@@ -1,7 +1,6 @@
 import time
 import requests
 from bs4 import BeautifulSoup
-import google.generativeai as genai
 
 
 def fetch_page_text(url: str) -> str:
@@ -30,19 +29,33 @@ def fetch_page_text(url: str) -> str:
         return f"[取得失敗: {e}]"
 
 
-def _gemini_call(model, prompt: str, max_retries: int = 3) -> str:
-    """Universal Gemini call with exponential backoff on 429."""
+_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
+
+def _gemini_call(api_key: str, prompt: str, max_retries: int = 3) -> str:
+    """Direct REST call to Gemini API with exponential backoff on 429."""
     waits = [15, 30, 60]
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     for attempt in range(max_retries):
         try:
-            return model.generate_content(prompt).text
-        except Exception as e:
-            err = str(e)
-            is_rate = any(k in err for k in ("429", "Resource exhausted", "RESOURCE_EXHAUSTED", "quota"))
+            r = requests.post(
+                f"{_GEMINI_URL}?key={api_key}",
+                json=payload,
+                timeout=120,
+            )
+            if r.status_code == 200:
+                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            err = f"{r.status_code} {r.text[:300]}"
+            is_rate = r.status_code == 429
             if is_rate and attempt < max_retries - 1:
                 time.sleep(waits[attempt])
                 continue
             return f"[情報取得失敗: {err}]"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(waits[attempt])
+                continue
+            return f"[情報取得失敗: {e}]"
     return "[情報取得失敗: レートリミット上限]"
 
 
@@ -52,9 +65,6 @@ def analyze_competitors(competitor_urls: list, gemini_api_key: str) -> dict:
 
     if not pages:
         return {"raw_pages": {}, "analysis": "（競合なし）"}
-
-    genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
 
     pages_text = "\n\n".join(
         f"=== 競合記事: {url} ===\n{content}"
@@ -83,7 +93,7 @@ def analyze_competitors(competitor_urls: list, gemini_api_key: str) -> dict:
 【ジャンル特有のフィールド】
 -
 """
-    analysis = _gemini_call(model, prompt)
+    analysis = _gemini_call(gemini_api_key, prompt)
     return {"raw_pages": pages, "analysis": analysis}
 
 
@@ -93,9 +103,6 @@ def discover_clinics_from_competitors(
     """Extract clinic names/domains from already-fetched competitor pages."""
     if not raw_pages:
         return []
-
-    genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
 
     specified_names = {c["name"] for c in specified_clinics}
     pages_text = "\n\n".join(
@@ -115,7 +122,7 @@ def discover_clinics_from_competitors(
 
 URLが不明な場合は「クリニック名::unknown」。見つからない場合は「なし」とだけ出力。説明文は不要。"""
 
-    text = _gemini_call(model, prompt)
+    text = _gemini_call(gemini_api_key, prompt)
 
     if text.startswith("[情報") or text.strip().lower() in ("なし", ""):
         return []
@@ -140,9 +147,6 @@ def auto_discover_clinics(
     main_kw: str, genre: str, gemini_api_key: str, specified_clinics: list
 ) -> list:
     """Discover clinics using Gemini's knowledge (no search grounding)."""
-    genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
-
     specified_names = {c["name"] for c in specified_clinics}
     exclude_note = (
         f"除外（指定済み）: {', '.join(specified_names)}\n" if specified_names else ""
@@ -159,7 +163,7 @@ TCB東京中央美容外科::tcb.net
 
 説明文は不要。"""
 
-    text = _gemini_call(model, prompt)
+    text = _gemini_call(gemini_api_key, prompt)
 
     discovered = []
     for line in text.strip().splitlines():
@@ -179,9 +183,6 @@ def collect_clinic_info(clinics: list, genre: str, gemini_api_key: str) -> dict:
     """Collect clinic info: static fetch → Gemini extraction. All clinics in one batched call."""
     if not clinics:
         return {}
-
-    genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
 
     # Fetch page content for each clinic
     fetched = {}
@@ -216,7 +217,7 @@ def collect_clinic_info(clinics: list, genre: str, gemini_api_key: str) -> dict:
 
 各クリニックの出力は「【クリニック名】」の見出しで始めてください。"""
 
-    result_text = _gemini_call(model, prompt)
+    result_text = _gemini_call(gemini_api_key, prompt)
 
     # Parse per-clinic sections
     results = {}

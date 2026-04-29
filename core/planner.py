@@ -1,27 +1,36 @@
 import time
-import google.generativeai as genai
+import requests
+
+_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 
-def _gemini_call(model, prompt: str, max_retries: int = 3) -> str:
-    """Gemini call with exponential backoff on 429."""
+def _gemini_call(api_key: str, prompt: str, max_retries: int = 3) -> str:
+    """Direct REST call to Gemini API with exponential backoff on 429."""
     waits = [15, 30, 60]
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     for attempt in range(max_retries):
         try:
-            return model.generate_content(prompt).text
-        except Exception as e:
-            err = str(e)
-            is_rate = any(k in err for k in ("429", "Resource exhausted", "RESOURCE_EXHAUSTED", "quota"))
-            if is_rate and attempt < max_retries - 1:
+            r = requests.post(
+                f"{_GEMINI_URL}?key={api_key}",
+                json=payload,
+                timeout=120,
+            )
+            if r.status_code == 200:
+                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            err = f"{r.status_code} {r.text[:300]}"
+            if r.status_code == 429 and attempt < max_retries - 1:
                 time.sleep(waits[attempt])
                 continue
             return f"[生成失敗: {err}]"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(waits[attempt])
+                continue
+            return f"[生成失敗: {e}]"
     return "[生成失敗: レートリミット上限]"
 
 
 def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, gemini_api_key: str) -> dict:
-    genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
-
     article_type = inputs["article_type"]
     clinics_list = "\n".join(f"- {c['name']} ({c['domain']})" for c in inputs["clinics"])
     clinic_info_text = "\n\n".join(
@@ -80,7 +89,6 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
     else:
         topics_note = ""
 
-    # Single prompt: load all context then request structure (avoids 2-call chat overhead)
     prompt = f"""あなたはSEO記事の構成設計の専門家です。
 {topics_note}
 以下の競合分析・クリニック情報を踏まえて、最適な記事構成（H1/H2/H3）を設計してください。
@@ -167,7 +175,7 @@ H2:
 - （情報が取得できなかった項目があれば記載。クリニックリスト外の要確認は記載しない）
 """
 
-    raw = _gemini_call(model, prompt)
+    raw = _gemini_call(gemini_api_key, prompt)
 
     title, meta, todo_list = "", "", ""
     for line in raw.split("\n"):
