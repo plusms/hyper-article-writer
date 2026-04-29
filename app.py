@@ -385,6 +385,7 @@ with tab2:
                     inputs["clinics"] = all_clinics
                     st.write("🏥 クリニック情報収集中...")
                     clinics = collect_clinic_info(all_clinics, genre, gemini_key)
+                    time.sleep(5)
                     st.write("📐 構成生成中（Gemini）...")
                     structure = generate_structure(inputs, comp, clinics, gemini_key)
                     st.write("✍️ 本文生成中（Claude）...")

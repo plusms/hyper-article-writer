@@ -48,10 +48,13 @@ def _gemini_call(model, prompt: str, max_retries: int = 3) -> str:
 
 def analyze_competitors(competitor_urls: list, gemini_api_key: str) -> dict:
     """Fetch competitor pages and analyze structure with Gemini."""
+    pages = {url: fetch_page_text(url) for url in competitor_urls if url.strip()}
+
+    if not pages:
+        return {"raw_pages": {}, "analysis": "（競合なし）"}
+
     genai.configure(api_key=gemini_api_key)
     model = genai.GenerativeModel("gemini-2.0-flash")
-
-    pages = {url: fetch_page_text(url) for url in competitor_urls if url.strip()}
 
     pages_text = "\n\n".join(
         f"=== 競合記事: {url} ===\n{content}"
