@@ -49,7 +49,7 @@ def _gemini_call(model, prompt: str, max_retries: int = 3) -> str:
 def analyze_competitors(competitor_urls: list, gemini_api_key: str) -> dict:
     """Fetch competitor pages and analyze structure with Gemini."""
     genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     pages = {url: fetch_page_text(url) for url in competitor_urls if url.strip()}
 
@@ -92,7 +92,7 @@ def discover_clinics_from_competitors(
         return []
 
     genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     specified_names = {c["name"] for c in specified_clinics}
     pages_text = "\n\n".join(
@@ -138,7 +138,7 @@ def auto_discover_clinics(
 ) -> list:
     """Discover clinics using Gemini's knowledge (no search grounding)."""
     genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     specified_names = {c["name"] for c in specified_clinics}
     exclude_note = (
@@ -178,7 +178,7 @@ def collect_clinic_info(clinics: list, genre: str, gemini_api_key: str) -> dict:
         return {}
 
     genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     # Fetch page content for each clinic
     fetched = {}
