@@ -20,7 +20,7 @@ def _gemini_call(model, prompt: str, max_retries: int = 3) -> str:
 
 def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, gemini_api_key: str) -> dict:
     genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-2.0-flash")
 
     article_type = inputs["article_type"]
     clinics_list = "\n".join(f"- {c['name']} ({c['domain']})" for c in inputs["clinics"])
