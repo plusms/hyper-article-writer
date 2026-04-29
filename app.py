@@ -50,7 +50,7 @@ _claude_key_default  = _secret("CLAUDE_API_KEY")
 with st.sidebar:
     st.header("設定")
     if _gemini_key_default:
-        st.caption("Gemini API Key: Secrets から読込済み")
+        st.caption(f"Gemini API Key: Secrets 読込済み（{_gemini_key_default[:6]}...）")
         gemini_key = _gemini_key_default
     else:
         gemini_key = st.text_input("Gemini API Key", type="password")
