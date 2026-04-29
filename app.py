@@ -43,18 +43,11 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
     return None
 
 # ── APIキー（Secrets優先 → サイドバー入力 fallback）──────────
-_gemini_key_default = _secret("GEMINI_API_KEY")
 _claude_key_default  = _secret("CLAUDE_API_KEY")
 
 # ── サイドバー：設定 ──────────────────────────────────────
 with st.sidebar:
     st.header("設定")
-    if _gemini_key_default:
-        st.caption(f"Gemini API Key: Secrets 読込済み（{_gemini_key_default[:6]}...）")
-        gemini_key = _gemini_key_default
-    else:
-        gemini_key = st.text_input("Gemini API Key", type="password")
-
     if _claude_key_default:
         st.caption("Claude API Key: Secrets から読込済み")
         claude_key = _claude_key_default
@@ -163,7 +156,6 @@ with tab1:
         if not sheet_url_batch:
             errors.append("スプレッドシートURLを入力してください")
         if not dry_run:
-            if not gemini_key: errors.append("Gemini API Key が未設定です")
             if not claude_key:  errors.append("Claude API Key が未設定です")
 
         if errors:
@@ -198,18 +190,18 @@ with tab1:
 
                     try:
                         inputs = build_inputs_from_row(row, defaults)
-                        comp   = analyze_competitors(inputs["competitor_urls"], gemini_key)
+                        comp   = analyze_competitors(inputs["competitor_urls"], claude_key)
                         if inputs["competitor_urls"]:
                             discovered = discover_clinics_from_competitors(
-                                comp["raw_pages"], inputs["clinics"], gemini_key
+                                comp["raw_pages"], inputs["clinics"], claude_key
                             )
                         else:
                             discovered = auto_discover_clinics(
-                                inputs["main_kw"], inputs["genre"], gemini_key, inputs["clinics"]
+                                inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"]
                             )
                         inputs["clinics"] = inputs["clinics"] + discovered
-                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], gemini_key)
-                        structure = generate_structure(inputs, comp, clinics, gemini_key)
+                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key)
+                        structure = generate_structure(inputs, comp, clinics, claude_key)
                         output    = generate_body(inputs, structure, clinics, claude_key, comp)
 
                         write_output_row(ws, row_num, {
@@ -344,7 +336,6 @@ with tab2:
     if st.button("🚀 実行", type="primary", use_container_width=True, key="run_test"):
         valid_clinics = [c for c in st.session_state.test_clinics if c["name"] and c["domain"]]
         errs = []
-        if not gemini_key: errs.append("Gemini API Key 未設定")
         if not claude_key:  errs.append("Claude API Key 未設定")
         if not main_kw:     errs.append("メインKW を入力してください")
         if not genre:       errs.append("ジャンル を入力してください")
@@ -369,25 +360,24 @@ with tab2:
             with st.status("生成中...", expanded=True) as s:
                 try:
                     st.write("🔍 競合分析中...")
-                    comp = analyze_competitors(competitor_urls, gemini_key)
+                    comp = analyze_competitors(competitor_urls, claude_key)
                     st.write("🤖 クリニック自動探索中...")
                     if competitor_urls:
                         discovered = discover_clinics_from_competitors(
-                            comp["raw_pages"], valid_clinics, gemini_key
+                            comp["raw_pages"], valid_clinics, claude_key
                         )
                     else:
                         discovered = auto_discover_clinics(
-                            main_kw, genre, gemini_key, valid_clinics
+                            main_kw, genre, claude_key, valid_clinics
                         )
                     all_clinics = valid_clinics + discovered
                     if discovered:
                         st.write(f"　→ {len(discovered)} 件を自動追加: {', '.join(c['name'] for c in discovered)}")
                     inputs["clinics"] = all_clinics
                     st.write("🏥 クリニック情報収集中...")
-                    clinics = collect_clinic_info(all_clinics, genre, gemini_key)
-                    time.sleep(5)
-                    st.write("📐 構成生成中（Gemini）...")
-                    structure = generate_structure(inputs, comp, clinics, gemini_key)
+                    clinics = collect_clinic_info(all_clinics, genre, claude_key)
+                    st.write("📐 構成生成中...")
+                    structure = generate_structure(inputs, comp, clinics, claude_key)
                     st.write("✍️ 本文生成中（Claude）...")
                     output = generate_body(inputs, structure, clinics, claude_key, comp)
                     s.update(label="✅ 完了", state="complete")

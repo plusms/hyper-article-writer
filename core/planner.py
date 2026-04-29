@@ -1,36 +1,20 @@
-import time
-import requests
-
-_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+import anthropic
 
 
-def _gemini_call(api_key: str, prompt: str, max_retries: int = 3) -> str:
-    """Direct REST call to Gemini API with exponential backoff on 429."""
-    waits = [15, 30, 60]
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    for attempt in range(max_retries):
-        try:
-            r = requests.post(
-                f"{_GEMINI_URL}?key={api_key}",
-                json=payload,
-                timeout=120,
-            )
-            if r.status_code == 200:
-                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            err = f"{r.status_code} {r.text[:300]}"
-            if r.status_code == 429 and attempt < max_retries - 1:
-                time.sleep(waits[attempt])
-                continue
-            return f"[生成失敗: {err}]"
-        except Exception as e:
-            if attempt < max_retries - 1:
-                time.sleep(waits[attempt])
-                continue
-            return f"[生成失敗: {e}]"
-    return "[生成失敗: レートリミット上限]"
+def _claude_call(api_key: str, prompt: str) -> str:
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return msg.content[0].text
+    except Exception as e:
+        return f"[生成失敗: {e}]"
 
 
-def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, gemini_api_key: str) -> dict:
+def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, claude_api_key: str) -> dict:
     article_type = inputs["article_type"]
     clinics_list = "\n".join(f"- {c['name']} ({c['domain']})" for c in inputs["clinics"])
     clinic_info_text = "\n\n".join(
@@ -175,7 +159,7 @@ H2:
 - （情報が取得できなかった項目があれば記載。クリニックリスト外の要確認は記載しない）
 """
 
-    raw = _gemini_call(gemini_api_key, prompt)
+    raw = _claude_call(claude_api_key, prompt)
 
     title, meta, todo_list = "", "", ""
     for line in raw.split("\n"):

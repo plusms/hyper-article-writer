@@ -1,10 +1,9 @@
-import time
 import requests
+import anthropic
 from bs4 import BeautifulSoup
 
 
 def fetch_page_text(url: str) -> str:
-    """Fetch a URL and return headings + body text (static HTML only)."""
     try:
         headers = {
             "User-Agent": (
@@ -29,38 +28,20 @@ def fetch_page_text(url: str) -> str:
         return f"[取得失敗: {e}]"
 
 
-_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+def _claude_call(api_key: str, prompt: str) -> str:
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return msg.content[0].text
+    except Exception as e:
+        return f"[情報取得失敗: {e}]"
 
 
-def _gemini_call(api_key: str, prompt: str, max_retries: int = 3) -> str:
-    """Direct REST call to Gemini API with exponential backoff on 429."""
-    waits = [15, 30, 60]
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    for attempt in range(max_retries):
-        try:
-            r = requests.post(
-                f"{_GEMINI_URL}?key={api_key}",
-                json=payload,
-                timeout=120,
-            )
-            if r.status_code == 200:
-                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            err = f"{r.status_code} {r.text[:300]}"
-            is_rate = r.status_code == 429
-            if is_rate and attempt < max_retries - 1:
-                time.sleep(waits[attempt])
-                continue
-            return f"[情報取得失敗: {err}]"
-        except Exception as e:
-            if attempt < max_retries - 1:
-                time.sleep(waits[attempt])
-                continue
-            return f"[情報取得失敗: {e}]"
-    return "[情報取得失敗: レートリミット上限]"
-
-
-def analyze_competitors(competitor_urls: list, gemini_api_key: str) -> dict:
-    """Fetch competitor pages and analyze structure with Gemini."""
+def analyze_competitors(competitor_urls: list, claude_api_key: str) -> dict:
     pages = {url: fetch_page_text(url) for url in competitor_urls if url.strip()}
 
     if not pages:
@@ -93,14 +74,13 @@ def analyze_competitors(competitor_urls: list, gemini_api_key: str) -> dict:
 【ジャンル特有のフィールド】
 -
 """
-    analysis = _gemini_call(gemini_api_key, prompt)
+    analysis = _claude_call(claude_api_key, prompt)
     return {"raw_pages": pages, "analysis": analysis}
 
 
 def discover_clinics_from_competitors(
-    raw_pages: dict, specified_clinics: list, gemini_api_key: str
+    raw_pages: dict, specified_clinics: list, claude_api_key: str
 ) -> list:
-    """Extract clinic names/domains from already-fetched competitor pages."""
     if not raw_pages:
         return []
 
@@ -122,7 +102,7 @@ def discover_clinics_from_competitors(
 
 URLが不明な場合は「クリニック名::unknown」。見つからない場合は「なし」とだけ出力。説明文は不要。"""
 
-    text = _gemini_call(gemini_api_key, prompt)
+    text = _claude_call(claude_api_key, prompt)
 
     if text.startswith("[情報") or text.strip().lower() in ("なし", ""):
         return []
@@ -144,9 +124,8 @@ URLが不明な場合は「クリニック名::unknown」。見つからない�
 
 
 def auto_discover_clinics(
-    main_kw: str, genre: str, gemini_api_key: str, specified_clinics: list
+    main_kw: str, genre: str, claude_api_key: str, specified_clinics: list
 ) -> list:
-    """Discover clinics using Gemini's knowledge (no search grounding)."""
     specified_names = {c["name"] for c in specified_clinics}
     exclude_note = (
         f"除外（指定済み）: {', '.join(specified_names)}\n" if specified_names else ""
@@ -163,7 +142,7 @@ TCB東京中央美容外科::tcb.net
 
 説明文は不要。"""
 
-    text = _gemini_call(gemini_api_key, prompt)
+    text = _claude_call(claude_api_key, prompt)
 
     discovered = []
     for line in text.strip().splitlines():
@@ -179,12 +158,10 @@ TCB東京中央美容外科::tcb.net
     return discovered[:5]
 
 
-def collect_clinic_info(clinics: list, genre: str, gemini_api_key: str) -> dict:
-    """Collect clinic info: static fetch → Gemini extraction. All clinics in one batched call."""
+def collect_clinic_info(clinics: list, genre: str, claude_api_key: str) -> dict:
     if not clinics:
         return {}
 
-    # Fetch page content for each clinic
     fetched = {}
     for clinic in clinics:
         name = clinic["name"]
@@ -201,7 +178,6 @@ def collect_clinic_info(clinics: list, genre: str, gemini_api_key: str) -> dict:
                     break
         fetched[name] = content
 
-    # Build one batched extraction prompt
     clinic_blocks = "\n\n".join(
         f"【{name}】\nWebサイト内容：\n{content[:2000]}\n\n"
         f"院名：\n住所：\nアクセス（最寄り駅・徒歩分数）：\n診療時間：\n休診日：\n"
@@ -217,9 +193,8 @@ def collect_clinic_info(clinics: list, genre: str, gemini_api_key: str) -> dict:
 
 各クリニックの出力は「【クリニック名】」の見出しで始めてください。"""
 
-    result_text = _gemini_call(gemini_api_key, prompt)
+    result_text = _claude_call(claude_api_key, prompt)
 
-    # Parse per-clinic sections
     results = {}
     for clinic in clinics:
         name = clinic["name"]
