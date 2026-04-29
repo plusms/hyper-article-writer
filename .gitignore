@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.json
+.streamlit/secrets.toml
+起動.bat

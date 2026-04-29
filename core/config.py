@@ -1,0 +1,38 @@
+TOPICS = {
+    "地域": [
+        {"key": "intro",            "label": "★ 冒頭（冒頭文 + 比較表）",           "fixed": True,  "default": True},
+        {"key": "how_to_choose",    "label": "クリニックの選び方",                   "fixed": False, "default": True},
+        {"key": "price_range",      "label": "費用相場",                             "fixed": False, "default": True},
+        {"key": "recommended",      "label": "おすすめ紹介ブロック",                 "fixed": False, "default": True},
+        {"key": "area_clinics",     "label": "エリア別おすすめ",                     "fixed": False, "default": False},
+        {"key": "treatment_type",   "label": "治療法・プラン・症状別おすすめ",       "fixed": False, "default": False},
+        {"key": "summary",          "label": "★ まとめ",                             "fixed": True,  "default": True},
+    ],
+    "比較": [
+        {"key": "intro",            "label": "★ 冒頭（冒頭文 + 比較表）",           "fixed": True,  "default": True},
+        {"key": "how_to_choose",    "label": "クリニックの選び方",                   "fixed": False, "default": True},
+        {"key": "price_range",      "label": "費用相場",                             "fixed": False, "default": True},
+        {"key": "recommended",      "label": "おすすめ紹介ブロック",                 "fixed": False, "default": True},
+        {"key": "summary",          "label": "★ まとめ",                             "fixed": True,  "default": True},
+    ],
+    "商標": [
+        {"key": "intro",            "label": "★ 冒頭（冒頭文 + おすすめプラン + 営業時間 + 諸費用）", "fixed": True,  "default": True},
+        {"key": "pricing",          "label": "料金プラン",                           "fixed": False, "default": True},
+        {"key": "reviews",          "label": "口コミ・評判",                         "fixed": False, "default": True},
+        {"key": "coupons",          "label": "クーポン・割引情報",                   "fixed": False, "default": False},
+        {"key": "summary",          "label": "★ まとめ",                             "fixed": True,  "default": True},
+    ],
+}
+
+TOPIC_LABELS = {
+    "intro":          "冒頭（冒頭文 + 比較表）",
+    "how_to_choose":  "クリニックの選び方",
+    "price_range":    "費用相場",
+    "recommended":    "おすすめクリニック紹介ブロック",
+    "area_clinics":   "エリア別おすすめクリニック",
+    "treatment_type": "治療法・プラン・症状別おすすめ",
+    "summary":        "まとめ",
+    "pricing":        "料金プラン",
+    "reviews":        "口コミ・評判",
+    "coupons":        "クーポン・割引情報",
+}
