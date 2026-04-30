@@ -1,0 +1,149 @@
+{
+  "wp_config": {},
+  "design_rules": {
+    "tone": "医療・美容クリニック向け。クリーンでプロフェッショナル、信頼感のあるフラットデザイン。",
+    "colors": {
+      "main": "#e86a8d",
+      "accent_red": "#e86a8d",
+      "accent_yellow": "#fff5f8",
+      "accent_orange": "#c6ed77",
+      "bg_white": "#FFFFFF",
+      "bg_gray": "#fff5f8",
+      "text": "#1e2c3d"
+    }
+  },
+  "image_templates": [
+    {
+      "name": "3つのポイント",
+      "usage_scene": "3つのメリット・理由・ポイントを列挙するH2/H3",
+      "base_prompt": "フラットデザインのクリーンなベクターイラストを用いた、医療・ライフスタイル系の3列インフォグラフィックパネル。テキストのフォントは全体を通して親しみやすい「丸ゴシック体」を使用すること。\n\n# 全体構成\n上部にタイトルエリアを配置し、その下に3つの同一サイズの縦長カードパネルが横に均等に並んだ3列レイアウトを構成する。背景は#FFF5F8。全体的に#1E2C3Dと#E86A8Dを基調とした配色。デザインはシンプルで余白を活かしたプロフェッショナルなUIデザインスタイルとする。\n\n# 上部タイトルエリア\n左側に#E86A8Dの丸ゴシック体テキストで「{{title_text_1}}」。右側に#1E2C3Dの太い枠線がある白い長方形のボックスがあり、ボックスの右上角には#E86A8Dの斜めのアクセント（三角形のリボン）がある。ボックス内には#1E2C3Dの丸ゴシック体テキストで「{{title_text_2}}」。\n\n# カード全体（3列レイアウト）\n各カードは白い背景で、外側に#1E2C3Dの枠線がある。\n- 上部タブ: カードの上端中央に、数字（1, 2, 3）が白字（#FFFFFF）で書かれた#E86A8Dの半円形のインデックスタブが上に飛び出している。\n- ヘッダー: タブのすぐ下は、#E86A8Dの背景に白抜き（#FFFFFF）の2行の丸ゴシック体テキストが書かれたヘッダー領域。\n- イラスト: 中央に、#1E2C3Dのシンプルな線画と、少ない色数で描かれたフラットスタイルのミニマルなイラスト。\n- フッター: 下部に、#1E2C3Dの丸ゴシック体の項目名（「{{eval_label_1}}」、「{{eval_label_2}}」）と、その下に小さな#1E2C3Dの説明テキストが並んでいる。\n\n# 個別カードの詳細（左、中央、右）\n\n### パネル 1 (左)\n- **ヘッダーテキスト:** 「{{point1_title}}」\n- **イラスト:** {{point1_icon}}\n- **フッター:** {{eval_label_1}}の説明「{{point1_eval1_desc}}」 / {{eval_label_2}}の説明「{{point1_eval2_desc}}」\n\n### パネル 2 (中央)\n- **ヘッダーテキスト:** 「{{point2_title}}」\n- **イラスト:** {{point2_icon}}\n- **フッター:** {{eval_label_1}}の説明「{{point2_eval1_desc}}」 / {{eval_label_2}}の説明「{{point2_eval2_desc}}」\n\n### パネル 3 (右)\n- **ヘッダーテキスト:** 「{{point3_title}}」\n- **イラスト:** {{point3_icon}}\n- **フッター:** {{eval_label_1}}の説明「{{point3_eval1_desc}}」 / {{eval_label_2}}の説明「{{point3_eval2_desc}}」\n\n日本語の文字崩れがないよう正確にレンダリングすること。"
+    },
+    {
+      "name": "4つのポイント",
+      "usage_scene": "4つのチェック項目・ステップ・ポイントを列挙するH2/H3",
+      "base_prompt": "フラットデザインのクリーンなベクターイラストを用いた、2x2グリッドインフォグラフィックパネル。テキストのフォントは全体を通して親しみやすい「丸ゴシック体」を使用すること。\n\n# 全体構成\n上部にタイトルエリアを配置し、その下に4つの同一サイズの白い丸角カードパネルが2行2列（2x2）のグリッドで並んだレイアウトを構成する。背景は非常に薄いピンク（#FFF5F8）。全体的にネイビー（#1E2C3D）とくすんだピンク（#E86A8D）を基調とした配色。デザインはシンプルで余白を活かしたプロフェッショナルなUIデザインスタイルとする。\n\n# 上部タイトルエリア\n中央揃えで配置された1行の丸ゴシック体テキスト。以下の3つのパーツが横に連続して構成されている。\n1. 「{{h1_title_part1}}」（ネイビー文字：#1E2C3D）\n2. 「{{h1_title_part2}}」（ピンク文字：#E86A8D、文字の周囲に白いフチ取り/グロー効果あり）\n3. 「{{h1_title_part3}}」（ネイビー文字：#1E2C3D）\n\n# カード全体（2x2グリッドレイアウト）\n各カードは白い丸角カード。内部は左側のテキストエリアと右側のイラストエリアに分かれている。\n- テキストエリア（左側）: 上部にピンク（#E86A8D）背景に白抜き（#FFFFFF）の丸ゴシック体で書かれた丸角ラベル「{{point[n]_label}}」が配置されている。その下にネイビー（#1E2C3D）の丸ゴシック体で説明テキスト「{{point[n]_desc}}」が配置されている。\n- イラストエリア（右側）: ネイビー（#1E2C3D）の線で描かれたフラットスタイルのミニマルな線画イラストが配置されている。\n\n# 個別カードの詳細（左上、右上、左下、右下）\n\n### パネル 1 (左上)\n- **ラベル（ピンク背景）:** 「{{point1_label}}」\n- **説明文（ネイビー文字）:** 「{{point1_desc}}」\n- **イラスト（ネイビー線画）:** {{point1_icon}}\n\n### パネル 2 (右上)\n- **ラベル（ピンク背景）:** 「{{point2_label}}」\n- **説明文（ネイビー文字）:** 「{{point2_desc}}」\n- **イラスト（ネイビー線画）:** {{point2_icon}}\n\n### パネル 3 (左下)\n- **ラベル（ピンク背景）:** 「{{point3_label}}」\n- **説明文（ネイビー文字）:** 「{{point3_desc}}」\n- **イラスト（ネイビー線画）:** {{point3_icon}}\n\n### パネル 4 (右下)\n- **ラベル（ピンク背景）:** 「{{point4_label}}」\n- **説明文（ネイビー文字）:** 「{{point4_desc}}」\n- **イラスト（ネイビー線画）:** {{point4_icon}}\n\n日本語の文字崩れがないよう正確にレンダリングすること。"
+    },
+    {
+      "name": "解説",
+      "usage_scene": "「〇〇とは」「〇〇の仕組み」「〇〇と〇〇の違い」系のH2/H3",
+      "base_prompt": "フラットデザインのクリーンなベクターイラストを用いた、概念や用語を説明するための図解インフォグラフィックパネル。テキストのフォントは全体を通して親しみやすい「丸ゴシック体」を使用すること。\n\n# 全体構成\n上部にタイトルエリアを配置し、その下に1つの大きな白い丸角のメインパネルを配置するレイアウトを構成する。背景は非常に薄いピンク（#FFF5F8）。全体的にネイビー（#1E2C3D）とくすんだピンク（#E86A8D）を基調とした配色。デザインはシンプルで余白を活かしたプロフェッショナルなUIデザインスタイルとする。\n\n# 上部タイトルエリア\n中央揃えで配置された要素。以下の2つのパーツが横に連続して構成されている。\n1. 左側: ネイビー（#1E2C3D）の太い枠線がある白い長方形のボックス。ボックスの左上角にはピンク（#E86A8D）の斜めのアクセント（三角形のリボン）がある。ボックス内にはピンク（#E86A8D）の丸ゴシック体テキストで「{{title_box_text}}」。\n2. 右側: ネイビー（#1E2C3D）の丸ゴシック体テキストで「{{title_text}}」。\n\n# メインパネル（図解エリア）\n白い背景で、外側にネイビー（#1E2C3D）の枠線がない、もしくは非常に細い枠線のみの大きなパネル。\nパネルの内部は、特定の概念や効果を説明するための自由度の高い図解スペースとなっている。\nネイビー（#1E2C3D）の主線で描かれたフラットスタイルのミニマルなイラストと、ピンク（#E86A8D）をアクセントカラーとして使用し、視覚的にわかりやすい構成にする。\n\n# 図解の詳細指示\n{{diagram_description}}\n\n日本語の文字崩れがないよう正確にレンダリングすること。"
+    }
+  ],
+  "components": [
+    {
+      "name": "画像パス",
+      "pattern": "https://example.com/wp-content/uploads/{{name}}",
+      "active": true
+    },
+    {
+      "name": "メタリフ",
+      "pattern": "https://example.com/lp/{{name}}",
+      "active": true
+    },
+    {
+      "name": "大見出し",
+      "pattern": "<h2>{{title}}</h2>",
+      "active": true
+    },
+    {
+      "name": "小見出し (h3)",
+      "pattern": "<h3>{{title}}</h3>",
+      "active": true
+    },
+    {
+      "name": "見出しパーツ (subttl)",
+      "pattern": "<div class=\"subTitle\">{{content}}</div>",
+      "active": true
+    },
+    {
+      "name": "文字装飾 (Marker Txt)",
+      "pattern": "<span class=\"marker\">{{content}}</span>",
+      "active": true
+    },
+    {
+      "name": "文字装飾 (Bold)",
+      "pattern": "<span class=\"bold\">{{content}}</span>",
+      "active": true
+    },
+    {
+      "name": "文字装飾 (Caution)",
+      "pattern": "<span class=\"caution\">{{content}}</span>",
+      "active": true
+    },
+    {
+      "name": "コンテンツ幅100%画像　※画像の記述入れる際はこれマスト使用",
+      "pattern": "<div class=\"full-img\">\n    {{content}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "テーブル",
+      "pattern": "<table class=\"table\">\n    {{content}}\n</table>",
+      "active": true
+    },
+    {
+      "name": "シンプルボックス",
+      "pattern": "<div class=\"normalBox\">\n    {{content}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "シンプルボックスタイトル　※シンプルボックスにタイトルをつけたいときにセットで使用する",
+      "pattern": "<div class=\"box-ttl\">{{title}}</div>",
+      "active": true
+    },
+    {
+      "name": "番号付きリスト",
+      "pattern": "<ol>\n    {{content}}\n</ol>",
+      "active": true
+    },
+    {
+      "name": "番号なしリスト",
+      "pattern": "<ul>\n    {{content}}\n</ul>",
+      "active": true
+    },
+    {
+      "name": "まとめボックス",
+      "pattern": "<div class=\"matomeBox\">\n    <div class=\"matomeBox-title\">{{title}}</div>\n    <p>{{content}}</p>\n</div>",
+      "active": true
+    },
+    {
+      "name": "CTA",
+      "pattern": "<div class=\"c-btn\">\n    {{link}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "スクロールテーブル（4列以上はこれ）",
+      "pattern": "<div class=\"scrolltable\">\n<table class=\"table\">\n    {{content}}\n</table>\n</div>",
+      "active": true
+    },
+    {
+      "name": "ステップパーツ",
+      "pattern": "<div class=\"flow-wrap\">\n    {{content}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "ステップパーツ内部　※必ずステップパーツと組み合わせて使用（ステップパーツ内にステップ数に合わせて内部パーツを配置）",
+      "pattern": "<div class=\"flow\">\n    <div class=\"flow-title\">\n        <span class=\"flow-num\"></span><p>{{title}}</p>\n    </div>\n   <div class=\"flow-text\">\n    {{content}}\n    </div>\n</div>",
+      "active": true
+    },
+    {
+      "name": "ナンバリングパーツ",
+      "pattern": "<ol class=\"numlist\">\n    {{content}}\n</ol>",
+      "active": true
+    },
+    {
+      "name": "ナンバリングパーツ内部　※必ずナンバリングパーツと組み合わせて使用（ナンバリングパーツ内に数に合わせて内部パーツを配置）",
+      "pattern": "<li>\n    <p class=\"numlist-ttl\">\n    <span class=\"numlist-num\">{{number}}</span>{{title}}\n    </p>\n    <div class=\"numlist-block\">\n    {{content}}\n    </div>\n</li>",
+      "active": true
+    },
+    {
+      "name": "Q＆Aパーツ（ショートコード）",
+      "pattern": "[qa-box01-wrap]\n    {{content}}\n[/qa-box01-wrap]",
+      "active": true
+    },
+    {
+      "name": "Q＆Aパーツ内部（ショートコード）　※必ずQ＆Aパーツと組み合わせて使用（Q＆Aパーツ内にQ＆Aの数に合わせて内部パーツを配置）",
+      "pattern": "[qa-box01 title=\"{{question}}\"]\n    {{answer}}\n[/qa-box01]",
+      "active": true
+    }
+  ]
+}

@@ -14,6 +14,7 @@ from core.sheets import (
     read_input_rows, write_output_row, write_status, get_sheet,
     get_settings_sheet, read_defaults,
 )
+from core import site_config_manager
 
 st.set_page_config(page_title="CV Article Writer", layout="wide", page_icon="✍️")
 
@@ -82,7 +83,7 @@ with st.sidebar:
         "記事タイプ別デフォルト追加指示"
     )
 
-tab1, tab2, tab3 = st.tabs(["📋 スプシ一括", "📝 1記事", "✅ 品質チェック"])
+tab1, tab2, tab3, tab4 = st.tabs(["📋 スプシ一括", "📝 1記事", "✅ 品質チェック", "⚙️ サイト設定"])
 
 
 # ════════════════════════════════════════════════════════
@@ -190,6 +191,14 @@ with tab1:
 
                     try:
                         inputs = build_inputs_from_row(row, defaults)
+
+                        # サイトパーツ読み込み（site_nameが登録済みサイトと一致する場合のみ）
+                        _batch_site_parts = ""
+                        _batch_site_name = inputs.get("site_name", "")
+                        if _batch_site_name and _batch_site_name in site_config_manager.list_sites():
+                            _sc = site_config_manager.load_site_config(_batch_site_name)
+                            _batch_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
+
                         comp   = analyze_competitors(inputs["competitor_urls"], claude_key)
                         if inputs["competitor_urls"]:
                             discovered = discover_clinics_from_competitors(
@@ -202,7 +211,8 @@ with tab1:
                         inputs["clinics"] = inputs["clinics"] + discovered
                         clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key)
                         structure = generate_structure(inputs, comp, clinics, claude_key)
-                        output    = generate_body(inputs, structure, clinics, claude_key, comp)
+                        output    = generate_body(inputs, structure, clinics, claude_key, comp,
+                                                  site_parts=_batch_site_parts)
 
                         write_output_row(ws, row_num, {
                             "title":     structure["title"],
@@ -228,6 +238,22 @@ with tab1:
 with tab2:
     st.title("📝 1記事")
     st.caption("単発テスト・社員用。設定タブのデフォルト追加指示を自動適用します。")
+
+    # ── サイトパーツ選択 ──────────────────────────────────
+    _registered_sites = site_config_manager.list_sites()
+    _site_options = ["（なし）"] + _registered_sites
+    selected_site_for_parts = st.selectbox(
+        "サイトパーツを使用する",
+        _site_options,
+        key="t_site_parts_sel",
+        help="登録済みサイトを選ぶと、そのサイトのHTMLパーツを記事生成に使用します。",
+    )
+    if selected_site_for_parts != "（なし）":
+        _preview_cfg = site_config_manager.load_site_config(selected_site_for_parts)
+        _active_count = sum(1 for c in _preview_cfg.get("components", []) if c.get("active", True))
+        st.caption(f"✅ {selected_site_for_parts}：有効パーツ {_active_count} 件")
+
+    st.divider()
 
     article_type = st.radio("記事タイプ", ["地域", "比較", "商標"], horizontal=True, key="test_type")
 
@@ -343,6 +369,12 @@ with tab2:
             st.error(e)
 
         if not errs:
+            # サイトパーツ構築
+            _single_site_parts = ""
+            if selected_site_for_parts != "（なし）":
+                _sc = site_config_manager.load_site_config(selected_site_for_parts)
+                _single_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
+
             combined_block = "\n".join(filter(None, [default_block_val, additional_block]))
             inputs = {
                 "article_type":    article_type,
@@ -379,7 +411,8 @@ with tab2:
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key)
                     st.write("✍️ 本文生成中（Claude）...")
-                    output = generate_body(inputs, structure, clinics, claude_key, comp)
+                    output = generate_body(inputs, structure, clinics, claude_key, comp,
+                                          site_parts=_single_site_parts)
                     s.update(label="✅ 完了", state="complete")
 
                     st.markdown(f"**タイトル:** {structure['title']}")
@@ -439,3 +472,77 @@ with tab3:
                     claude_key,
                 )
                 st.markdown(result)
+
+
+# ════════════════════════════════════════════════════════
+#  Tab4: サイト設定
+# ════════════════════════════════════════════════════════
+with tab4:
+    st.title("⚙️ サイト設定")
+    st.caption("サイト別のHTMLパーツを登録します。記事生成時に選択すると、そのサイトのパーツが使用されます。")
+
+    sites_list = site_config_manager.list_sites()
+    col_left4, col_right4 = st.columns([1, 2])
+
+    with col_left4:
+        st.subheader("サイト一覧")
+        _site_opts = ["-- 新規作成 --"] + sites_list
+        _selected4 = st.selectbox("サイトを選択", _site_opts, key="cfg_site_sel")
+
+        if _selected4 == "-- 新規作成 --":
+            _new_name = st.text_input("新規サイト名（半角英数字推奨）", placeholder="example-com", key="cfg_new_name")
+            _current_site4 = _new_name.strip() if _new_name.strip() else None
+            _config4 = site_config_manager.get_default_site_config()
+        else:
+            _current_site4 = _selected4
+            _config4 = site_config_manager.load_site_config(_current_site4)
+            st.markdown("---")
+            if st.button("🗑️ このサイトを削除", key="cfg_del"):
+                site_config_manager.delete_site_config(_current_site4)
+                st.success(f"「{_current_site4}」を削除しました")
+                st.rerun()
+
+    with col_right4:
+        if not _current_site4:
+            st.info("左側でサイトを選択するか、新規サイト名を入力してください。")
+        else:
+            st.subheader(f"「{_current_site4}」のパーツ設定")
+
+            with st.form(f"site_form_{_current_site4}"):
+                st.markdown("### 🧩 HTMLパーツ一覧")
+                st.caption("各パーツの {{変数名}} は記事生成時にAIが実際の内容に置き換えます。有効チェックを外すと使用されません。")
+
+                _existing_comps = _config4.get("components", [])
+                _updated_comps = []
+
+                for i, comp in enumerate(_existing_comps):
+                    _is_active = comp.get("active", True)
+                    _label = f"{'✅' if _is_active else '❌'} {comp.get('name', f'パーツ{i+1}')}"
+                    with st.expander(_label, expanded=False):
+                        _c_active  = st.checkbox("このサイトで有効にする", value=_is_active,             key=f"comp_active_{_current_site4}_{i}")
+                        _c_name    = st.text_input("パーツ名",             value=comp.get("name", ""),    key=f"comp_name_{_current_site4}_{i}")
+                        _c_pattern = st.text_area("HTMLパターン",          value=comp.get("pattern", ""), key=f"comp_pattern_{_current_site4}_{i}", height=120)
+                        _comp_keep = st.checkbox("このパーツを保持",        value=True,                   key=f"comp_keep_{_current_site4}_{i}")
+                        if _comp_keep:
+                            _updated_comps.append({"name": _c_name, "pattern": _c_pattern, "active": _c_active})
+
+                st.markdown("**＋ 新規パーツを追加**")
+                _new_comp_name    = st.text_input("新パーツ名",           key=f"new_comp_name_{_current_site4}",    placeholder="例: normalBox")
+                _new_comp_pattern = st.text_area("新パーツ HTMLパターン", key=f"new_comp_pattern_{_current_site4}", height=100,
+                                                 placeholder='<div class="normalBox">{{content}}</div>')
+                if _new_comp_name.strip():
+                    _updated_comps.append({"name": _new_comp_name.strip(), "pattern": _new_comp_pattern, "active": True})
+
+                _submitted4 = st.form_submit_button("💾 設定を保存する", type="primary")
+
+            if _submitted4:
+                _new_config4 = {
+                    "design_rules": _config4.get("design_rules", {}),
+                    "image_templates": _config4.get("image_templates", []),
+                    "components": _updated_comps,
+                }
+                if site_config_manager.save_site_config(_current_site4, _new_config4):
+                    st.success(f"「{_current_site4}」の設定を保存しました。")
+                    st.rerun()
+                else:
+                    st.error("保存に失敗しました。")

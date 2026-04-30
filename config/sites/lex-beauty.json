@@ -1,0 +1,174 @@
+{
+  "wp_config": {},
+  "design_rules": {
+    "tone": "上質でラグジュアリー、清潔感と温かみを両立、ゴールド×ベージュ基調、自然光、余白多めのシンプルな構図、美容医療クリニックのプロフェッショナル感",
+    "colors": {
+      "main": "#fff4ec",
+      "accent_red": "#b36922",
+      "accent_yellow": "#c9aa75",
+      "accent_orange": "#ffac4a",
+      "bg_white": "#FFFFFF",
+      "bg_gray": "#f7f7f7",
+      "text": "#080808"
+    }
+  },
+  "image_templates": [
+    {
+      "name": "3つのポイント",
+      "usage_scene": "3つのメリット・理由・ポイントを列挙するH2/H3",
+      "base_prompt": "影なし・グラデーションなしのフラットイラストを用いた、美容・ライフスタイル系の3列カードインフォグラフィックパネル。イラストは#c9aa75と#937960の2色のみを使用したシンプルなフラットデザインとし、美容アイテム・植物・シンプルな人物シルエットなどをモチーフにすること。イラストの背景は必ず白（#ffffff）のみとすること。ベージュ・茶色・クリーム色など白以外の背景色は使用禁止。テクスチャや影も一切入れないこと。テキストのフォントは全体を通して明朝体（Shippori Mincho）を使用すること。\n\n**全体構成**\n上部に全幅のタイトルエリアを配置し、その下に3つの同一サイズの縦長カードが横に均等に並んだ3列レイアウトを構成する。全体の背景色は#fff4ec。全体的に#937960を基調とした配色。デザインはシンプルで余白を活かしたラグジュアリーなスタイルとする。\n\n**上部タイトルエリア**\n全幅の半透明の白い帯状エリア（白80%程度）の中央に、#937960のShippori Mincho Boldで「{{main_title}}」を表示する。装飾はなし。\n\n**カード構造（全体）**\n各カードは角丸4pxの長方形で、1pxの#937960ボーダーで囲まれ、薄いドロップシャドウ（blur 12px、透明度10%のグレー）がある。カード内部は上下に二分割される。\n- ヘッダーエリア: 背景色#937960、白（#ffffff）のShippori Mincho Boldで見出しが中央に配置される。\n- ボディエリア: 背景色が白（#ffffff）で、#080808のShippori Mincho Mediumによる説明テキストが中央揃えで配置される。その下に横長の長方形の画像エリアが設けられる。\n\n**個別カードの詳細**\n- パネル1（左）: ヘッダー「{{card_header_text_1}}」、説明「{{card_body_text_1}}」、画像「{{card_image_content_1}}」\n- パネル2（中央）: ヘッダー「{{card_header_text_2}}」、説明「{{card_body_text_2}}」、画像「{{card_image_content_2}}」\n- パネル3（右）: ヘッダー「{{card_header_text_3}}」、説明「{{card_body_text_3}}」、画像「{{card_image_content_3}}」\n\n日本語の文字崩れがないよう正確にレンダリングすること。"
+    },
+    {
+      "name": "4つのポイント",
+      "usage_scene": "4つのメリット・理由・ポイントを列挙するH2/H3",
+      "base_prompt": "影なし・グラデーションなしのフラットイラストを用いた、美容・ライフスタイル系の2x2グリッドカードインフォグラフィックパネル。イラストは#c9aa75と#937960の2色のみを使用したシンプルなフラットデザインとし、美容アイテム・植物・シンプルな人物シルエットなどをモチーフにすること。イラストの背景は必ず白（#ffffff）のみとすること。ベージュ・茶色・クリーム色など白以外の背景色は使用禁止。テクスチャや影も一切入れないこと。テキストのフォントは全体を通して明朝体（Shippori Mincho）を使用すること。\n\n**全体構成**\n上部に全幅のタイトルエリアを配置し、その下に4つの同一サイズのカードが2行×2列のグリッドで並ぶレイアウトを構成する。全体の背景色は#fff4ec。全体的に#c9aa75を基調とした配色。デザインはシンプルで余白を活かしたラグジュアリーなスタイルとする。\n\n**上部タイトルエリア**\n全幅の半透明の白い帯状エリア（白80%程度）の中央に、#937960のShippori Mincho Boldで「{{main_title}}」を表示する。装飾はなし。\n\n**カード構造（全体）**\n各カードは角丸4pxの長方形で、枠線なし、薄いドロップシャドウ（blur 12px、透明度10%のグレー）がある。カード内部は上下に二分割される。\n- ヘッダーエリア: 背景色#c9aa75、#080808のShippori Mincho Boldで見出しが中央に配置される。\n- ボディエリア: 背景色が白（#ffffff）で、#b36922のShippori Mincho Boldによる説明テキストが中央揃えで配置される。その下に全幅の横長の画像エリアが設けられる。\n\n**個別カードの詳細**\n- パネル1（左上）: ヘッダー「{{card_header_text_1}}」、説明「{{card_body_text_1}}」、画像「{{card_image_content_1}}」\n- パネル2（右上）: ヘッダー「{{card_header_text_2}}」、説明「{{card_body_text_2}}」、画像「{{card_image_content_2}}」\n- パネル3（左下）: ヘッダー「{{card_header_text_3}}」、説明「{{card_body_text_3}}」、画像「{{card_image_content_3}}」\n- パネル4（右下）: ヘッダー「{{card_header_text_4}}」、説明「{{card_body_text_4}}」、画像「{{card_image_content_4}}」\n\n日本語の文字崩れがないよう正確にレンダリングすること。"
+    },
+    {
+      "name": "比較表",
+      "usage_scene": "2つの対象を複数の項目で比較するH2/H3（例：〇〇と△△の違い、施術A vs 施術B）",
+      "base_prompt": "クリーンなレイアウトを用いた、2列比較表インフォグラフィックパネル。テキストのフォントは全体を通して明朝体（Shippori Mincho）を使用すること。\n\n**全体構成**\n上部に全幅のタイトルエリアを配置し、その下に3行×2列の比較表を構成する。全体の背景色は#fff4ec。全体的に#c9aa75と#937960を基調とした配色。デザインはシンプルで余白を活かしたラグジュアリーなスタイルとする。\n\n**上部タイトルエリア**\n全幅の半透明の白い帯状エリア（白80%程度）の中央に、#937960のShippori Mincho Boldで「{{main_title}}」を表示する。装飾はなし。\n\n**表のヘッダー行**\n左端は空白セル。その右に2つのヘッダーセルが横並びで配置される。各ヘッダーセルは背景色#937960、白（#ffffff）のShippori Mincho Boldでテキストが中央揃えで配置される。\n- 左ヘッダー: 「{{col_header_a}}」\n- 右ヘッダー: 「{{col_header_b}}」\n\n**表のデータ行（3行）**\n各行は左端の行ラベルセルと2つのデータセルで構成される。行ラベルセルは背景色#c9aa75、#080808のShippori Mincho Boldでテキストが中央揃えで配置される。データセルは背景色が白（#ffffff）、#080808のShippori Mincho Mediumでテキストが中央揃えで配置される。セル間には4pxのギャップがある。\n- 行1: ラベル「{{row_label_1}}」、左セル「{{cell_a1}}」、右セル「{{cell_b1}}」\n- 行2: ラベル「{{row_label_2}}」、左セル「{{cell_a2}}」、右セル「{{cell_b2}}」\n- 行3: ラベル「{{row_label_3}}」、左セル「{{cell_a3}}」、右セル「{{cell_b3}}」\n\n日本語の文字崩れがないよう正確にレンダリングすること。"
+    },
+    {
+      "name": "5ステップフロー",
+      "usage_scene": "手順・流れ・プロセスを5段階で説明するH2/H3（例：施術の流れ、〇〇の手順）",
+      "base_prompt": "影なし・グラデーションなしのフラットイラストを用いた、美容・ライフスタイル系の5ステップフローインフォグラフィックパネル。イラストは#c9aa75と#937960の2色のみを使用したシンプルなフラットデザインとし、美容アイテム・植物・シンプルな人物シルエットなどをモチーフにすること。イラストの背景は必ず白（#ffffff）のみとすること。ベージュ・茶色・クリーム色など白以外の背景色は使用禁止。テクスチャや影も一切入れないこと。テキストのフォントは全体を通して明朝体（Shippori Mincho）を使用すること。\n\n**全体構成**\n上部に全幅のタイトルエリアを配置し、その下に5つのステップカードを「上段3枚＋下段2枚（中央寄せ）」のレイアウトで配置する。全体の背景色は#fff4ec。全体的に#937960を基調とした配色。デザインはシンプルで余白を活かしたラグジュアリーなスタイルとする。\n\n**上部タイトルエリア**\n全幅の半透明の白い帯状エリア（白80%程度）の中央に、#937960のShippori Mincho Boldで「{{main_title}}」を表示する。装飾はなし。\n\n**ステップカード構造（全5枚共通）**\n各カードは角丸なし（直角）の長方形で、枠線なし、薄いドロップシャドウ（blur 12px、透明度10%のグレー）がある。カード内部は上下に二分割される。\n- ヘッダーエリア: 背景色#937960。左に白（#ffffff）のShippori Mincho Boldで「Step」のテキスト、右に白枠の丸（円形）の中に白のShippori Mincho Boldでステップ番号を表示する。\n- ボディエリア: 背景色が白（#ffffff）。上部に#080808のShippori Mincho Boldでステップ説明テキストを中央揃えで配置。その下に全幅の横長の画像エリアを配置する。\n\n**個別ステップの詳細**\n- Step1: 説明「{{step1_desc}}」、画像「{{step1_image}}」\n- Step2: 説明「{{step2_desc}}」、画像「{{step2_image}}」\n- Step3: 説明「{{step3_desc}}」、画像「{{step3_image}}」\n- Step4: 説明「{{step4_desc}}」、画像「{{step4_image}}」\n- Step5: 説明「{{step5_desc}}」、画像「{{step5_image}}」\n\n日本語の文字崩れがないよう正確にレンダリングすること。"
+    },
+    {
+      "name": "",
+      "usage_scene": "",
+      "base_prompt": ""
+    }
+  ],
+  "components": [
+    {
+      "name": "画像パス",
+      "pattern": "https://lex-beauty.clinic/wp-content/uploads/{{name}}",
+      "active": true
+    },
+    {
+      "name": "メタリフ",
+      "pattern": "https://lex-beauty.clinic/lp/{{name}}",
+      "active": true
+    },
+    {
+      "name": "大見出し",
+      "pattern": "<h2>{{title}}</h2>",
+      "active": true
+    },
+    {
+      "name": "小見出し (h3)",
+      "pattern": "<h3>{{title}}</h3>",
+      "active": true
+    },
+    {
+      "name": "見出しパーツ (subttl)",
+      "pattern": "<div class=\"subhead\">{{content}}</div>",
+      "active": true
+    },
+    {
+      "name": "文字装飾 (Marker Txt)",
+      "pattern": "<span class=\"marker\">{{content}}</span>",
+      "active": true
+    },
+    {
+      "name": "文字装飾 (Bold)",
+      "pattern": "<span class=\"bold\">{{content}}</span>",
+      "active": true
+    },
+    {
+      "name": "文字装飾 (Caution)",
+      "pattern": "<span class=\"caution\">{{content}}</span>",
+      "active": true
+    },
+    {
+      "name": "コンテンツ幅100%画像　※画像の記述入れる際はこれマスト使用",
+      "pattern": "<div class=\"full-img\">\n    {{content}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "テーブル",
+      "pattern": "<table class=\"table\">\n    {{content}}\n</table>",
+      "active": true
+    },
+    {
+      "name": "シンプルボックス",
+      "pattern": "<div class=\"simplebox box\">\n    {{content}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "シンプルボックスタイトル　※シンプルボックスにタイトルをつけたいときにセットで使用する",
+      "pattern": "<div class=\"box-ttl\">{{title}}</div>",
+      "active": true
+    },
+    {
+      "name": "番号付きリスト",
+      "pattern": "<ol>\n    {{content}}\n</ol>",
+      "active": true
+    },
+    {
+      "name": "番号なしリスト",
+      "pattern": "<ul>\n    {{content}}\n</ul>",
+      "active": true
+    },
+    {
+      "name": "まとめボックス",
+      "pattern": "<div class=\"matome box\">\n    <div class=\"matome-ttl\">{{title}}</div>\n    <p>{{content}}</p>\n</div>",
+      "active": true
+    },
+    {
+      "name": "CTA",
+      "pattern": "<div class=\"c-btn\">\n    {{link}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "スクロールテーブル（4列以上はこれ）",
+      "pattern": "<div class=\"scrolltable\">\n<table class=\"table\">\n    {{content}}\n</table>\n</div>",
+      "active": true
+    },
+    {
+      "name": "ステップパーツ",
+      "pattern": "<div class=\"flow-wrap\">\n    {{content}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "ステップパーツ内部　※必ずステップパーツと組み合わせて使用（ステップパーツ内にステップ数に合わせて内部パーツを配置）",
+      "pattern": "<div class=\"flow\">\n    <div class=\"flow-ttl\">\n        <span class=\"flow-icon\"></span><p>{{title}}</p>\n    </div>\n   <div class=\"flow-inner\">\n    {{content}}\n    </div>\n</div>",
+      "active": true
+    },
+    {
+      "name": "ナンバリングパーツ",
+      "pattern": "<ol class=\"numlist\">\n    {{content}}\n</ol>",
+      "active": true
+    },
+    {
+      "name": "ナンバリングパーツ内部　※必ずナンバリングパーツと組み合わせて使用（ナンバリングパーツ内に数に合わせて内部パーツを配置）",
+      "pattern": "<li>\n    <p class=\"numlist-ttl\">\n    <span class=\"numlist-num\">{{number}}</span>{{title}}\n    </p>\n    <div class=\"numlist-inner\">\n    {{content}}\n    </div>\n</li>",
+      "active": true
+    },
+    {
+      "name": "Q＆Aパーツ（ショートコード）",
+      "pattern": "[qa-box01-wrap]\n    {{content}}\n[/qa-box01-wrap]",
+      "active": true
+    },
+    {
+      "name": "Q＆Aパーツ内部（ショートコード）　※必ずQ＆Aパーツと組み合わせて使用（Q＆Aパーツ内にQ＆Aの数に合わせて内部パーツを配置）",
+      "pattern": "[qa-box01 title=\"{{question}}\"]\n    {{answer}}\n[/qa-box01]",
+      "active": true
+    },
+    {
+      "name": "メリットパーツ",
+      "pattern": "<div class=\"meritdemerit\" data-type=\"merit\">\n    <div class=\"meritdemerit-ttl\">{{title}}</div>\n<div class=\"meritdemerit-inner\">\n\t<ul class=\"meritdemerit-list\">\n\t\t{{content}}\n\t</ul>\n</div>\n</div>",
+      "active": true
+    },
+    {
+      "name": "デメリットパーツ",
+      "pattern": "<div class=\"meritdemerit\" data-type=\"demerit\">\n    <div class=\"meritdemerit-ttl\">{{title}}</div>\n    <div class=\"meritdemerit-inner\">\n    <ul class=\"meritdemerit-list\">\n\t\t{{content}}\n\t</ul>\n</div>\n</div>",
+      "active": true
+    },
+    {
+      "name": "右寄せリンク",
+      "pattern": "<div class=\"right-link-icon\">{{link}}</div>",
+      "active": true
+    }
+  ]
+}

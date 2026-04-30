@@ -1,0 +1,148 @@
+{
+  "wp_config": {},
+  "design_rules": {
+    "tone": "",
+    "colors": {
+      "main": "#47c1d3",
+      "accent_red": "#fe766b",
+      "accent_yellow": "#ffd711",
+      "accent_orange": "#fd9b23",
+      "bg_white": "#FFFFFF",
+      "bg_gray": "#eeeeee",
+      "text": "#333333"
+    }
+  },
+  "image_templates": [],
+  "components": [
+    {
+      "name": "画像パス",
+      "pattern": "https://example.com/wp-content/uploads/{{name}}",
+      "active": true
+    },
+    {
+      "name": "メタリフ",
+      "pattern": "https://example.com/lp/{{name}}",
+      "active": true
+    },
+    {
+      "name": "大見出し",
+      "pattern": "<h2>{{title}}</h2>",
+      "active": true
+    },
+    {
+      "name": "小見出し (h3)",
+      "pattern": "<h3>{{title}}</h3>",
+      "active": true
+    },
+    {
+      "name": "見出しパーツ (subttl)",
+      "pattern": "<div class=\"subttl\">{{content}}</div>",
+      "active": true
+    },
+    {
+      "name": "文字装飾 (Marker Txt)",
+      "pattern": "<span class=\"main-color-bold\">{{content}}</span>",
+      "active": true
+    },
+    {
+      "name": "文字装飾 (Bold)",
+      "pattern": "<span class=\"bold\">{{content}}</span>",
+      "active": true
+    },
+    {
+      "name": "文字装飾 (Caution)",
+      "pattern": "<span class=\"caution\">{{content}}</span>",
+      "active": true
+    },
+    {
+      "name": "コンテンツ幅100%画像　※画像の記述入れる際はこれマスト使用",
+      "pattern": "<div class=\"img-100\">\n    {{content}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "テーブル",
+      "pattern": "<table class=\"table\">\n    {{content}}\n</table>",
+      "active": true
+    },
+    {
+      "name": "シンプルボックス",
+      "pattern": "<div class=\"simple-box box\">\n    {{content}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "シンプルボックスタイトル　※シンプルボックスにタイトルをつけたいときにセットで使用する",
+      "pattern": "<p class=\"box-ttl\">{{title}}</p>",
+      "active": true
+    },
+    {
+      "name": "番号付きリスト",
+      "pattern": "<ol>\n    {{content}}\n</ol>",
+      "active": true
+    },
+    {
+      "name": "番号なしリスト",
+      "pattern": "<ul>\n    {{content}}\n</ul>",
+      "active": true
+    },
+    {
+      "name": "まとめボックス",
+      "pattern": "<div class=\"summary box\">\n    <div class=\"summary-ttl\">{{title}}</div>\n <div class=\"summary-inner\">\n    <p>{{content}}</p>\n</div>\n</div>",
+      "active": true
+    },
+    {
+      "name": "CTA",
+      "pattern": "<div class=\"c-btn\">\n    {{link}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "スクロールテーブル（4列以上はこれ）",
+      "pattern": "<div class=\"table-scroll\">\n<table class=\"table\">\n    {{content}}\n</table>\n</div>",
+      "active": true
+    },
+    {
+      "name": "ステップパーツ",
+      "pattern": "<div class=\"step-wrap\">\n    {{content}}\n</div>",
+      "active": true
+    },
+    {
+      "name": "ステップパーツ内部　※必ずステップパーツと組み合わせて使用（ステップパーツ内にステップ数に合わせて内部パーツを配置）",
+      "pattern": "<div class=\"step\">\n    <p class=\"num\">{{number}</p><p class=\"ttl\">{{title}}</p>\n    <p>\n    {{content}}\n    </p>\n</div>",
+      "active": true
+    },
+    {
+      "name": "ナンバリングパーツ",
+      "pattern": "<ol class=\"numbering-wrap\">\n    {{content}}\n</ol>",
+      "active": true
+    },
+    {
+      "name": "ナンバリングパーツ内部　※必ずナンバリングパーツと組み合わせて使用（ナンバリングパーツ内に数に合わせて内部パーツを配置）",
+      "pattern": "<li class=\"numbering\">\n    <p class=\"ttl\">\n    <span class=\"num\">{{number}}</span>{{title}}\n    </p>\n    <div class=\"inner\">\n    {{content}}\n    </div>\n</li>",
+      "active": true
+    },
+    {
+      "name": "Q＆Aパーツ（ショートコード）",
+      "pattern": "[qa-box01-wrap]\n    {{content}}\n[/qa-box01-wrap]",
+      "active": true
+    },
+    {
+      "name": "Q＆Aパーツ内部（ショートコード）　※必ずQ＆Aパーツと組み合わせて使用（Q＆Aパーツ内にQ＆Aの数に合わせて内部パーツを配置）",
+      "pattern": "[qa-box01 title=\"{{question}}\"]\n    {{answer}}\n[/qa-box01]",
+      "active": true
+    },
+    {
+      "name": "メリットパーツ",
+      "pattern": "<div class=\"merideme\" data-type=\"merit\">\n<div class=\"ttl\">{{title}}</div>\n<div class=\"inner\">\n\t<ul class=\"list\">\n\t\t{{content}}\n\t</ul>\n</div>\n</div>",
+      "active": true
+    },
+    {
+      "name": "デメリットパーツ",
+      "pattern": "<div class=\"merideme\" data-type=\"demerit\">\n<div class=\"ttl\">{{title}}</div>\n<div class=\"inner\">\n\t<ul class=\"list\">\n\t\t{{content}}\n\t</ul>\n</div>\n</div>",
+      "active": true
+    },
+    {
+      "name": "右寄せリンク",
+      "pattern": "<p class=\"right-link in\">{{link}}</p>",
+      "active": true
+    }
+  ]
+}

@@ -278,6 +278,7 @@ def _build_body_prompt(
     h2_scope: str,
     include_h1: bool,
     use_clinic_placeholder: bool = False,
+    site_parts: str = "",
 ) -> str:
     article_type = inputs["article_type"]
     clinic_names = list(clinic_info.keys()) if clinic_info else []
@@ -326,6 +327,11 @@ def _build_body_prompt(
         "本文を一切生成しない。<h2>タグのみ出力し、直後に `<!-- クリニック紹介ブロック入る -->` とだけ記述して次のH2に進む。\n"
     ) if use_clinic_placeholder else ""
 
+    site_parts_block = (
+        f"\n{site_parts}\n"
+        "※上記のサイト別パーツを使用すること。{{変数名}}は実際の内容に置き換えること。パーツリスト外のクラス名・タグは使用しない。\n"
+    ) if site_parts else ""
+
     return f"""あなたはSEO記事の執筆専門家です。
 記事全体の構成を把握したうえで、指定されたH2セクションのみHTMLで出力してください。
 
@@ -349,7 +355,7 @@ def _build_body_prompt(
 
 {WRITING_RULES}
 {type_instruction}
-
+{site_parts_block}
 【HTML出力ルール】
 - 見出し: <h1>、<h2>、<h3> タグを使用（<h4>は禁止）
 - 段落: <p> タグ（裸のテキスト禁止）
@@ -367,6 +373,7 @@ def generate_body(
     clinic_info: dict,
     claude_api_key: str,
     competitor_analysis: dict | None = None,
+    site_parts: str = "",
 ) -> dict:
     client = anthropic.Anthropic(api_key=claude_api_key)
 
@@ -401,6 +408,7 @@ def generate_body(
             h2_scope=structure["structure_text"],
             include_h1=True,
             use_clinic_placeholder=use_clinic_placeholder,
+            site_parts=site_parts,
         )
         return _finish(call_claude(fallback_prompt), debug="H2パース失敗: フォールバック使用")
 
@@ -414,6 +422,7 @@ def generate_body(
         h2_scope="\n".join(first_half),
         include_h1=True,
         use_clinic_placeholder=use_clinic_placeholder,
+        site_parts=site_parts,
     )
     part1 = call_claude(prompt1)
 
@@ -425,6 +434,7 @@ def generate_body(
             h2_scope="\n".join(second_half),
             include_h1=False,
             use_clinic_placeholder=use_clinic_placeholder,
+            site_parts=site_parts,
         )
         part2 = call_claude(prompt2)
 
