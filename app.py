@@ -255,7 +255,7 @@ with tab2:
 
     st.divider()
 
-    article_type = st.radio("記事タイプ", ["地域", "比較", "商標"], horizontal=True, key="test_type")
+    article_type = st.radio("記事タイプ", ["地域", "比較", "商標", "ノウハウ"], horizontal=True, key="test_type")
 
     sheet_url_single = st.text_input(
         "スプレッドシートURL（設定タブのデフォルトを読む）",
@@ -454,7 +454,7 @@ with tab2:
 # ════════════════════════════════════════════════════════
 with tab3:
     st.title("✅ 品質チェック")
-    check_type    = st.radio("記事タイプ", ["地域", "比較", "商標"], horizontal=True, key="chk_type")
+    check_type    = st.radio("記事タイプ", ["地域", "比較", "商標", "ノウハウ"], horizontal=True, key="chk_type")
     check_main_kw = st.text_input("メインKW", key="chk_kw")
     check_sub_kw  = st.text_input("サブKW（カンマ区切り）", key="chk_sub")
     html_input    = st.text_area("HTMLを貼り付け", height=300, key="chk_html")

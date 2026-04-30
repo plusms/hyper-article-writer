@@ -30,6 +30,18 @@ TOPICS = {
         {"key": "faq",              "label": "よくある質問",                         "fixed": False, "default": False},
         {"key": "summary",          "label": "★ まとめ",                             "fixed": True,  "default": True},
     ],
+    "ノウハウ": [
+        {"key": "intro",            "label": "★ 冒頭文",                             "fixed": True,  "default": True},
+        {"key": "what_is",          "label": "〇〇とは（基本解説）",                 "fixed": False, "default": True},
+        {"key": "types",            "label": "種類・分類",                           "fixed": False, "default": False},
+        {"key": "how_to_choose",    "label": "選び方・比較軸",                       "fixed": False, "default": True},
+        {"key": "cost",             "label": "費用・料金相場",                       "fixed": False, "default": False},
+        {"key": "flow",             "label": "手順・流れ",                           "fixed": False, "default": False},
+        {"key": "merit_demerit",    "label": "メリット・デメリット",                 "fixed": False, "default": False},
+        {"key": "faq",              "label": "よくある質問",                         "fixed": False, "default": False},
+        {"key": "cv_link",          "label": "★ CV記事への誘導",                     "fixed": True,  "default": True},
+        {"key": "summary",          "label": "★ まとめ",                             "fixed": True,  "default": True},
+    ],
 }
 
 TOPIC_LABELS = {
@@ -46,4 +58,11 @@ TOPIC_LABELS = {
     "pricing":         "料金プラン",
     "reviews":         "口コミ・評判",
     "coupons":         "クーポン・割引情報",
+    # ノウハウ
+    "what_is":         "〇〇とは（基本解説）",
+    "types":           "種類・分類",
+    "cost":            "費用・料金相場",
+    "flow":            "手順・流れ",
+    "merit_demerit":   "メリット・デメリット",
+    "cv_link":         "CV記事への誘導",
 }

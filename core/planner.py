@@ -32,6 +32,14 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
             f"ジャンル: {inputs['genre']}\n"
             "固定H2：冒頭比較表、おすすめクリニック紹介、まとめ"
         )
+    elif article_type == "ノウハウ":
+        type_note = (
+            f"ジャンル: {inputs['genre']}\n"
+            "クリニック紹介ブロック・具体的な料金表は設けない。情報提供・解説に特化した構成にする。\n"
+            "固定H2：冒頭文、まとめ（まとめの直前にCV記事誘導セクションを置く）\n"
+            "CV記事誘導セクションは「関連CV記事へ誘導する1ブロック」。\n"
+            "読者が次に取るべき行動（クリニック選びや費用確認）につながる橋渡し記事として設計する。"
+        )
     else:
         type_note = (
             "クリニック名（商標名）はメインKWから自動判断してください。\n"

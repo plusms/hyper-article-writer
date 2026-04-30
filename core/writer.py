@@ -165,13 +165,42 @@ Q33. 「怪しい」「副作用」「失敗」「効果なし」等ネガティ
 Q34. 冒頭に簡易料金表またはCTA（申込・予約・問い合わせ導線）が置かれているか
 """
 
+_QUALITY_HOWTO = """
+【ノウハウ記事 追加チェック基準】
+
+Q29. クリニック紹介ブロック・具体的な料金表が設けられていないか（情報提供記事として）
+Q30. 各H3が「どう判断・行動すればよいか」まで踏み込んでいるか（仕組み説明のみで終わっていないか）
+Q31. CV記事誘導セクション（[要確認：関連CV記事URL]）がまとめの直前に置かれているか
+Q32. 医療・専門用語をユーザーが行動判断できる粒度に噛み砕いているか
+"""
+
 _QUALITY_TYPE = {
     "地域": _QUALITY_LOCAL,
     "比較": _QUALITY_COMPARISON,
     "商標": _QUALITY_BRAND,
+    "ノウハウ": _QUALITY_HOWTO,
 }
 
 _TYPE_INSTRUCTIONS = {
+    "ノウハウ": """
+【ノウハウ記事 執筆要件（厳守）】
+
+■ 基本方針
+- クリニック紹介ブロック・具体的な料金表は設けない
+- 情報提供・解説に徹する。「〇〇できます」「〇〇で解決します」等の断定型で書く
+- 「なぜそうなるか」の仕組みより「どう判断・行動すればよいか」を優先する
+- 医学的・専門的な説明はユーザーが行動判断できる粒度まで噛み砕く
+- 各H3でそのジャンル・KW特有の具体例・数値・条件を最低1つ入れる
+
+■ CV記事誘導セクション（まとめの直前に配置・固定）
+- <p>[要確認：関連CV記事のURLをここに挿入してください]</p> の形式でプレースホルダーを出力
+- 誘導文は「〇〇で実際にクリニックを選ぶなら」「〇〇の費用を比較するなら」等のアクション起点で書く
+- リンクは架空のURLを書かない。プレースホルダーのみ
+
+■ ノウハウ禁止事項（CV記事との区別）
+- 特定クリニックの紹介・評価はしない
+- 「〇〇クリニックがおすすめ」「〇〇の料金は△△円」等の具体情報はNG
+""",
     "地域": """
 【地域記事 執筆要件（厳守）】
 
@@ -364,7 +393,16 @@ def _build_body_prompt(
 - 比較表: <table class="comparison-table"><thead><tr><th>...</th></tr></thead><tbody>...</tbody></table>
 - [要確認]箇所: テキストをそのまま出力する（例: <p>[要確認：GoogleマップID]</p>）。補完しない
 - HTMLの外側にコードブロック記号（```）をつけない。HTMLをそのまま出力する{clinic_placeholder_note}
-{todo_note}"""
+{todo_note}
+【出力前の自己チェック（必ず実行・チェック結果は出力しない）】
+以下を確認し、違反があれば修正してからHTMLのみを出力してください。
+① こそあど言葉（これ・それ・この・その・ここ・そこ）→ 具体的な名詞に置き換える
+② 各H3の末尾がSoWhat（行動後の状態変化まで書いた締め文）になっているか
+   NG：「〜重要です」「〜大切です」「〜しましょう」「〜確認してください」
+   OK：「〜することで△△できます」「〜が続けやすくなります」等
+③ H2直下に導入文（3〜4文・80〜120文字）があるか。いきなりH3・テーブル・リストで始まっていないか
+④ 記事内参照表現（以下の・上記の・本記事・先ほど・前述・次のセクション等）が使われていないか
+⑤ SoWhatの文末パターンが連続2H3以上重複していないか"""
 
 
 def generate_body(
@@ -379,11 +417,11 @@ def generate_body(
 
     use_clinic_placeholder = inputs.get("article_type") in ("地域", "比較")
 
-    def call_claude(prompt: str) -> str:
+    def _call(messages: list) -> str:
         msg = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=8192,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
         )
         return msg.content[0].text
 
@@ -410,13 +448,14 @@ def generate_body(
             use_clinic_placeholder=use_clinic_placeholder,
             site_parts=site_parts,
         )
-        return _finish(call_claude(fallback_prompt), debug="H2パース失敗: フォールバック使用")
+        return _finish(_call([{"role": "user", "content": fallback_prompt}]),
+                       debug="H2パース失敗: フォールバック使用")
 
     mid = max(1, len(h2_sections) // 2)
     first_half = h2_sections[:mid]
     second_half = h2_sections[mid:]
 
-    # コール1: H1 + 冒頭文 + 前半H2
+    # ターン1: H1 + 冒頭文 + 前半H2（自己チェック内包）
     prompt1 = _build_body_prompt(
         inputs, structure, clinic_info, competitor_analysis,
         h2_scope="\n".join(first_half),
@@ -424,21 +463,25 @@ def generate_body(
         use_clinic_placeholder=use_clinic_placeholder,
         site_parts=site_parts,
     )
-    part1 = call_claude(prompt1)
+    messages = [{"role": "user", "content": prompt1}]
+    part1 = _call(messages)
 
-    # コール2: 後半H2（後半がある場合のみ）
-    part2 = ""
-    if second_half:
-        prompt2 = _build_body_prompt(
-            inputs, structure, clinic_info, competitor_analysis,
-            h2_scope="\n".join(second_half),
-            include_h1=False,
-            use_clinic_placeholder=use_clinic_placeholder,
-            site_parts=site_parts,
-        )
-        part2 = call_claude(prompt2)
+    if not second_half:
+        return _finish(part1)
 
-    raw = part1.rstrip() + "\n" + part2.lstrip() if part2 else part1
+    # ターン2: 後半H2（前半の会話コンテキストを保持した状態で生成・自己チェック内包）
+    messages.append({"role": "assistant", "content": part1})
+    prompt2 = _build_body_prompt(
+        inputs, structure, clinic_info, competitor_analysis,
+        h2_scope="\n".join(second_half),
+        include_h1=False,
+        use_clinic_placeholder=use_clinic_placeholder,
+        site_parts=site_parts,
+    )
+    messages.append({"role": "user", "content": prompt2})
+    part2 = _call(messages)
+
+    raw = part1.rstrip() + "\n" + part2.lstrip()
     return _finish(raw)
 
 
