@@ -14,7 +14,7 @@ from core.sheets import (
     read_input_rows, write_output_row, write_status, get_sheet,
     get_settings_sheet, read_defaults,
 )
-from core import site_config_manager
+from core import site_config_manager, image_generator, drive_uploader
 
 st.set_page_config(page_title="CV Article Writer", layout="wide", page_icon="✍️")
 
@@ -45,6 +45,8 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
 
 # ── APIキー（Secrets優先 → サイドバー入力 fallback）──────────
 _claude_key_default  = _secret("CLAUDE_API_KEY")
+_gemini_key_default  = _secret("GEMINI_API_KEY")
+_drive_folder_id     = _secret("DRIVE_PARENT_FOLDER_ID", "1Nqz5C62IzEXihgBZAUE5zCCnU6Yc68t9")
 
 # ── サイドバー：設定 ──────────────────────────────────────
 with st.sidebar:
@@ -54,6 +56,12 @@ with st.sidebar:
         claude_key = _claude_key_default
     else:
         claude_key = st.text_input("Claude API Key", type="password")
+
+    if _gemini_key_default:
+        st.caption("Gemini API Key: Secrets から読込済み")
+        gemini_key = _gemini_key_default
+    else:
+        gemini_key = st.text_input("Gemini API Key（画像生成用）", type="password")
 
     if _secret("gcp_service_account.type"):
         st.caption("Google Sheets 認証: Secrets から読込済み")
@@ -371,9 +379,11 @@ with tab2:
         if not errs:
             # サイトパーツ構築
             _single_site_parts = ""
+            _single_site_config = {}
             if selected_site_for_parts != "（なし）":
                 _sc = site_config_manager.load_site_config(selected_site_for_parts)
                 _single_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
+                _single_site_config = _sc
 
             combined_block = "\n".join(filter(None, [default_block_val, additional_block]))
             inputs = {
@@ -414,6 +424,17 @@ with tab2:
                     output = generate_body(inputs, structure, clinics, claude_key, comp,
                                           site_parts=_single_site_parts)
                     s.update(label="✅ 完了", state="complete")
+                    st.session_state["t2_last"] = {
+                        "html":           output["html"],
+                        "title":          structure["title"],
+                        "meta":           structure["meta"],
+                        "todo_list":      output["todo_list"],
+                        "structure_text": structure["structure_text"],
+                        "site_config":    _single_site_config,
+                        "site_name":      site_name or (selected_site_for_parts if selected_site_for_parts != "（なし）" else ""),
+                        "main_kw":        main_kw,
+                        "debug":          output.get("debug"),
+                    }
 
                     st.markdown(f"**タイトル:** {structure['title']}")
                     st.markdown(f"**メタ:** {structure['meta']}")
@@ -447,6 +468,81 @@ with tab2:
                 except Exception as e:
                     s.update(label="❌ エラー", state="error")
                     st.error(str(e))
+
+    # ── 画像生成セクション（前回生成した記事に対して実行）────────────
+    _t2_last = st.session_state.get("t2_last")
+    if _t2_last and _t2_last.get("site_config", {}).get("image_templates"):
+        st.divider()
+        st.subheader("🖼️ 画像生成")
+        st.caption(f"対象記事: {_t2_last['main_kw']}")
+
+        _img_slug = st.text_input(
+            "スラッグ（ファイル名の接頭辞・英数字ハイフンのみ）",
+            key="t2_img_slug",
+            placeholder="例: aga-treatment-tokyo",
+            help="画像ファイル名: スラッグ-英単語.webp",
+        )
+
+        if st.button("🖼️ 画像を生成してDriveにアップロード", key="t2_img_gen", type="primary"):
+            errs_img = []
+            if not gemini_key:
+                errs_img.append("Gemini API Key が未設定です（サイドバーから入力してください）")
+            if not _img_slug.strip():
+                errs_img.append("スラッグを入力してください")
+            if not claude_key:
+                errs_img.append("Claude API Key が未設定です")
+            for e in errs_img:
+                st.error(e)
+
+            if not errs_img:
+                _creds_img = _get_gcp_creds(sheets_creds_file)
+                if not _creds_img:
+                    st.error("Google Sheets 認証情報が未設定です（Drive アップロードにも使用）")
+                else:
+                    with st.status("画像生成中...", expanded=True) as img_status:
+                        try:
+                            st.write("💡 画像プロンプト生成中（Claude）...")
+                            prompts = image_generator.generate_image_prompts(
+                                _t2_last["structure_text"],
+                                _t2_last["site_config"],
+                                claude_key,
+                                _img_slug.strip(),
+                            )
+                            st.write(f"　→ {len(prompts)} 枚分のプロンプトを生成しました")
+
+                            _img_results = []
+                            for i, p in enumerate(prompts):
+                                st.write(f"🎨 画像生成中 ({i+1}/{len(prompts)}): {p['filename']}...")
+                                img_bytes = image_generator.generate_image_bytes(p["prompt"], gemini_key)
+                                if img_bytes:
+                                    drive_url = drive_uploader.upload_image(
+                                        img_bytes,
+                                        p["filename"],
+                                        _t2_last["site_name"] or "default",
+                                        _img_slug.strip(),
+                                        _creds_img,
+                                        _drive_folder_id,
+                                    )
+                                    _img_results.append({**p, "drive_url": drive_url})
+                                    st.write(f"　→ アップロード完了")
+                                else:
+                                    st.warning(f"　→ {p['filename']} の画像生成に失敗しました")
+
+                            img_status.update(label=f"✅ {len(_img_results)} 枚アップロード完了", state="complete")
+
+                            st.markdown("### アップロード結果")
+                            for r in _img_results:
+                                st.markdown(
+                                    f"**{r['position']}**  \n"
+                                    f"ファイル名: `{r['filename']}`  \n"
+                                    f"alt: {r['alt']}  \n"
+                                    f"[Driveで開く]({r['drive_url']})"
+                                )
+                                st.divider()
+
+                        except Exception as e:
+                            img_status.update(label="❌ エラー", state="error")
+                            st.error(str(e))
 
 
 # ════════════════════════════════════════════════════════
