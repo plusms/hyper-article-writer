@@ -34,10 +34,17 @@ if _app_password:
 
 # ── GCP認証（Secrets優先 → ファイルアップロード fallback）──
 def _get_gcp_creds(uploaded_file) -> dict | None:
+    # 方式1: TOML ネスト形式 [gcp_service_account]
     try:
         return dict(st.secrets["gcp_service_account"])
     except Exception:
         pass
+    # 方式2: JSON文字列 GCP_SERVICE_ACCOUNT_JSON = '''...'''
+    try:
+        return json.loads(st.secrets["GCP_SERVICE_ACCOUNT_JSON"])
+    except Exception:
+        pass
+    # 方式3: ファイルアップロード
     if uploaded_file:
         uploaded_file.seek(0)
         return json.load(uploaded_file)
@@ -63,7 +70,8 @@ with st.sidebar:
     else:
         gemini_key = st.text_input("Gemini API Key（画像生成用）", type="password")
 
-    if _secret("gcp_service_account.type"):
+    _gcp_in_secrets = _secret("gcp_service_account.type") or _secret("GCP_SERVICE_ACCOUNT_JSON")
+    if _gcp_in_secrets:
         st.caption("Google Sheets 認証: Secrets から読込済み")
         sheets_creds_file = None
     else:
