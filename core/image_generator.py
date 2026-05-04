@@ -3,7 +3,8 @@ import anthropic
 from typing import Optional
 
 try:
-    import google.generativeai as genai
+    from google import genai as _google_genai
+    from google.genai import types as _google_genai_types
     _GENAI_AVAILABLE = True
 except ImportError:
     _GENAI_AVAILABLE = False
@@ -80,16 +81,16 @@ def generate_image_prompts(
 def generate_image_bytes(prompt: str, gemini_api_key: str) -> Optional[bytes]:
     """Gemini で画像を生成し bytes を返す。失敗時は None。"""
     if not _GENAI_AVAILABLE:
-        raise ImportError("google-generativeai がインストールされていません")
-    genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel(_IMAGE_MODEL)
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            response_modalities=["IMAGE", "TEXT"]
+        raise ImportError("google-genai がインストールされていません")
+    client = _google_genai.Client(api_key=gemini_api_key)
+    response = client.models.generate_content(
+        model=_IMAGE_MODEL,
+        contents=prompt,
+        config=_google_genai_types.GenerateContentConfig(
+            response_modalities=["IMAGE"],
         ),
     )
     for part in response.candidates[0].content.parts:
-        if hasattr(part, "inline_data") and part.inline_data and part.inline_data.data:
+        if part.inline_data and part.inline_data.data:
             return part.inline_data.data
     return None
