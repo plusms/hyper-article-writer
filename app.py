@@ -431,7 +431,6 @@ with tab2:
                     st.write("✍️ 本文生成中（Claude）...")
                     output = generate_body(inputs, structure, clinics, claude_key, comp,
                                           site_parts=_single_site_parts)
-                    s.update(label="✅ 完了", state="complete")
                     st.session_state["t2_last"] = {
                         "html":           output["html"],
                         "title":          structure["title"],
@@ -443,19 +442,7 @@ with tab2:
                         "main_kw":        main_kw,
                         "debug":          output.get("debug"),
                     }
-
-                    st.markdown(f"**タイトル:** {structure['title']}")
-                    st.markdown(f"**メタ:** {structure['meta']}")
-                    with st.expander("構成テキスト（デバッグ用）"):
-                        st.text(structure["structure_text"])
-                        if output.get("debug"):
-                            st.warning(f"⚠️ {output['debug']}")
-                    if output["todo_list"]:
-                        st.warning("**[要確認]リスト**\n" + output["todo_list"])
-                    st.code(output["html"], language="html")
-                    st.download_button("📥 HTMLをダウンロード", output["html"],
-                                       file_name=f"{main_kw.replace(' ','_')}.html",
-                                       mime="text/html")
+                    s.update(label="✅ 完了", state="complete")
 
                     if sheet_url_out.strip():
                         creds_out = _get_gcp_creds(sheets_creds_file)
@@ -477,8 +464,27 @@ with tab2:
                     s.update(label="❌ エラー", state="error")
                     st.error(str(e))
 
-    # ── 画像生成セクション（前回生成した記事に対して実行）────────────
+    # ── 生成結果表示（session_stateから常時表示）────────────────
     _t2_last = st.session_state.get("t2_last")
+    if _t2_last:
+        st.divider()
+        st.markdown(f"**タイトル:** {_t2_last['title']}")
+        st.markdown(f"**メタ:** {_t2_last['meta']}")
+        with st.expander("構成テキスト（デバッグ用）"):
+            st.text(_t2_last["structure_text"])
+            if _t2_last.get("debug"):
+                st.warning(f"⚠️ {_t2_last['debug']}")
+        if _t2_last["todo_list"]:
+            st.warning("**[要確認]リスト**\n" + _t2_last["todo_list"])
+        st.code(_t2_last["html"], language="html")
+        st.download_button(
+            "📥 HTMLをダウンロード", _t2_last["html"],
+            file_name=f"{_t2_last['main_kw'].replace(' ','_')}.html",
+            mime="text/html",
+            key="t2_dl",
+        )
+
+    # ── 画像生成セクション（前回生成した記事に対して実行）────────────
     if _t2_last and _t2_last.get("site_config", {}).get("image_templates"):
         st.divider()
         st.subheader("🖼️ 画像生成")

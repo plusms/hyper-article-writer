@@ -66,7 +66,7 @@ def generate_image_prompts(
     client = anthropic.Anthropic(api_key=claude_api_key)
     msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=4096,
+        max_tokens=8192,
         messages=[{"role": "user", "content": prompt}],
     )
     text = msg.content[0].text.strip()
