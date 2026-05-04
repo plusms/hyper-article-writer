@@ -9,7 +9,7 @@ try:
 except ImportError:
     _GENAI_AVAILABLE = False
 
-_IMAGE_MODEL = "imagen-3.0-generate-001"
+_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
 
 
 def generate_image_prompts(
@@ -81,18 +81,32 @@ def generate_image_prompts(
 def generate_image_bytes(
     prompt: str, gemini_api_key: str, model_override: Optional[str] = None
 ) -> Optional[bytes]:
-    """Imagen で画像を生成し bytes を返す。失敗時は None。"""
+    """Gemini/Imagen で画像を生成し bytes を返す。失敗時は None。"""
     if not _GENAI_AVAILABLE:
         raise ImportError("google-genai がインストールされていません")
     model = model_override or _IMAGE_MODEL
     client = _google_genai.Client(api_key=gemini_api_key)
-    response = client.models.generate_images(
-        model=model,
-        prompt=prompt,
-        config=_google_genai_types.GenerateImagesConfig(
-            number_of_images=1,
-        ),
-    )
-    if response.generated_images:
-        return response.generated_images[0].image.image_bytes
-    return None
+
+    if "imagen" in model.lower():
+        # Imagen系: generate_images API
+        response = client.models.generate_images(
+            model=model,
+            prompt=prompt,
+            config=_google_genai_types.GenerateImagesConfig(number_of_images=1),
+        )
+        if response.generated_images:
+            return response.generated_images[0].image.image_bytes
+        return None
+    else:
+        # Gemini系: generate_content + response_modalities
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=_google_genai_types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+            ),
+        )
+        for part in response.candidates[0].content.parts:
+            if part.inline_data and part.inline_data.data:
+                return part.inline_data.data
+        return None
