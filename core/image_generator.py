@@ -78,13 +78,16 @@ def generate_image_prompts(
     return json.loads(text)
 
 
-def generate_image_bytes(prompt: str, gemini_api_key: str) -> Optional[bytes]:
+def generate_image_bytes(
+    prompt: str, gemini_api_key: str, model_override: Optional[str] = None
+) -> Optional[bytes]:
     """Imagen で画像を生成し bytes を返す。失敗時は None。"""
     if not _GENAI_AVAILABLE:
         raise ImportError("google-genai がインストールされていません")
+    model = model_override or _IMAGE_MODEL
     client = _google_genai.Client(api_key=gemini_api_key)
     response = client.models.generate_images(
-        model=_IMAGE_MODEL,
+        model=model,
         prompt=prompt,
         config=_google_genai_types.GenerateImagesConfig(
             number_of_images=1,
