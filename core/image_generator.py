@@ -9,7 +9,7 @@ try:
 except ImportError:
     _GENAI_AVAILABLE = False
 
-_IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"
+_IMAGE_MODEL = "gemini-2.0-flash-exp"
 
 
 def generate_image_prompts(
