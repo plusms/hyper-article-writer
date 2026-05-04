@@ -51,7 +51,7 @@ def upload_image(
     service = _get_service(credentials_dict)
     site_folder_id = _find_or_create_folder(service, site_name or "default", parent_folder_id)
     slug_folder_id = _find_or_create_folder(service, slug, site_folder_id)
-    media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/webp")
+    media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/png")
     metadata = {"name": filename, "parents": [slug_folder_id]}
     file = service.files().create(
         body=metadata,
