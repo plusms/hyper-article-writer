@@ -1,6 +1,7 @@
 import requests
 import anthropic
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 
 
 def fetch_page_text(url: str) -> str:
@@ -158,7 +159,35 @@ TCB東京中央美容外科::tcb.net
     return discovered[:5]
 
 
-def collect_clinic_info(clinics: list, genre: str, claude_api_key: str) -> dict:
+def _find_price_pages(base_url: str, genre: str, max_pages: int = 2) -> list[str]:
+    """トップページのリンクから料金・メニュー系ページのURLを抽出する。"""
+    price_keywords = ["price", "料金", "費用", "プラン", "plan", "menu", "メニュー", "cost", "ryokin"]
+    if genre:
+        price_keywords.append(genre[:4])
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        r = requests.get(base_url, headers=headers, timeout=15)
+        soup = BeautifulSoup(r.text, "html.parser")
+        base_domain = urlparse(base_url).netloc
+        seen, links = set(), []
+        for a in soup.find_all("a", href=True):
+            href = urljoin(base_url, a["href"])
+            if urlparse(href).netloc != base_domain:
+                continue
+            if href in seen or href == base_url:
+                continue
+            link_text = (a.get_text(strip=True) + " " + href).lower()
+            if any(kw.lower() in link_text for kw in price_keywords if kw):
+                seen.add(href)
+                links.append(href)
+                if len(links) >= max_pages:
+                    break
+        return links
+    except Exception:
+        return []
+
+
+def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "") -> dict:
     if not clinics:
         return {}
 
@@ -168,18 +197,30 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str) -> dict:
         domain_or_url = clinic["domain"]
 
         if domain_or_url.startswith("http"):
-            content = fetch_page_text(domain_or_url)
+            main_url = domain_or_url
+            content = fetch_page_text(main_url)
         else:
+            main_url = None
             content = "[取得失敗]"
             for prefix in ["https://", "https://www."]:
                 result = fetch_page_text(f"{prefix}{domain_or_url}")
                 if not result.startswith("[取得失敗"):
+                    main_url = f"{prefix}{domain_or_url}"
                     content = result
                     break
+
+        # 商標記事は料金・メニューページも追加取得
+        if article_type == "商標" and main_url:
+            extra_pages = _find_price_pages(main_url, genre)
+            for extra_url in extra_pages:
+                extra = fetch_page_text(extra_url)
+                if not extra.startswith("[取得失敗"):
+                    content += f"\n\n--- 追加ページ: {extra_url} ---\n{extra}"
+
         fetched[name] = content
 
     clinic_blocks = "\n\n".join(
-        f"【{name}】\nWebサイト内容：\n{content[:2000]}\n\n"
+        f"【{name}】\nWebサイト内容：\n{content[:6000]}\n\n"
         f"院名：\n住所：\nアクセス（最寄り駅・徒歩分数）：\n診療時間：\n休診日：\n"
         f"{genre}の料金（税込/税抜）：\n支払い方法（カード・ローン・現金）：\n"
         f"麻酔の有無と料金：\n学割・割引情報：\n予約方法："

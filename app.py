@@ -225,7 +225,7 @@ with tab1:
                                 inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"]
                             )
                         inputs["clinics"] = inputs["clinics"] + discovered
-                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key)
+                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""))
                         structure = generate_structure(inputs, comp, clinics, claude_key)
                         output    = generate_body(inputs, structure, clinics, claude_key, comp,
                                                   site_parts=_batch_site_parts)
@@ -425,7 +425,7 @@ with tab2:
                         st.write(f"　→ {len(discovered)} 件を自動追加: {', '.join(c['name'] for c in discovered)}")
                     inputs["clinics"] = all_clinics
                     st.write("🏥 クリニック情報収集中...")
-                    clinics = collect_clinic_info(all_clinics, genre, claude_key)
+                    clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type)
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key)
                     st.write("✍️ 本文生成中（Claude）...")
