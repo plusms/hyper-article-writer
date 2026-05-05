@@ -53,7 +53,7 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
 # ── APIキー（Secrets優先 → サイドバー入力 fallback）──────────
 _claude_key_default  = _secret("CLAUDE_API_KEY")
 _gemini_key_default  = _secret("GEMINI_API_KEY")
-_drive_folder_id     = _secret("DRIVE_PARENT_FOLDER_ID", "1Nqz5C62IzEXihgBZAUE5zCCnU6Yc68t9")
+_drive_folder_id     = _secret("DRIVE_PARENT_FOLDER_ID", "1CHqNruWiOVdeJPs7Nyd3Nfjt3sLxMc2c")
 
 # ── サイドバー：設定 ──────────────────────────────────────
 with st.sidebar:
