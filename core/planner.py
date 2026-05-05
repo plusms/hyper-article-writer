@@ -40,12 +40,22 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
             "CV記事誘導セクションは「関連CV記事へ誘導する1ブロック」。\n"
             "読者が次に取るべき行動（クリニック選びや費用確認）につながる橋渡し記事として設計する。"
         )
-    else:
-        type_note = (
-            "クリニック名（商標名）はメインKWから自動判断してください。\n"
-            f"ジャンル: {inputs['genre']}\n"
-            "固定H2：冒頭（最訴求プラン・営業時間・諸費用）、まとめ"
-        )
+    else:  # 商標
+        _clinics = inputs.get("clinics", [])
+        if len(_clinics) == 1:
+            type_note = (
+                f"掲載クリニック：{_clinics[0]['name']}（このクリニック専用の記事）\n"
+                f"ジャンル: {inputs['genre']}\n"
+                "1院専用記事。他院との比較・複数院紹介は行わない。\n"
+                "「おすすめクリニック紹介」「クリニックの選び方」等の複数院前提の構成要素は設けない。\n"
+                "固定H2：冒頭（最訴求プラン・営業時間・諸費用）、まとめ"
+            )
+        else:
+            type_note = (
+                "クリニック名（商標名）はメインKWから自動判断してください。\n"
+                f"ジャンル: {inputs['genre']}\n"
+                "固定H2：冒頭（最訴求プラン・営業時間・諸費用）、まとめ"
+            )
 
     custom_note = f"\n【追加指示】\n{inputs['custom_block']}" if inputs.get("custom_block") else ""
     related_kw_note = (

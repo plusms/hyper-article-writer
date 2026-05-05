@@ -490,42 +490,12 @@ with tab2:
         st.subheader("🖼️ 画像生成")
         st.caption(f"対象記事: {_t2_last['main_kw']}")
 
-        # モデル確認ボタン
-        with st.expander("⚙️ 使用モデルを確認・変更"):
-            if st.button("利用可能な画像生成モデルを確認", key="t2_list_models"):
-                if not gemini_key:
-                    st.error("Gemini API Key が必要です")
-                else:
-                    try:
-                        import requests as _req
-                        _r = _req.get(
-                            f"https://generativelanguage.googleapis.com/v1beta/models",
-                            params={"key": gemini_key, "pageSize": 100},
-                            timeout=10,
-                        )
-                        _models = _r.json().get("models", [])
-                        _img_models = [
-                            m["name"] for m in _models
-                            if any(
-                                method in m.get("supportedGenerationMethods", [])
-                                for method in ["generateContent", "generateImages", "predict"]
-                            )
-                            and any(
-                                kw in m["name"].lower()
-                                for kw in ["imagen", "flash", "gemini-2"]
-                            )
-                        ]
-                        st.write("**候補モデル:**")
-                        for n in _img_models:
-                            st.code(n.replace("models/", ""))
-                    except Exception as _e:
-                        st.error(str(_e))
-
-            _img_model_override = st.text_input(
-                "モデル名（空欄=コードのデフォルト使用）",
-                key="t2_model_override",
-                placeholder="例: imagen-3.0-generate-001",
-            )
+        st.caption(f"画像生成モデル（デフォルト）: `{image_generator._IMAGE_MODEL}`")
+        _img_model_override = st.text_input(
+            "モデルを変更する場合は入力（空欄でデフォルト使用）",
+            key="t2_model_override",
+            placeholder="例: imagen-3.0-generate-001",
+        )
 
         _img_slug = st.text_input(
             "スラッグ（ファイル名の接頭辞・英数字ハイフンのみ）",

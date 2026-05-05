@@ -327,11 +327,21 @@ def _build_body_prompt(
         "※このプランを冒頭・おすすめセクションで最上位に配置してください。\n"
     ) if inputs.get("recommended") else ""
 
-    clinic_restriction = (
-        f"【クリニック紹介の制約】\n"
-        f"紹介できるクリニック：{', '.join(clinic_names)}\n"
-        "このリスト以外のクリニックは紹介しない。[要確認]としても出力しない。\n"
-    ) if clinic_names else "クリニック指定なし：クリニック紹介セクションは設けない。\n"
+    if article_type == "商標" and len(clinic_names) == 1:
+        clinic_restriction = (
+            f"【掲載クリニック（1院専用）】\n"
+            f"掲載クリニック：{clinic_names[0]}\n"
+            "記事全体を通じてこの1院に絞った情報のみ記載する。\n"
+            "他院との比較・他院名の言及・複数院前提の表現（「各クリニック」「おすすめの院」等）は一切使わない。\n"
+        )
+    elif clinic_names:
+        clinic_restriction = (
+            f"【クリニック紹介の制約】\n"
+            f"紹介できるクリニック：{', '.join(clinic_names)}\n"
+            "このリスト以外のクリニックは紹介しない。[要確認]としても出力しない。\n"
+        )
+    else:
+        clinic_restriction = "クリニック指定なし：クリニック紹介セクションは設けない。\n"
 
     competitor_note = (
         f"【競合分析サマリー（差別化・網羅性チェックに使用）】\n"
