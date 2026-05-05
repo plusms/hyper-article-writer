@@ -14,7 +14,7 @@ from core.sheets import (
     read_input_rows, write_output_row, write_status, get_sheet,
     get_settings_sheet, read_defaults,
 )
-from core import site_config_manager, image_generator, drive_uploader
+from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer
 
 st.set_page_config(page_title="CV Article Writer", layout="wide", page_icon="✍️")
 
@@ -99,7 +99,7 @@ with st.sidebar:
         "記事タイプ別デフォルト追加指示"
     )
 
-tab1, tab2, tab3, tab4 = st.tabs(["📋 スプシ一括", "📝 1記事", "✅ 品質チェック", "⚙️ サイト設定"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 スプシ一括", "📝 1記事", "✅ 品質チェック", "⚙️ サイト設定", "🏥 クリニックブロック"])
 
 
 # ════════════════════════════════════════════════════════
@@ -441,6 +441,7 @@ with tab2:
                         "site_name":      site_name or (selected_site_for_parts if selected_site_for_parts != "（なし）" else ""),
                         "main_kw":        main_kw,
                         "debug":          output.get("debug"),
+                        "clinics":        all_clinics,
                     }
                     s.update(label="✅ 完了", state="complete")
 
@@ -482,6 +483,26 @@ with tab2:
             file_name=f"{_t2_last['main_kw'].replace(' ','_')}.html",
             mime="text/html",
             key="t2_dl",
+        )
+
+    # 掲載院一覧（クリニックブロックタブ用）
+    if _t2_last and _t2_last.get("clinics"):
+        st.divider()
+        st.subheader("掲載院一覧（クリニックブロック用コピペ）")
+        _clinic_lines = []
+        for _i, _c in enumerate(_t2_last["clinics"]):
+            _url = _c.get("domain", "[要確認]")
+            if _url and not _url.startswith("http") and _url not in ("[要確認]", "unknown", ""):
+                _url = f"https://{_url}"
+            _clinic_lines.append(f"{_i+1}. {_c['name']}::{_url or '[要確認]'}")
+        _clinic_list_text = "\n".join(_clinic_lines)
+        st.code(_clinic_list_text, language="text")
+        st.download_button(
+            "📋 一覧をダウンロード",
+            _clinic_list_text,
+            file_name="clinic_list.txt",
+            mime="text/plain",
+            key="t2_clinic_list_dl",
         )
 
     # ── 画像生成セクション（前回生成した記事に対して実行）────────────
@@ -722,6 +743,7 @@ with tab4:
                     },
                     "image_templates": _updated_tmpls,
                     "components": _updated_comps,
+                    "clinic_block_templates": _config4.get("clinic_block_templates", []),  # 既存値を保持
                 }
                 if site_config_manager.save_site_config(_current_site4, _new_config4):
                     st.session_state.pop("t4_generated_tmpl", None)
@@ -815,3 +837,327 @@ with tab4:
                                     st.error("画像データが取得できませんでした")
                             except Exception as _prev_e:
                                 st.error(f"生成エラー: {_prev_e}")
+
+            # ── クリニックブロックテンプレート管理 ─────────────────────
+            st.markdown("---")
+            st.markdown("### 🏥 6. クリニックブロックテンプレート")
+            st.caption("おすすめクリニック紹介ブロックの構成・形式をテンプレートとして登録します。")
+
+            _existing_cb_tmpls = _config4.get("clinic_block_templates", [])
+
+            with st.form(f"cb_tmpl_form_{_current_site4}"):
+                _updated_cb_tmpls = []
+
+                for _cbi, _cbt in enumerate(_existing_cb_tmpls):
+                    with st.expander(f"テンプレート {_cbi+1}: {_cbt.get('name', '(無名)')}", expanded=False):
+                        _cbt_name = st.text_input("テンプレート名", value=_cbt.get("name", ""), key=f"cbt_name_{_current_site4}_{_cbi}")
+                        _cbt_heading = st.selectbox(
+                            "見出しタイプ",
+                            options=list(clinic_block_writer.HEADING_TYPE_OPTIONS.keys()),
+                            format_func=lambda x: clinic_block_writer.HEADING_TYPE_OPTIONS[x],
+                            index=list(clinic_block_writer.HEADING_TYPE_OPTIONS.keys()).index(_cbt.get("heading_type", 1)),
+                            key=f"cbt_heading_{_current_site4}_{_cbi}",
+                        )
+
+                        st.caption("コンポーネント順序（数字＝表示順、0＝非表示）")
+                        _cbt_existing_order = _cbt.get("component_order", [])
+                        _cbt_comp_nums = {}
+                        _cbt_cols = st.columns(4)
+                        for _cbi2, _ck in enumerate(clinic_block_writer.ALL_COMPONENTS):
+                            _col = _cbt_cols[_cbi2 % 4]
+                            _default_order = (_cbt_existing_order.index(_ck) + 1) if _ck in _cbt_existing_order else 0
+                            _cbt_comp_nums[_ck] = _col.number_input(
+                                clinic_block_writer.COMPONENT_LABELS[_ck],
+                                min_value=0, max_value=20, value=_default_order,
+                                key=f"cbt_comp_{_current_site4}_{_cbi}_{_ck}",
+                            )
+                        _cbt_order = [k for k, v in sorted(_cbt_comp_nums.items(), key=lambda x: x[1]) if v > 0]
+
+                        st.caption("基本情報テーブルの項目")
+                        _cbt_existing_bi = _cbt.get("basic_info_fields", [])
+                        _cbt_bi_fields = []
+                        _cbt_bi_cols = st.columns(4)
+                        for _bfi, _bfk in enumerate(clinic_block_writer.ALL_BASIC_INFO_FIELDS):
+                            _bc = _cbt_bi_cols[_bfi % 4]
+                            if _bc.checkbox(
+                                clinic_block_writer.BASIC_INFO_FIELD_LABELS[_bfk],
+                                value=_bfk in _cbt_existing_bi,
+                                key=f"cbt_bi_{_current_site4}_{_cbi}_{_bfk}",
+                            ):
+                                _cbt_bi_fields.append(_bfk)
+
+                        st.caption("上位3院のリンク設置箇所")
+                        _cbt_existing_links = _cbt.get("top3_link_placements", [])
+                        _cbt_links = []
+                        for _lk, _ll in [("heading", "見出しクリニック名"), ("spec_image", "スペック画像"), ("cta_button", "CTAボタン")]:
+                            if st.checkbox(_ll, value=_lk in _cbt_existing_links, key=f"cbt_link_{_current_site4}_{_cbi}_{_lk}"):
+                                _cbt_links.append(_lk)
+
+                        st.caption("料金テーブルHTMLテンプレート")
+                        _cbt_existing_pts = _cbt.get("price_table_templates", [])
+                        _cbt_pts = []
+                        for _pti, _pt in enumerate(_cbt_existing_pts):
+                            _pt_name = st.text_input("テンプレート名", value=_pt.get("name", ""), key=f"cbt_pt_name_{_current_site4}_{_cbi}_{_pti}")
+                            _pt_html = st.text_area("HTML", value=_pt.get("html", ""), height=150, key=f"cbt_pt_html_{_current_site4}_{_cbi}_{_pti}")
+                            _pt_keep = st.checkbox("保持", value=True, key=f"cbt_pt_keep_{_current_site4}_{_cbi}_{_pti}")
+                            if _pt_keep and _pt_name.strip():
+                                _cbt_pts.append({"name": _pt_name.strip(), "html": _pt_html})
+                        _new_pt_name = st.text_input("＋ 料金テーブル名", key=f"cbt_pt_new_name_{_current_site4}_{_cbi}", placeholder="GLP-1用量別タブ")
+                        _new_pt_html = st.text_area("＋ HTML", key=f"cbt_pt_new_html_{_current_site4}_{_cbi}", height=150, placeholder="<table>{{plan_name}} {{price}}</table>")
+                        if _new_pt_name.strip():
+                            _cbt_pts.append({"name": _new_pt_name.strip(), "html": _new_pt_html})
+
+                        _cbt_keep = st.checkbox("このテンプレートを保持", value=True, key=f"cbt_keep_{_current_site4}_{_cbi}")
+                        if _cbt_keep:
+                            _updated_cb_tmpls.append({
+                                "name": _cbt_name,
+                                "heading_type": _cbt_heading,
+                                "component_order": _cbt_order,
+                                "basic_info_fields": _cbt_bi_fields,
+                                "top3_link_placements": _cbt_links,
+                                "price_table_templates": _cbt_pts,
+                            })
+
+                st.markdown("**＋ 新規クリニックブロックテンプレート**")
+                _new_cbt_name = st.text_input("テンプレート名", key=f"new_cbt_name_{_current_site4}", placeholder="地域記事クリニックブロック")
+                _new_cbt_heading = st.selectbox(
+                    "見出しタイプ",
+                    options=list(clinic_block_writer.HEADING_TYPE_OPTIONS.keys()),
+                    format_func=lambda x: clinic_block_writer.HEADING_TYPE_OPTIONS[x],
+                    key=f"new_cbt_heading_{_current_site4}",
+                )
+                st.caption("コンポーネント順序（数字＝表示順、0＝非表示）")
+                _new_cbt_comp_nums = {}
+                _new_cbt_cols = st.columns(4)
+                for _nci, _ck in enumerate(clinic_block_writer.ALL_COMPONENTS):
+                    _col = _new_cbt_cols[_nci % 4]
+                    _new_cbt_comp_nums[_ck] = _col.number_input(
+                        clinic_block_writer.COMPONENT_LABELS[_ck],
+                        min_value=0, max_value=20, value=0,
+                        key=f"new_cbt_comp_{_current_site4}_{_ck}",
+                    )
+                _new_cbt_order = [k for k, v in sorted(_new_cbt_comp_nums.items(), key=lambda x: x[1]) if v > 0]
+
+                if _new_cbt_name.strip():
+                    _updated_cb_tmpls.append({
+                        "name": _new_cbt_name.strip(),
+                        "heading_type": _new_cbt_heading,
+                        "component_order": _new_cbt_order,
+                        "basic_info_fields": [],
+                        "top3_link_placements": [],
+                        "price_table_templates": [],
+                    })
+
+                _cb_submitted = st.form_submit_button("💾 クリニックブロックテンプレートを保存", type="primary")
+
+            if _cb_submitted:
+                _cb_save_config = site_config_manager.load_site_config(_current_site4)
+                _cb_save_config["clinic_block_templates"] = _updated_cb_tmpls
+                if site_config_manager.save_site_config(_current_site4, _cb_save_config):
+                    st.success("クリニックブロックテンプレートを保存しました。")
+                    st.rerun()
+                else:
+                    st.error("保存に失敗しました。")
+
+
+# ════════════════════════════════════════════════════════
+#  Tab5: クリニックブロック
+# ════════════════════════════════════════════════════════
+with tab5:
+    st.title("🏥 クリニックブロック")
+    st.caption("おすすめクリニック紹介ブロックのHTMLを院ごとに生成します。Tab2の「掲載院一覧」をコピペして使ってください。")
+
+    _cb_sites = site_config_manager.list_sites()
+    _cb_site_opts = ["（なし）"] + _cb_sites
+    _cb_sel_site = st.selectbox("サイトを選択（テンプレート読込）", _cb_site_opts, key="cb_site_sel")
+
+    _cb_site_cfg = {}
+    _cb_templates = []
+    _cb_template_names = []
+    if _cb_sel_site != "（なし）":
+        _cb_site_cfg = site_config_manager.load_site_config(_cb_sel_site)
+        _cb_templates = _cb_site_cfg.get("clinic_block_templates", [])
+        _cb_template_names = [t.get("name", f"テンプレート{i+1}") for i, t in enumerate(_cb_templates)]
+
+    _cb_sel_tmpl = None
+    if _cb_templates:
+        _cb_tmpl_idx = st.selectbox(
+            "ブロックテンプレートを選択",
+            range(len(_cb_template_names)),
+            format_func=lambda i: _cb_template_names[i],
+            key="cb_tmpl_idx",
+        )
+        _cb_sel_tmpl = _cb_templates[_cb_tmpl_idx]
+    else:
+        st.info("サイトにクリニックブロックテンプレートが登録されていません。先にサイト設定タブで登録してください。")
+
+    st.divider()
+
+    _cb_col1, _cb_col2 = st.columns(2)
+    with _cb_col1:
+        _cb_main_kw = st.text_input("メインKW", key="cb_main_kw")
+        _cb_sub_kw = st.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
+    with _cb_col2:
+        _cb_criteria = st.text_area(
+            "選び方コンテンツ（全文ペースト）",
+            height=120, key="cb_criteria",
+            placeholder="記事内の「○○の選び方」セクションの文章をそのまま貼り付けてください。",
+        )
+
+    st.divider()
+    st.subheader("掲載院一覧")
+    _cb_clinic_paste = st.text_area(
+        "Tab2の「掲載院一覧」をペースト",
+        height=150, key="cb_clinic_paste",
+        placeholder="1. TCB東京中央美容外科 大阪院::https://tcb.net/osaka\n2. 湘南美容クリニック 梅田院::https://s-b-c.net/\n3. 品川スキンクリニック 大阪院::[要確認]",
+    )
+
+    if st.button("📋 院一覧をパース", key="cb_parse_btn"):
+        if _cb_clinic_paste.strip():
+            st.session_state["cb_clinics"] = clinic_block_writer.parse_clinic_list(_cb_clinic_paste)
+            st.rerun()
+        else:
+            st.warning("院一覧を入力してください")
+
+    _cb_clinics = st.session_state.get("cb_clinics", [])
+
+    if _cb_clinics:
+        st.caption(f"パース結果: {len(_cb_clinics)} 院")
+        st.divider()
+        st.subheader("各院の入力情報")
+
+        for _cbc in _cb_clinics:
+            _r = _cbc["rank"]
+            _is_top3 = _r <= 3
+            with st.expander(f"{'⭐' if _is_top3 else ''} {_r}位: {_cbc['name']}", expanded=_is_top3):
+                _cbc_url = st.text_input(
+                    "公式URL",
+                    value=_cbc.get("url", ""),
+                    key=f"cb_url_{_r}",
+                    placeholder="https://example.com",
+                )
+                st.session_state[f"cb_url_{_r}"] = _cbc_url
+
+                if _is_top3:
+                    _cbc_link = st.text_input(
+                        "リンクURL（LP等）",
+                        value=st.session_state.get(f"cb_link_{_r}", _cbc_url),
+                        key=f"cb_link_{_r}",
+                        placeholder="CTAボタン・見出しリンクのリンク先URL",
+                    )
+                    _cbc_lp = st.text_area(
+                        "LP掲載プラン",
+                        value=st.session_state.get(f"cb_lp_{_r}", ""),
+                        key=f"cb_lp_{_r}",
+                        height=80,
+                        placeholder="例: セマグルチド0.5mg 週1回 9,800円（税込）",
+                    )
+                else:
+                    _cbc_link = ""
+                    _cbc_lp = ""
+
+                _cbc_price = st.text_area(
+                    "料金データ（フリーテキスト）",
+                    value=st.session_state.get(f"cb_price_{_r}", ""),
+                    key=f"cb_price_{_r}",
+                    height=100,
+                    placeholder="例: 0.5mg週1回 / 9,800円（税込）/ 初回限定\n1mg週1回 / 14,800円（税込）/ -",
+                )
+                _cbc_notes = st.text_area(
+                    "追加メモ・補足情報（任意）",
+                    value=st.session_state.get(f"cb_notes_{_r}", ""),
+                    key=f"cb_notes_{_r}",
+                    height=80,
+                    placeholder="公式HPに載っていない特記事項など",
+                )
+
+        st.divider()
+        _cb_gen_all = st.button("🚀 全院のブロックを生成", type="primary", use_container_width=True, key="cb_gen_all")
+
+        if _cb_gen_all:
+            errs_cb = []
+            if not claude_key:
+                errs_cb.append("Claude API Key が未設定です")
+            if not _cb_main_kw:
+                errs_cb.append("メインKWを入力してください")
+            if not _cb_sel_tmpl:
+                errs_cb.append("テンプレートを選択してください")
+            for _e in errs_cb:
+                st.error(_e)
+
+            if not errs_cb:
+                _cb_sub_kw_list = [k.strip() for k in _cb_sub_kw.split(",") if k.strip()]
+                _cb_site_parts = ""
+                if _cb_sel_site != "（なし）":
+                    _cb_site_parts = site_config_manager.format_site_parts(_cb_site_cfg.get("components", []))
+
+                _cb_results = []
+                with st.status("クリニックブロック生成中...", expanded=True) as _cb_status:
+                    for _cbc in _cb_clinics:
+                        _r = _cbc["rank"]
+                        _clinic_url = st.session_state.get(f"cb_url_{_r}", _cbc.get("url", ""))
+                        _link_url = st.session_state.get(f"cb_link_{_r}", _clinic_url)
+                        _lp_plan = st.session_state.get(f"cb_lp_{_r}", "")
+                        _price_data = st.session_state.get(f"cb_price_{_r}", "")
+                        _extra_notes = st.session_state.get(f"cb_notes_{_r}", "")
+
+                        st.write(f"🔍 {_r}位: {_cbc['name']} の情報を収集中...")
+                        try:
+                            from core.researcher import collect_clinic_info
+                            _scraped = collect_clinic_info(
+                                [{"name": _cbc["name"], "domain": _clinic_url or _cbc["name"]}],
+                                "", claude_key,
+                            )
+                            _scraped_text = _scraped.get(_cbc["name"], "（取得失敗）")
+                        except Exception:
+                            _scraped_text = "（取得失敗）"
+
+                        st.write(f"✍️ {_r}位: {_cbc['name']} のブロックを生成中...")
+                        try:
+                            _html = clinic_block_writer.generate_clinic_block(
+                                name=_cbc["name"],
+                                rank=_r,
+                                scraped_info=_scraped_text,
+                                price_data=_price_data,
+                                extra_notes=_extra_notes,
+                                link_url=_link_url,
+                                lp_plan=_lp_plan,
+                                template=_cb_sel_tmpl,
+                                main_kw=_cb_main_kw,
+                                sub_kw=_cb_sub_kw_list,
+                                criteria_text=_cb_criteria,
+                                claude_api_key=claude_key,
+                                site_parts=_cb_site_parts,
+                            )
+                            _cb_results.append({"rank": _r, "name": _cbc["name"], "html": _html})
+                        except Exception as _e:
+                            st.warning(f"{_r}位 ({_cbc['name']}) でエラー: {_e}")
+
+                    _cb_status.update(label=f"✅ {len(_cb_results)} 院分のブロックを生成しました", state="complete")
+
+                st.session_state["cb_results"] = _cb_results
+
+    _cb_results = st.session_state.get("cb_results", [])
+    if _cb_results:
+        st.divider()
+        st.subheader("生成結果")
+        for _res in _cb_results:
+            st.markdown(f"**{_res['rank']}位: {_res['name']}**")
+            st.code(_res["html"], language="html")
+            st.download_button(
+                f"📥 {_res['rank']}位HTMLをダウンロード",
+                _res["html"],
+                file_name=f"clinic_block_{_res['rank']}_{_res['name'].replace(' ', '_')}.html",
+                mime="text/html",
+                key=f"cb_dl_{_res['rank']}",
+            )
+            st.divider()
+
+        _all_html = "\n\n".join(f"<!-- {r['rank']}位: {r['name']} -->\n{r['html']}" for r in _cb_results)
+        st.download_button(
+            "📥 全院まとめてダウンロード",
+            _all_html,
+            file_name="clinic_blocks_all.html",
+            mime="text/html",
+            key="cb_dl_all",
+        )

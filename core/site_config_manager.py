@@ -28,6 +28,7 @@ def get_default_site_config() -> Dict[str, Any]:
             {"name": "番号なしリスト", "pattern": "<ul>\n    {{content}}\n</ul>", "active": True},
             {"name": "CTA", "pattern": '<div class="c-btn">\n    {{link}}\n</div>', "active": True},
         ],
+        "clinic_block_templates": [],
     }
 
 

@@ -1,0 +1,192 @@
+import re
+import anthropic
+
+COMPONENT_LABELS = {
+    "spec_image": "スペック画像",
+    "intro_text": "クリニック紹介文",
+    "price_table": "料金テーブル",
+    "reviews": "口コミ",
+    "map_image": "マップ画像",
+    "basic_info": "基本情報テーブル",
+    "cta_button": "CTAボタン（上位3院のみ）",
+}
+
+ALL_COMPONENTS = list(COMPONENT_LABELS.keys())
+
+BASIC_INFO_FIELD_LABELS = {
+    "address": "住所",
+    "access": "最寄り駅",
+    "hours": "診療時間",
+    "holidays": "休診日",
+    "payment": "支払方法",
+    "shipping": "配送情報",
+    "discount": "割引情報",
+    "cancel": "途中解約",
+    "dosage": "取扱い用量",
+    "plan": "取扱いプラン",
+    "clinics_count": "院数",
+    "reservation": "予約方法",
+    "phone": "電話番号",
+    "website": "公式サイト",
+    "areas": "主な展開エリア",
+    "consultation": "診察方法",
+}
+
+ALL_BASIC_INFO_FIELDS = list(BASIC_INFO_FIELD_LABELS.keys())
+
+HEADING_TYPE_OPTIONS = {
+    1: "①H3（クリニック名＋○○院のみ）",
+    2: "②H3（クリニック名＋○○院＋コメント）",
+    3: "③小見出し（クリニック名＋○○院のみ）",
+    4: "④専用パーツ（コメント先行＋クリニック名＋○○院）",
+}
+
+
+def parse_clinic_list(text: str) -> list[dict]:
+    """掲載院一覧テキストをパースして [{rank, name, url}] リストに変換する。"""
+    clinics = []
+    for line in text.strip().splitlines():
+        line = line.strip()
+        if not line or line.startswith("==="):
+            continue
+        m = re.match(r'^(\d+)[.\)、]\s*(.+?)::(https?://\S+|\[要確認\]|unknown)$', line)
+        if m:
+            rank = int(m.group(1))
+            name = m.group(2).strip()
+            url = m.group(3).strip()
+            clinics.append({"rank": rank, "name": name, "url": "" if url in ("[要確認]", "unknown") else url})
+        else:
+            m2 = re.match(r'^(\d+)[.\)、]\s*(.+)$', line)
+            if m2:
+                clinics.append({"rank": int(m2.group(1)), "name": m2.group(2).strip(), "url": ""})
+    return clinics
+
+
+def generate_clinic_block(
+    name: str,
+    rank: int,
+    scraped_info: str,
+    price_data: str,
+    extra_notes: str,
+    link_url: str,
+    lp_plan: str,
+    template: dict,
+    main_kw: str,
+    sub_kw: list,
+    criteria_text: str,
+    claude_api_key: str,
+    site_parts: str = "",
+) -> str:
+    is_top3 = rank <= 3
+    heading_type = template.get("heading_type", 1)
+    component_order = template.get("component_order", ["intro_text", "basic_info"])
+    basic_info_fields = template.get("basic_info_fields", [])
+    price_table_templates = template.get("price_table_templates", [])
+    top3_link_placements = template.get("top3_link_placements", [])
+
+    active_components = [c for c in component_order if c != "cta_button" or is_top3]
+
+    heading_map = {
+        1: f'<h3 id="clinic-xxx">{name}</h3>',
+        2: f'<h3 id="clinic-xxx">{name}は[記事内容に合わせた1文コメント]</h3>',
+        3: f'小見出しパーツを使用: {name}',
+        4: f'専用パーツ（コメント先行型）: [コメント]{name}',
+    }
+    heading_instruction = heading_map.get(heading_type, heading_map[1])
+
+    price_section = ""
+    if "price_table" in active_components:
+        if price_table_templates:
+            pt_text = "\n\n".join(
+                f"テンプレート「{pt['name']}」:\n{pt['html']}"
+                for pt in price_table_templates
+            )
+            price_section = f"""
+【料金テーブル】
+以下のHTMLテンプレートの{{{{変数}}}}を入力された料金データで埋めること。取得できない数値は[要確認]。
+{pt_text}
+
+入力された料金データ:
+{price_data or '（未入力）'}
+"""
+        elif price_data:
+            price_section = f"""
+【料金テーブル】
+以下の料金データをもとに料金テーブルHTMLを作成してください。
+{price_data}
+"""
+
+    basic_info_section = ""
+    if "basic_info" in active_components and basic_info_fields:
+        field_names = [BASIC_INFO_FIELD_LABELS.get(f, f) for f in basic_info_fields]
+        basic_info_section = f"""
+【基本情報テーブル】
+以下の項目のみをテーブルで出力してください: {', '.join(field_names)}
+取得できない項目は[要確認]。診療時間の区切り文字・改行方法など書き方・形式は他院と必ず統一すること。
+"""
+
+    if is_top3:
+        top3_section = f"【上位3院ルール（{rank}位）】\n- クリニック紹介文は4段落\n"
+        if rank == 1:
+            top3_section += "- 1位のため選び方コンテンツの全項目にマッチしていることを自然に示す\n"
+        else:
+            top3_section += "- 選び方コンテンツの約3分の2の項目にマッチしている内容にする（自然な文章が大前提）\n"
+        if "heading" in top3_link_placements and link_url:
+            top3_section += f'- 見出しのクリニック名にリンク: href="{link_url}"\n'
+        if "spec_image" in top3_link_placements and link_url:
+            top3_section += f'- スペック画像にリンク: href="{link_url}"\n'
+        if "cta_button" in top3_link_placements:
+            if link_url:
+                top3_section += f'- CTAボタン設置: href="{link_url}"\n'
+            if lp_plan:
+                top3_section += f'- LP掲載プランを記載: {lp_plan}\n'
+    else:
+        top3_section = f"【4位以下ルール（{rank}位）】\n- クリニック紹介文は2〜3段落\n- リンク・CTAボタンなし\n"
+
+    components_str = " → ".join(COMPONENT_LABELS.get(c, c) for c in active_components)
+
+    prompt = f"""あなたはSEO記事のおすすめクリニック紹介ブロック専門ライターです。
+以下の条件に従って、1院分のHTMLブロックを生成してください。
+
+【記事メインKW】{main_kw}
+【サブKW】{', '.join(sub_kw) if sub_kw else '（なし）'}
+
+【このクリニック】
+クリニック名（本文中でも必ず○○院まで記載）: {name}
+掲載順位: {rank}位
+{top3_section}
+【選び方コンテンツ（記事内の評価軸）】
+{criteria_text or '（未入力）'}
+
+【公式サイトから取得した情報】
+{scraped_info or '（取得できませんでした）'}
+
+【追加メモ・補足情報】
+{extra_notes or '（なし）'}
+
+【コンポーネント構成と出力順序】
+{components_str}
+
+【見出しの形式】
+{heading_instruction}
+
+{price_section}
+{basic_info_section}
+{f"【サイト別HTMLパーツ】{chr(10)}{site_parts}" if site_parts else ""}
+
+【共通ルール】
+- メインKW・サブKWで検索するユーザーに刺さる切り口で紹介文を書く
+- 選び方コンテンツの項目に自然に触れた内容にする（評価軸を露骨に列挙しない）
+- クリニック名は本文中でも○○院まで必ず記載
+- 基本情報テーブルの書き方・形式は他院と統一する前提で出力する
+
+HTML本文のみを出力してください。説明文・コードフェンスは不要。
+"""
+
+    client = anthropic.Anthropic(api_key=claude_api_key)
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=8192,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text.strip()
