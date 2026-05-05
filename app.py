@@ -599,7 +599,7 @@ with tab3:
 # ════════════════════════════════════════════════════════
 with tab4:
     st.title("⚙️ サイト設定")
-    st.caption("サイト別のHTMLパーツを登録します。記事生成時に選択すると、そのサイトのパーツが使用されます。")
+    st.caption("サイト別のカラー・トンマナ・画像テンプレート・HTMLパーツを登録します。")
 
     sites_list = site_config_manager.list_sites()
     col_left4, col_right4 = st.columns([1, 2])
@@ -626,23 +626,74 @@ with tab4:
         if not _current_site4:
             st.info("左側でサイトを選択するか、新規サイト名を入力してください。")
         else:
-            st.subheader(f"「{_current_site4}」のパーツ設定")
+            st.subheader(f"「{_current_site4}」の設定")
 
             with st.form(f"site_form_{_current_site4}"):
-                st.markdown("### 🧩 HTMLパーツ一覧")
-                st.caption("各パーツの {{変数名}} は記事生成時にAIが実際の内容に置き換えます。有効チェックを外すと使用されません。")
 
+                # ── 1. カラー設定 ────────────────────────────────────
+                st.markdown("### 🎨 1. カラー設定")
+                st.caption("画像プロンプト内で使用する色。デフォルトはティール系カラー。")
+                _colors4 = _config4.get("design_rules", {}).get("colors", {})
+                _cc1, _cc2, _cc3, _cc4 = st.columns(4)
+                with _cc1:
+                    _color_main  = st.color_picker("メイン",       value=_colors4.get("main",          "#47c1d3"), key=f"color_main_{_current_site4}")
+                    _color_text  = st.color_picker("テキスト",     value=_colors4.get("text",          "#333333"), key=f"color_text_{_current_site4}")
+                with _cc2:
+                    _color_acc_r = st.color_picker("アクセント赤", value=_colors4.get("accent_red",    "#fe766b"), key=f"color_acc_r_{_current_site4}")
+                    _color_bg_w  = st.color_picker("背景白",       value=_colors4.get("bg_white",      "#FFFFFF"), key=f"color_bg_w_{_current_site4}")
+                with _cc3:
+                    _color_acc_y = st.color_picker("アクセント黄", value=_colors4.get("accent_yellow", "#ffd711"), key=f"color_acc_y_{_current_site4}")
+                    _color_bg_g  = st.color_picker("背景グレー",   value=_colors4.get("bg_gray",       "#eeeeee"), key=f"color_bg_g_{_current_site4}")
+                with _cc4:
+                    _color_acc_o = st.color_picker("アクセント橙", value=_colors4.get("accent_orange", "#fd9b23"), key=f"color_acc_o_{_current_site4}")
+                st.markdown("---")
+
+                # ── 2. トンマナ ──────────────────────────────────────
+                st.markdown("### 📝 2. トンマナ")
+                _tone4 = st.text_input(
+                    "画像トンマナ（AIへの指示）",
+                    value=_config4.get("design_rules", {}).get("tone", ""),
+                    placeholder="医療的でクリーン、ビジネスライク、など",
+                    key=f"tone_{_current_site4}",
+                )
+                st.markdown("---")
+
+                # ── 3. 画像テンプレート管理 ──────────────────────────
+                st.markdown("### 🖼️ 3. 画像テンプレート管理")
+                st.caption("AIに渡す画像生成プロンプトのテンプレートを管理します。")
+                _existing_tmpls = _config4.get("image_templates", [])
+                _updated_tmpls = []
+                for _ti, _tmpl in enumerate(_existing_tmpls):
+                    with st.expander(f"テンプレート {_ti+1}: {_tmpl.get('name', '(無名)')}", expanded=False):
+                        _t_name  = st.text_input("テンプレート名",  value=_tmpl.get("name", ""),       key=f"tname_{_current_site4}_{_ti}")
+                        _t_scene = st.text_input("使用シーン説明",  value=_tmpl.get("usage_scene", ""), key=f"tscene_{_current_site4}_{_ti}")
+                        _t_base  = st.text_area("ベースプロンプト", value=_tmpl.get("base_prompt", ""), key=f"tbase_{_current_site4}_{_ti}", height=200)
+                        _t_keep  = st.checkbox("このテンプレートを保持", value=True,                   key=f"tkeep_{_current_site4}_{_ti}")
+                        if _t_keep:
+                            _updated_tmpls.append({"name": _t_name, "usage_scene": _t_scene, "base_prompt": _t_base})
+
+                st.markdown("**＋ 新規テンプレートを追加**（名前を入力して保存するだけでOK）")
+                _new_tname  = st.text_input("新テンプレート名", key=f"new_tname_{_current_site4}",  placeholder="カスタム型名")
+                _new_tscene = st.text_input("新使用シーン",     key=f"new_tscene_{_current_site4}", placeholder="使用するシーンの説明")
+                _default_tbase = st.session_state.get("t4_generated_tmpl", "")
+                _new_tbase  = st.text_area("新ベースプロンプト", key=f"new_tbase_{_current_site4}", height=200, value=_default_tbase)
+                if _new_tname.strip():
+                    _updated_tmpls.append({"name": _new_tname.strip(), "usage_scene": _new_tscene, "base_prompt": _new_tbase})
+                st.markdown("---")
+
+                # ── 4. HTMLパーツ ────────────────────────────────────
+                st.markdown("### 🧩 4. HTMLパーツ")
+                st.caption("各パーツの {{変数名}} は記事生成時にAIが実際の内容に置き換えます。有効チェックを外すと使用されません。")
                 _existing_comps = _config4.get("components", [])
                 _updated_comps = []
-
-                for i, comp in enumerate(_existing_comps):
-                    _is_active = comp.get("active", True)
-                    _label = f"{'✅' if _is_active else '❌'} {comp.get('name', f'パーツ{i+1}')}"
-                    with st.expander(_label, expanded=False):
-                        _c_active  = st.checkbox("このサイトで有効にする", value=_is_active,             key=f"comp_active_{_current_site4}_{i}")
-                        _c_name    = st.text_input("パーツ名",             value=comp.get("name", ""),    key=f"comp_name_{_current_site4}_{i}")
-                        _c_pattern = st.text_area("HTMLパターン",          value=comp.get("pattern", ""), key=f"comp_pattern_{_current_site4}_{i}", height=120)
-                        _comp_keep = st.checkbox("このパーツを保持",        value=True,                   key=f"comp_keep_{_current_site4}_{i}")
+                for _ci, _comp in enumerate(_existing_comps):
+                    _is_active = _comp.get("active", True)
+                    _clabel = f"{'✅' if _is_active else '❌'} {_comp.get('name', f'パーツ{_ci+1}')}"
+                    with st.expander(_clabel, expanded=False):
+                        _c_active  = st.checkbox("このサイトで有効にする", value=_is_active,               key=f"comp_active_{_current_site4}_{_ci}")
+                        _c_name    = st.text_input("パーツ名",             value=_comp.get("name", ""),    key=f"comp_name_{_current_site4}_{_ci}")
+                        _c_pattern = st.text_area("HTMLパターン",          value=_comp.get("pattern", ""), key=f"comp_pattern_{_current_site4}_{_ci}", height=120)
+                        _comp_keep = st.checkbox("このパーツを保持",        value=True,                    key=f"comp_keep_{_current_site4}_{_ci}")
                         if _comp_keep:
                             _updated_comps.append({"name": _c_name, "pattern": _c_pattern, "active": _c_active})
 
@@ -657,12 +708,110 @@ with tab4:
 
             if _submitted4:
                 _new_config4 = {
-                    "design_rules": _config4.get("design_rules", {}),
-                    "image_templates": _config4.get("image_templates", []),
+                    "design_rules": {
+                        "tone": _tone4,
+                        "colors": {
+                            "main":          _color_main,
+                            "accent_red":    _color_acc_r,
+                            "accent_yellow": _color_acc_y,
+                            "accent_orange": _color_acc_o,
+                            "bg_white":      _color_bg_w,
+                            "bg_gray":       _color_bg_g,
+                            "text":          _color_text,
+                        },
+                    },
+                    "image_templates": _updated_tmpls,
                     "components": _updated_comps,
                 }
                 if site_config_manager.save_site_config(_current_site4, _new_config4):
+                    st.session_state.pop("t4_generated_tmpl", None)
                     st.success(f"「{_current_site4}」の設定を保存しました。")
                     st.rerun()
                 else:
                     st.error("保存に失敗しました。")
+
+            # ── 画像からプロンプト自動生成 ──────────────────────────
+            st.markdown("---")
+            st.markdown("### 📷 画像からプロンプト自動生成")
+            st.caption("型となる画像をアップすると構造を解析してプロンプトを生成します。生成後、上の「新ベースプロンプト」に貼り付けて保存してください。")
+
+            _t4_img_upload = st.file_uploader(
+                "画像をアップ（jpg / png / webp）",
+                type=["jpg", "jpeg", "png", "webp"],
+                key=f"t4_img_upload_{_current_site4}",
+            )
+            if _t4_img_upload is not None:
+                _t4_col_img, _t4_col_btn = st.columns([2, 1])
+                with _t4_col_img:
+                    st.image(_t4_img_upload, use_container_width=True)
+                with _t4_col_btn:
+                    st.caption(f"解析モデル: `{image_generator._VISION_MODEL}`")
+                    if st.button("🔍 プロンプト自動生成", key=f"btn_gen_tmpl_{_current_site4}", type="primary"):
+                        if not gemini_key:
+                            st.error("Gemini API Key が未設定です（サイドバーから入力してください）")
+                        else:
+                            with st.spinner("画像を解析中..."):
+                                try:
+                                    _t4_img_upload.seek(0)
+                                    _t4_mime = _t4_img_upload.type or "image/png"
+                                    _t4_img_bytes = _t4_img_upload.read()
+                                    _t4_generated = image_generator.generate_template_from_image(
+                                        _t4_img_bytes, _t4_mime, _config4, gemini_key
+                                    )
+                                    st.session_state["t4_generated_tmpl"] = _t4_generated
+                                    st.success("生成完了！下のテキストをコピーして「新ベースプロンプト」に貼り付け、保存してください。")
+                                except Exception as _t4_e:
+                                    st.error(f"生成エラー: {_t4_e}")
+
+            if st.session_state.get("t4_generated_tmpl"):
+                st.text_area(
+                    "生成されたプロンプト（コピーして上の「新ベースプロンプト」に貼り付け）",
+                    value=st.session_state["t4_generated_tmpl"],
+                    height=300,
+                    key="t4_gen_result_display",
+                )
+
+            # ── 画像プレビュー生成 ───────────────────────────────────
+            st.markdown("---")
+            st.markdown("### 🎨 画像プレビュー生成")
+            st.caption("テンプレートのプロンプトで実際の画像をプレビューできます。{{変数}} は実際の値に書き換えてから生成してください。")
+
+            _preview_config = site_config_manager.load_site_config(_current_site4)
+            _preview_tmpls = _preview_config.get("image_templates", [])
+            if not _preview_tmpls:
+                st.info("テンプレートがまだ登録されていません。上の設定から追加・保存してください。")
+            else:
+                _preview_names = [t.get("name", f"テンプレート{i+1}") for i, t in enumerate(_preview_tmpls)]
+                _preview_sel = st.selectbox(
+                    "テンプレートを選択",
+                    range(len(_preview_names)),
+                    format_func=lambda i: _preview_names[i],
+                    key=f"preview_tmpl_sel_{_current_site4}",
+                )
+                _preview_prompt = st.text_area(
+                    "プロンプト（変数を実際の値に書き換えてから生成）",
+                    value=_preview_tmpls[_preview_sel].get("base_prompt", ""),
+                    height=300,
+                    key=f"preview_prompt_{_current_site4}_{_preview_sel}",
+                )
+                _col_prev_btn, _col_prev_info = st.columns([1, 3])
+                with _col_prev_btn:
+                    _run_preview = st.button("🎨 プレビュー生成", key=f"btn_preview_{_current_site4}", type="primary")
+                with _col_prev_info:
+                    st.caption(f"生成モデル: `{image_generator._IMAGE_MODEL}`")
+
+                if _run_preview:
+                    if not gemini_key:
+                        st.error("Gemini API Key が未設定です（サイドバーから入力してください）")
+                    elif not _preview_prompt.strip():
+                        st.error("プロンプトを入力してください")
+                    else:
+                        with st.spinner("画像生成中..."):
+                            try:
+                                _prev_bytes = image_generator.generate_image_preview(_preview_prompt, gemini_key)
+                                if _prev_bytes:
+                                    st.image(_prev_bytes, caption="生成プレビュー", use_container_width=True)
+                                else:
+                                    st.error("画像データが取得できませんでした")
+                            except Exception as _prev_e:
+                                st.error(f"生成エラー: {_prev_e}")
