@@ -187,12 +187,19 @@ def _find_price_pages(base_url: str, genre: str, max_pages: int = 2) -> list[str
         return []
 
 
-def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "") -> dict:
+def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None) -> dict:
     if not clinics:
         return {}
 
+    db_cache = db_cache or {}
+    db_results = {c["name"]: db_cache[c["name"]] for c in clinics if c["name"] in db_cache}
+    clinics_to_scrape = [c for c in clinics if c["name"] not in db_cache]
+
+    if not clinics_to_scrape:
+        return db_results
+
     fetched = {}
-    for clinic in clinics:
+    for clinic in clinics_to_scrape:
         name = clinic["name"]
         domain_or_url = clinic["domain"]
 
@@ -209,8 +216,8 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
                     content = result
                     break
 
-        # 商標記事は料金・メニューページも追加取得
-        if article_type == "商標" and main_url:
+        # 料金・メニューページを追加取得（全記事タイプ）
+        if main_url:
             extra_pages = _find_price_pages(main_url, genre)
             for extra_url in extra_pages:
                 extra = fetch_page_text(extra_url)
@@ -236,17 +243,17 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
 
     result_text = _claude_call(claude_api_key, prompt)
 
-    results = {}
-    for clinic in clinics:
+    scraped_results = {}
+    for clinic in clinics_to_scrape:
         name = clinic["name"]
         marker = f"【{name}】"
         if marker not in result_text:
-            results[name] = "[要確認]"
+            scraped_results[name] = "[要確認]"
             continue
 
         start = result_text.index(marker)
         next_pos = len(result_text)
-        for other in clinics:
+        for other in clinics_to_scrape:
             if other["name"] == name:
                 continue
             other_marker = f"【{other['name']}】"
@@ -255,6 +262,6 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
                 if pos > start:
                     next_pos = min(next_pos, pos)
 
-        results[name] = result_text[start:next_pos].strip()
+        scraped_results[name] = result_text[start:next_pos].strip()
 
-    return results
+    return {**db_results, **scraped_results}

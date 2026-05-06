@@ -14,7 +14,7 @@ from core.sheets import (
     read_input_rows, write_output_row, write_status, get_sheet,
     get_settings_sheet, read_defaults,
 )
-from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer
+from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
 
 st.set_page_config(page_title="CV Article Writer", layout="wide", page_icon="✍️")
 
@@ -99,7 +99,7 @@ with st.sidebar:
         "記事タイプ別デフォルト追加指示"
     )
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 スプシ一括", "📝 1記事", "✅ 品質チェック", "⚙️ サイト設定", "🏥 クリニックブロック"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📋 スプシ一括", "📝 1記事", "✅ 品質チェック", "⚙️ サイト設定", "🏥 クリニックブロック", "🗄️ クリニックDB"])
 
 
 # ════════════════════════════════════════════════════════
@@ -225,7 +225,8 @@ with tab1:
                                 inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"]
                             )
                         inputs["clinics"] = inputs["clinics"] + discovered
-                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""))
+                        _batch_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in inputs["clinics"]])
+                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache)
                         structure = generate_structure(inputs, comp, clinics, claude_key)
                         output    = generate_body(inputs, structure, clinics, claude_key, comp,
                                                   site_parts=_batch_site_parts)
@@ -425,7 +426,10 @@ with tab2:
                         st.write(f"　→ {len(discovered)} 件を自動追加: {', '.join(c['name'] for c in discovered)}")
                     inputs["clinics"] = all_clinics
                     st.write("🏥 クリニック情報収集中...")
-                    clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type)
+                    _t2_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in all_clinics])
+                    if _t2_db_cache:
+                        st.write(f"　→ DB参照: {len(_t2_db_cache)} 院（スクレイピングスキップ）")
+                    clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache)
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key)
                     st.write("✍️ 本文生成中（Claude）...")
@@ -1103,10 +1107,12 @@ with tab5:
 
                         st.write(f"🔍 {_r}位: {_cbc['name']} の情報を収集中...")
                         try:
-                            from core.researcher import collect_clinic_info
+                            _t5_db_cache = clinic_db_manager.build_db_cache([_cbc["name"]])
+                            if _t5_db_cache:
+                                st.write(f"　→ DB参照")
                             _scraped = collect_clinic_info(
                                 [{"name": _cbc["name"], "domain": _clinic_url or _cbc["name"]}],
-                                "", claude_key,
+                                "", claude_key, db_cache=_t5_db_cache,
                             )
                             _scraped_text = _scraped.get(_cbc["name"], "（取得失敗）")
                         except Exception:
@@ -1161,3 +1167,151 @@ with tab5:
             mime="text/html",
             key="cb_dl_all",
         )
+
+
+# ════════════════════════════════════════════════════════
+#  Tab6: クリニックDB
+# ════════════════════════════════════════════════════════
+with tab6:
+    st.title("🗄️ クリニックDB")
+    st.caption("量産ジャンルで使う院を事前収集して蓄積します。DB登録済みの院は記事生成時にスクレイピングをスキップします。")
+
+    _db = clinic_db_manager.load_db()
+
+    # ── フィルター & 統計 ─────────────────────────────────
+    _all_genres_db = sorted(set(g for e in _db.values() for g in e.get("genres", [])))
+    _db_c1, _db_c2 = st.columns([3, 1])
+    with _db_c1:
+        _db_genre_filter = st.selectbox(
+            "ジャンルで絞り込み",
+            ["すべて"] + _all_genres_db,
+            key="db_genre_filter",
+        )
+    with _db_c2:
+        st.metric("登録院数", len(_db))
+
+    _filtered_names = [
+        name for name, entry in _db.items()
+        if _db_genre_filter == "すべて" or _db_genre_filter in entry.get("genres", [])
+    ]
+
+    # ── 新規追加フォーム ──────────────────────────────────
+    st.divider()
+    st.subheader("＋ 新規院を追加")
+    with st.form("db_add_form"):
+        _db_fa, _db_fb, _db_fc = st.columns([2, 2, 2])
+        _db_new_name   = _db_fa.text_input("クリニック名", placeholder="TCB東京中央美容外科")
+        _db_new_domain = _db_fb.text_input("ドメイン / URL", placeholder="tcb.net")
+        _db_new_genres = _db_fc.text_input("ジャンル（カンマ区切り）", placeholder="美容外科, 二重")
+        _db_btn_a, _db_btn_b = st.columns(2)
+        _db_add_now  = _db_btn_a.form_submit_button("追加して情報を取得", type="primary")
+        _db_add_only = _db_btn_b.form_submit_button("登録のみ（後で取得）")
+
+    def _db_parse_genres(raw: str) -> list:
+        return [g.strip() for g in raw.split(",") if g.strip()]
+
+    if _db_add_now or _db_add_only:
+        _errs_db = []
+        if not _db_new_name.strip():
+            _errs_db.append("クリニック名を入力してください")
+        if not _db_new_domain.strip():
+            _errs_db.append("ドメイン / URLを入力してください")
+        if _db_add_now and not claude_key:
+            _errs_db.append("Claude API Key が未設定です")
+        for _e in _errs_db:
+            st.error(_e)
+
+        if not _errs_db:
+            _g_list = _db_parse_genres(_db_new_genres)
+            if _db_add_only:
+                clinic_db_manager.upsert_clinic(_db_new_name.strip(), _db_new_domain.strip(), _g_list, "")
+                st.success(f"「{_db_new_name.strip()}」を登録しました。後で「再取得」してください。")
+                st.rerun()
+            else:
+                with st.spinner(f"{_db_new_name.strip()} の情報を取得中..."):
+                    try:
+                        _scraped_new = collect_clinic_info(
+                            [{"name": _db_new_name.strip(), "domain": _db_new_domain.strip()}],
+                            _g_list[0] if _g_list else "",
+                            claude_key,
+                        )
+                        _info_new = _scraped_new.get(_db_new_name.strip(), "[取得失敗]")
+                        clinic_db_manager.upsert_clinic(_db_new_name.strip(), _db_new_domain.strip(), _g_list, _info_new)
+                        st.success(f"「{_db_new_name.strip()}」をDBに追加しました")
+                        st.rerun()
+                    except Exception as _e_new:
+                        st.error(f"取得エラー: {_e_new}")
+
+    # ── 一括再取得 ────────────────────────────────────────
+    if _filtered_names:
+        st.divider()
+        _batch_label = f"「{_db_genre_filter}」を一括再取得" if _db_genre_filter != "すべて" else "全院を一括再取得"
+        if st.button(f"🔄 {_batch_label}（{len(_filtered_names)} 院）", key="db_batch_refresh"):
+            if not claude_key:
+                st.error("Claude API Key が未設定です")
+            else:
+                with st.status("一括取得中...", expanded=True) as _db_batch_status:
+                    _db_latest = clinic_db_manager.load_db()
+                    for _dn in _filtered_names:
+                        _de = _db_latest.get(_dn, {})
+                        st.write(f"🔍 {_dn} を取得中...")
+                        try:
+                            _r_scraped = collect_clinic_info(
+                                [{"name": _dn, "domain": _de.get("domain", _dn)}],
+                                _de.get("genres", [""])[0] if _de.get("genres") else "",
+                                claude_key,
+                            )
+                            _r_info = _r_scraped.get(_dn, "[取得失敗]")
+                            clinic_db_manager.upsert_clinic(_dn, _de.get("domain", ""), _de.get("genres", []), _r_info)
+                            st.write("　→ ✅ 完了")
+                        except Exception as _de2:
+                            st.write(f"　→ ❌ エラー: {_de2}")
+                    _db_batch_status.update(label="✅ 一括取得完了", state="complete")
+                st.rerun()
+
+    # ── 登録済み院一覧 ────────────────────────────────────
+    st.divider()
+    if not _db:
+        st.info("まだ院が登録されていません。上のフォームから追加してください。")
+    elif not _filtered_names:
+        st.info("このジャンルに該当する院がありません。")
+    else:
+        st.caption(f"**{len(_filtered_names)} 院**{'（フィルター後）' if _db_genre_filter != 'すべて' else ''}")
+        _db_reload = clinic_db_manager.load_db()
+        for _dn in sorted(_filtered_names):
+            _de = _db_reload.get(_dn, {})
+            _d_genres = "、".join(_de.get("genres", []))
+            _d_updated = _de.get("updated_at", "未取得")
+            _d_has_info = bool(_de.get("info"))
+            _d_label = f"{'🟢' if _d_has_info else '🟡'} {_dn}　｜　更新: {_d_updated}　｜　{_d_genres}"
+            with st.expander(_d_label, expanded=False):
+                st.caption(f"ドメイン: {_de.get('domain', '')}")
+                _d_info = _de.get("info", "（未取得）")
+                st.text_area(
+                    "取得済み情報",
+                    value=_d_info[:2000] + ("..." if len(_d_info) > 2000 else ""),
+                    height=200, disabled=True,
+                    key=f"db_info_{_dn}",
+                )
+                _db_rc1, _db_rc2 = st.columns(2)
+                if _db_rc1.button("🔄 再取得", key=f"db_refresh_{_dn}"):
+                    if not claude_key:
+                        st.error("Claude API Key が未設定です")
+                    else:
+                        with st.spinner(f"{_dn} を再取得中..."):
+                            try:
+                                _rr_scraped = collect_clinic_info(
+                                    [{"name": _dn, "domain": _de.get("domain", _dn)}],
+                                    _de.get("genres", [""])[0] if _de.get("genres") else "",
+                                    claude_key,
+                                )
+                                _rr_info = _rr_scraped.get(_dn, "[取得失敗]")
+                                clinic_db_manager.upsert_clinic(_dn, _de.get("domain", ""), _de.get("genres", []), _rr_info)
+                                st.success("再取得完了")
+                                st.rerun()
+                            except Exception as _rr_e:
+                                st.error(f"エラー: {_rr_e}")
+                if _db_rc2.button("🗑️ 削除", key=f"db_del_{_dn}"):
+                    clinic_db_manager.delete_clinic(_dn)
+                    st.success(f"「{_dn}」を削除しました")
+                    st.rerun()
