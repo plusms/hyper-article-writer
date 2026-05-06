@@ -1,5 +1,7 @@
 import json
 import os
+import pathlib
+import datetime
 import time
 import streamlit as st
 
@@ -99,12 +101,46 @@ with st.sidebar:
         "記事タイプ別デフォルト追加指示"
     )
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📋 スプシ一括", "📝 1記事", "✅ 品質チェック", "⚙️ サイト設定", "🏥 クリニックブロック", "🗄️ クリニックDB"])
+tab_batch, tab_custom, tab_rank, tab_qual, tab_cases, tab_settings = st.tabs([
+    "📋 スプシ一括（ノウハウ）", "📝 カスタム記事作成", "🏥 ランキングブロック",
+    "✅ 品質チェック", "🗄️ 案件データ", "⚙️ サイト設定",
+])
 
 
 # ════════════════════════════════════════════════════════
 #  共通ヘルパー
 # ════════════════════════════════════════════════════════
+_OUTPUT_CACHE_DIR = pathlib.Path("output_cache")
+
+
+def _save_output_cache(kw: str, data: dict) -> None:
+    _OUTPUT_CACHE_DIR.mkdir(exist_ok=True)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_kw = kw[:30].replace(" ", "_").replace("/", "_")
+    fname = f"{ts}_{safe_kw}.json"
+    (_OUTPUT_CACHE_DIR / fname).write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    files = sorted(_OUTPUT_CACHE_DIR.glob("*.json"))
+    for old in files[:-20]:
+        old.unlink()
+
+
+def _load_output_cache() -> list[dict]:
+    if not _OUTPUT_CACHE_DIR.exists():
+        return []
+    files = sorted(_OUTPUT_CACHE_DIR.glob("*.json"), reverse=True)[:10]
+    results = []
+    for f in files:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            data["_cache_file"] = f.name
+            results.append(data)
+        except Exception:
+            pass
+    return results
+
+
 def build_inputs_from_row(row: dict, defaults: dict | None = None) -> dict:
     clinics_raw = row.get("clinics_raw", "")
     clinics = []
@@ -154,9 +190,9 @@ def _render_topic_checkboxes(article_type: str, key_prefix: str) -> list[str]:
 # ════════════════════════════════════════════════════════
 #  Tab1: スプシ一括
 # ════════════════════════════════════════════════════════
-with tab1:
-    st.title("📋 スプシ一括実行")
-    st.caption("K列（ステータス）が空欄の行だけ処理します。設定タブのデフォルト追加指示＋H列の追記内容を合算します。")
+with tab_batch:
+    st.title("📋 スプシ一括（ノウハウ）")
+    st.caption("ノウハウ記事のみ処理します。K列（ステータス）が空欄でかつ記事タイプが「ノウハウ」の行だけ対象です。設定タブのデフォルト追加指示＋H列の追記内容を合算します。")
 
     sheet_url_batch = st.text_input(
         "Google Sheet URL",
@@ -181,7 +217,7 @@ with tab1:
         else:
             ws = get_sheet(sheet_url_batch, creds_data)
             rows = read_input_rows(ws)
-            pending = [r for r in rows if not r.get("status")]
+            pending = [r for r in rows if not r.get("status") and r.get("article_type", "") == "ノウハウ"]
 
             try:
                 settings_ws = get_settings_sheet(sheet_url_batch, creds_data)
@@ -252,9 +288,9 @@ with tab1:
 # ════════════════════════════════════════════════════════
 #  Tab2: 1記事
 # ════════════════════════════════════════════════════════
-with tab2:
-    st.title("📝 1記事")
-    st.caption("単発テスト・社員用。設定タブのデフォルト追加指示を自動適用します。")
+with tab_custom:
+    st.title("📝 カスタム記事作成")
+    st.caption("CV記事（地域・比較・商標）およびノウハウの単発生成。設定タブのデフォルト追加指示を自動適用します。")
 
     # ── サイトパーツ選択 ──────────────────────────────────
     _registered_sites = site_config_manager.list_sites()
@@ -448,6 +484,7 @@ with tab2:
                         "clinics":        all_clinics,
                     }
                     s.update(label="✅ 完了", state="complete")
+                    _save_output_cache(main_kw, st.session_state["t2_last"])
 
                     if sheet_url_out.strip():
                         creds_out = _get_gcp_creds(sheets_creds_file)
@@ -468,6 +505,24 @@ with tab2:
                 except Exception as e:
                     s.update(label="❌ エラー", state="error")
                     st.error(str(e))
+
+    # ── 過去の生成結果（リロード対策）────────────────────────────
+    _cache_hist = _load_output_cache()
+    if _cache_hist:
+        with st.expander(f"📂 過去の生成結果（最新 {len(_cache_hist)} 件）", expanded=False):
+            _cache_labels = [
+                f"{d.get('main_kw', '(不明)')}  —  {d['_cache_file'][:15]}"
+                for d in _cache_hist
+            ]
+            _cache_sel_idx = st.selectbox(
+                "読み込む記事を選択", range(len(_cache_labels)),
+                format_func=lambda i: _cache_labels[i],
+                key="cache_hist_sel",
+            )
+            if st.button("⬆️ この記事を読み込む", key="cache_hist_load"):
+                _loaded = {k: v for k, v in _cache_hist[_cache_sel_idx].items() if k != "_cache_file"}
+                st.session_state["t2_last"] = _loaded
+                st.rerun()
 
     # ── 生成結果表示（session_stateから常時表示）────────────────
     _t2_last = st.session_state.get("t2_last")
@@ -597,7 +652,7 @@ with tab2:
 # ════════════════════════════════════════════════════════
 #  Tab3: 品質チェック
 # ════════════════════════════════════════════════════════
-with tab3:
+with tab_qual:
     st.title("✅ 品質チェック")
     check_type    = st.radio("記事タイプ", ["地域", "比較", "商標", "ノウハウ"], horizontal=True, key="chk_type")
     check_main_kw = st.text_input("メインKW", key="chk_kw")
@@ -622,7 +677,7 @@ with tab3:
 # ════════════════════════════════════════════════════════
 #  Tab4: サイト設定
 # ════════════════════════════════════════════════════════
-with tab4:
+with tab_settings:
     st.title("⚙️ サイト設定")
     st.caption("サイト別のカラー・トンマナ・画像テンプレート・HTMLパーツを登録します。")
 
@@ -967,9 +1022,9 @@ with tab4:
 # ════════════════════════════════════════════════════════
 #  Tab5: クリニックブロック
 # ════════════════════════════════════════════════════════
-with tab5:
-    st.title("🏥 クリニックブロック")
-    st.caption("おすすめクリニック紹介ブロックのHTMLを院ごとに生成します。Tab2の「掲載院一覧」をコピペして使ってください。")
+with tab_rank:
+    st.title("🏥 ランキングブロック")
+    st.caption("おすすめ紹介ブロックのHTMLを案件ごとに生成します。「カスタム記事作成」タブの「掲載院一覧」をコピペして使ってください。")
 
     _cb_sites = site_config_manager.list_sites()
     _cb_site_opts = ["（なし）"] + _cb_sites
@@ -1172,9 +1227,9 @@ with tab5:
 # ════════════════════════════════════════════════════════
 #  Tab6: クリニックDB
 # ════════════════════════════════════════════════════════
-with tab6:
-    st.title("🗄️ クリニックDB")
-    st.caption("量産ジャンルで使う院を事前収集して蓄積します。DB登録済みの院は記事生成時にスクレイピングをスキップします。")
+with tab_cases:
+    st.title("🗄️ 案件データ")
+    st.caption("量産ジャンルで使う案件（クリニック・商品・ブランド等）を事前収集して蓄積します。DB登録済みの案件は記事生成時にスクレイピングをスキップします。")
 
     _db = clinic_db_manager.load_db()
 
