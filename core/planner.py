@@ -14,7 +14,23 @@ def _claude_call(api_key: str, prompt: str) -> str:
         return f"[生成失敗: {e}]"
 
 
-def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, claude_api_key: str) -> dict:
+def _gemini_call(api_key: str, prompt: str) -> str:
+    try:
+        from google import genai as _genai
+        client = _genai.Client(api_key=api_key)
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        return response.text
+    except Exception as e:
+        return f"[生成失敗: {e}]"
+
+
+def _llm_call(claude_api_key: str, prompt: str, gemini_api_key: str = "", provider: str = "claude") -> str:
+    if provider == "gemini" and gemini_api_key:
+        return _gemini_call(gemini_api_key, prompt)
+    return _claude_call(claude_api_key, prompt)
+
+
+def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude") -> dict:
     article_type = inputs["article_type"]
     clinics_list = "\n".join(f"- {c['name']} ({c['domain']})" for c in inputs["clinics"])
     clinic_info_text = "\n\n".join(
@@ -206,7 +222,7 @@ H2:
 - （情報が取得できなかった項目があれば記載。クリニックリスト外の要確認は記載しない）
 """
 
-    raw = _claude_call(claude_api_key, prompt)
+    raw = _llm_call(claude_api_key, prompt, gemini_api_key=gemini_api_key, provider=article_provider)
 
     title, meta, todo_list = "", "", ""
     for line in raw.split("\n"):

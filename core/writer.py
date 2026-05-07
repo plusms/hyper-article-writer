@@ -1,5 +1,20 @@
 import anthropic
 
+
+def _gemini_call_messages(api_key: str, messages: list) -> str:
+    try:
+        from google import genai as _genai
+        client = _genai.Client(api_key=api_key)
+        contents = [
+            {"role": "user" if m["role"] == "user" else "model", "parts": [{"text": m["content"]}]}
+            for m in messages
+        ]
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=contents)
+        return response.text
+    except Exception as e:
+        return f"[生成失敗: {e}]"
+
+
 WRITING_RULES = """
 【ライティングルール（すべて厳守）】
 
@@ -436,12 +451,15 @@ def generate_body(
     claude_api_key: str,
     competitor_analysis: dict | None = None,
     site_parts: str = "",
+    gemini_api_key: str = "",
+    article_provider: str = "claude",
 ) -> dict:
-    client = anthropic.Anthropic(api_key=claude_api_key)
-
     use_clinic_placeholder = inputs.get("article_type") in ("地域", "比較")
 
     def _call(messages: list) -> str:
+        if article_provider == "gemini" and gemini_api_key:
+            return _gemini_call_messages(gemini_api_key, messages)
+        client = anthropic.Anthropic(api_key=claude_api_key)
         msg = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=8192,
@@ -509,8 +527,7 @@ def generate_body(
     return _finish(raw)
 
 
-def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, claude_api_key: str) -> str:
-    client = anthropic.Anthropic(api_key=claude_api_key)
+def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude") -> str:
     criteria = _get_quality_criteria(article_type)
 
     prompt = f"""以下の記事HTML（{article_type}記事）の品質チェックを実施してください。
@@ -542,6 +559,9 @@ def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, clau
 Q〇, Q〇, Q〇 …（問題なしの項目番号を列挙）
 """
 
+    if article_provider == "gemini" and gemini_api_key:
+        return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": prompt}])
+    client = anthropic.Anthropic(api_key=claude_api_key)
     message = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4096,

@@ -107,6 +107,13 @@ with st.sidebar:
         horizontal=True,
         key="research_provider",
     )
+    article_provider = st.radio(
+        "記事生成AI（構成・本文）",
+        ["claude", "gemini"],
+        format_func=lambda x: "Claude (Sonnet)" if x == "claude" else "Gemini Flash",
+        horizontal=True,
+        key="article_provider",
+    )
 
     _gcp_in_secrets = _secret("gcp_service_account.type") or _secret("GCP_SERVICE_ACCOUNT_JSON")
     if _gcp_in_secrets:
@@ -336,9 +343,9 @@ with _safe_tab(tab_batch):
                         _batch_active_db_url = db_sheet_url if batch_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
                         _batch_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in inputs["clinics"]], genre=inputs.get("genre", ""), creds_data=creds_data, sheet_url=_batch_active_db_url)
                         clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache, db_type=batch_db_type, gemini_api_key=gemini_key, research_provider=research_provider)
-                        structure = generate_structure(inputs, comp, clinics, claude_key)
+                        structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
                         output    = generate_body(inputs, structure, clinics, claude_key, comp,
-                                                  site_parts=_batch_site_parts)
+                                                  site_parts=_batch_site_parts, gemini_api_key=gemini_key, article_provider=article_provider)
 
                         write_output_row(ws, row_num, {
                             "title":     structure["title"],
@@ -538,10 +545,11 @@ with _safe_tab(tab_custom):
                         st.write(f"　→ DB参照: {len(_t2_db_cache)} 案件（スクレイピングスキップ）")
                     clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache, db_type=custom_db_type, gemini_api_key=gemini_key, research_provider=research_provider)
                     st.write("📐 構成生成中...")
-                    structure = generate_structure(inputs, comp, clinics, claude_key)
-                    st.write("✍️ 本文生成中（Claude）...")
+                    structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
+                    _provider_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
+                    st.write(f"✍️ 本文生成中（{_provider_label}）...")
                     output = generate_body(inputs, structure, clinics, claude_key, comp,
-                                          site_parts=_single_site_parts)
+                                          site_parts=_single_site_parts, gemini_api_key=gemini_key, article_provider=article_provider)
                     st.session_state["t2_last"] = {
                         "html":           output["html"],
                         "title":          structure["title"],
@@ -842,6 +850,8 @@ with _safe_tab(tab_qual):
                     html_input, check_type, check_main_kw,
                     [k.strip() for k in check_sub_kw.split(",") if k.strip()],
                     claude_key,
+                    gemini_api_key=gemini_key,
+                    article_provider=article_provider,
                 )
                 st.markdown(result)
 
