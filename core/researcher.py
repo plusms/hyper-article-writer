@@ -29,12 +29,12 @@ def fetch_page_text(url: str) -> str:
         return f"[取得失敗: {e}]"
 
 
-def _claude_call(api_key: str, prompt: str) -> str:
+def _claude_call(api_key: str, prompt: str, max_tokens: int = 4096) -> str:
     try:
         client = anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
+            max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
         return msg.content[0].text
@@ -187,7 +187,98 @@ def _find_price_pages(base_url: str, genre: str, max_pages: int = 2) -> list[str
         return []
 
 
-def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None) -> dict:
+def crawl_site(start_url: str, genre: str, max_pages: int = 20) -> str:
+    """指定URLから同ドメイン内をBFSクロールし、収集ページのテキストを結合して返す。"""
+    from collections import deque
+
+    if not start_url.startswith("http"):
+        start_url = f"https://{start_url}"
+
+    parsed = urlparse(start_url)
+    base_domain = parsed.netloc
+    path_prefix = parsed.path.rstrip("/")
+
+    priority_kw = [
+        "料金", "price", "費用", "プラン", "plan", "menu", "メニュー",
+        "access", "アクセス", "flow", "流れ", "faq", "よくある",
+        "実績", "症例", "診療", "初診", "about", "概要", "特徴",
+    ]
+    if genre:
+        priority_kw.append(genre[:5])
+
+    headers_ua = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+
+    visited: set = set()
+    priority_q: deque = deque([start_url])
+    regular_q: deque = deque()
+    collected: list = []
+
+    while (priority_q or regular_q) and len(collected) < max_pages:
+        url = priority_q.popleft() if priority_q else regular_q.popleft()
+        clean_url = url.split("#")[0]
+        if clean_url in visited:
+            continue
+        visited.add(clean_url)
+
+        try:
+            r = requests.get(clean_url, headers=headers_ua, timeout=15)
+            r.encoding = r.apparent_encoding
+            soup = BeautifulSoup(r.text, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                tag.decompose()
+            headings = [
+                f"{h.name.upper()}: {h.get_text(strip=True)}"
+                for h in soup.find_all(["h1", "h2", "h3"])
+                if h.get_text(strip=True)
+            ]
+            body = soup.get_text(separator="\n", strip=True)[:10000]
+            collected.append(
+                f"=== {clean_url} ===\n"
+                "【見出し構成】\n" + "\n".join(headings) + "\n\n【本文抜粋】\n" + body
+            )
+
+            for a in soup.find_all("a", href=True):
+                href = urljoin(clean_url, a["href"]).split("#")[0]
+                lp = urlparse(href)
+                if lp.netloc != base_domain:
+                    continue
+                if href in visited:
+                    continue
+                if path_prefix and not lp.path.startswith(path_prefix):
+                    continue
+                link_text = (a.get_text(strip=True) + " " + href).lower()
+                if any(kw.lower() in link_text for kw in priority_kw if kw):
+                    priority_q.append(href)
+                else:
+                    regular_q.append(href)
+        except Exception:
+            continue
+
+    return "\n\n".join(collected)
+
+
+_EXTRACTION_FIELDS = """\
+院名：
+住所：
+アクセス（最寄り駅・徒歩分数）：
+診療時間：
+休診日：
+予約方法：
+料金詳細（プランごと・全プラン・税込/税抜を記載）：
+諸費用（診察料・カウンセリング料・麻酔代・薬代・送料・アフターケア代等）：
+支払い方法（カード・ローン・現金）：
+学割・割引・クーポン情報：
+実績情報（症例数・年間件数・在籍医師・認定資格・モニター有無等）：
+診療/施術の流れ（予約〜アフターケアまでのステップ）："""
+
+
+def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None, full_crawl: bool = False) -> dict:
     if not clinics:
         return {}
 
@@ -198,70 +289,82 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
     if not clinics_to_scrape:
         return db_results
 
-    fetched = {}
-    for clinic in clinics_to_scrape:
-        name = clinic["name"]
-        domain_or_url = clinic["domain"]
+    scraped_results = {}
 
-        if domain_or_url.startswith("http"):
-            main_url = domain_or_url
-            content = fetch_page_text(main_url)
-        else:
-            main_url = None
-            content = "[取得失敗]"
-            for prefix in ["https://", "https://www."]:
-                result = fetch_page_text(f"{prefix}{domain_or_url}")
-                if not result.startswith("[取得失敗"):
-                    main_url = f"{prefix}{domain_or_url}"
-                    content = result
-                    break
+    if full_crawl:
+        # DB事前収集用：1院ずつクロール → 個別抽出
+        for clinic in clinics_to_scrape:
+            name = clinic["name"]
+            domain_or_url = clinic["domain"]
+            start_url = domain_or_url if domain_or_url.startswith("http") else f"https://{domain_or_url}"
+            content = crawl_site(start_url, genre, max_pages=20)
+            prompt = f"""以下の{name}のWebサイト内容から情報を抽出してください。
+取得できない項目は「[要確認]」と記載してください。補完・推測は一切しないでください。
 
-        # 料金・メニューページを追加取得（全記事タイプ）
-        if main_url:
-            extra_pages = _find_price_pages(main_url, genre)
-            for extra_url in extra_pages:
-                extra = fetch_page_text(extra_url)
-                if not extra.startswith("[取得失敗"):
-                    content += f"\n\n--- 追加ページ: {extra_url} ---\n{extra}"
+{content[:30000]}
 
-        fetched[name] = content
+出力は「【{name}】」の見出しで始め、以下の形式で記載してください：
 
-    clinic_blocks = "\n\n".join(
-        f"【{name}】\nWebサイト内容：\n{content[:6000]}\n\n"
-        f"院名：\n住所：\nアクセス（最寄り駅・徒歩分数）：\n診療時間：\n休診日：\n"
-        f"{genre}の料金（税込/税抜）：\n支払い方法（カード・ローン・現金）：\n"
-        f"麻酔の有無と料金：\n学割・割引情報：\n予約方法："
-        for name, content in fetched.items()
-    )
+【{name}】
+{_EXTRACTION_FIELDS}"""
+            scraped_results[name] = _claude_call(claude_api_key, prompt, max_tokens=8192)
+    else:
+        # 記事生成時：従来通り main + 料金ページのみ、一括抽出
+        fetched = {}
+        for clinic in clinics_to_scrape:
+            name = clinic["name"]
+            domain_or_url = clinic["domain"]
 
-    prompt = f"""以下の各クリニックについて、提供されたWebサイト内容から情報を抽出してください。
+            if domain_or_url.startswith("http"):
+                main_url = domain_or_url
+                content = fetch_page_text(main_url)
+            else:
+                main_url = None
+                content = "[取得失敗]"
+                for prefix in ["https://", "https://www."]:
+                    result = fetch_page_text(f"{prefix}{domain_or_url}")
+                    if not result.startswith("[取得失敗"):
+                        main_url = f"{prefix}{domain_or_url}"
+                        content = result
+                        break
+
+            if main_url:
+                extra_pages = _find_price_pages(main_url, genre)
+                for extra_url in extra_pages:
+                    extra = fetch_page_text(extra_url)
+                    if not extra.startswith("[取得失敗"):
+                        content += f"\n\n--- 追加ページ: {extra_url} ---\n{extra}"
+
+            fetched[name] = content
+
+        clinic_blocks = "\n\n".join(
+            f"【{name}】\nWebサイト内容：\n{content[:6000]}\n\n{_EXTRACTION_FIELDS}"
+            for name, content in fetched.items()
+        )
+        prompt = f"""以下の各クリニックについて、提供されたWebサイト内容から情報を抽出してください。
 取得できない項目は「[要確認]」と記載してください。補完・推測は一切しないでください。
 
 {clinic_blocks}
 
 各クリニックの出力は「【クリニック名】」の見出しで始めてください。"""
+        result_text = _claude_call(claude_api_key, prompt)
 
-    result_text = _claude_call(claude_api_key, prompt)
-
-    scraped_results = {}
-    for clinic in clinics_to_scrape:
-        name = clinic["name"]
-        marker = f"【{name}】"
-        if marker not in result_text:
-            scraped_results[name] = "[要確認]"
-            continue
-
-        start = result_text.index(marker)
-        next_pos = len(result_text)
-        for other in clinics_to_scrape:
-            if other["name"] == name:
+        for clinic in clinics_to_scrape:
+            name = clinic["name"]
+            marker = f"【{name}】"
+            if marker not in result_text:
+                scraped_results[name] = "[要確認]"
                 continue
-            other_marker = f"【{other['name']}】"
-            if other_marker in result_text:
-                pos = result_text.index(other_marker)
-                if pos > start:
-                    next_pos = min(next_pos, pos)
-
-        scraped_results[name] = result_text[start:next_pos].strip()
+            start = result_text.index(marker)
+            next_pos = len(result_text)
+            for other in clinics_to_scrape:
+                if other["name"] == name:
+                    continue
+                other_marker = f"【{other['name']}】"
+                if other_marker in result_text:
+                    pos = result_text.index(other_marker)
+                    if pos > start:
+                        next_pos = min(next_pos, pos)
+            scraped_results[name] = result_text[start:next_pos].strip()
 
     return {**db_results, **scraped_results}

@@ -56,6 +56,7 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
 _claude_key_default  = _secret("CLAUDE_API_KEY")
 _gemini_key_default  = _secret("GEMINI_API_KEY")
 _drive_folder_id     = _secret("DRIVE_PARENT_FOLDER_ID", "1CHqNruWiOVdeJPs7Nyd3Nfjt3sLxMc2c")
+_db_sheet_url_default = _secret("CLINIC_DB_SHEET_URL")
 
 # ── サイドバー：設定 ──────────────────────────────────────
 with st.sidebar:
@@ -80,6 +81,17 @@ with st.sidebar:
         sheets_creds_file = st.file_uploader("Google Sheets 認証JSON", type="json")
         if sheets_creds_file:
             st.success("認証ファイル読み込み済み")
+
+    st.divider()
+    if _db_sheet_url_default:
+        st.caption("案件DB スプシ: Secrets から読込済み")
+        db_sheet_url = _db_sheet_url_default
+    else:
+        db_sheet_url = st.text_input(
+            "案件DB スプレッドシートURL",
+            placeholder="https://docs.google.com/spreadsheets/d/...",
+            key="db_sheet_url_input",
+        )
 
     st.divider()
     st.markdown(
@@ -261,7 +273,7 @@ with tab_batch:
                                 inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"]
                             )
                         inputs["clinics"] = inputs["clinics"] + discovered
-                        _batch_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in inputs["clinics"]])
+                        _batch_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in inputs["clinics"]], creds_data=creds_data, sheet_url=db_sheet_url)
                         clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache)
                         structure = generate_structure(inputs, comp, clinics, claude_key)
                         output    = generate_body(inputs, structure, clinics, claude_key, comp,
@@ -462,9 +474,10 @@ with tab_custom:
                         st.write(f"　→ {len(discovered)} 件を自動追加: {', '.join(c['name'] for c in discovered)}")
                     inputs["clinics"] = all_clinics
                     st.write("🏥 クリニック情報収集中...")
-                    _t2_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in all_clinics])
+                    _t2_db_creds = _get_gcp_creds(sheets_creds_file)
+                    _t2_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in all_clinics], creds_data=_t2_db_creds, sheet_url=db_sheet_url)
                     if _t2_db_cache:
-                        st.write(f"　→ DB参照: {len(_t2_db_cache)} 院（スクレイピングスキップ）")
+                        st.write(f"　→ DB参照: {len(_t2_db_cache)} 案件（スクレイピングスキップ）")
                     clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache)
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key)
@@ -1162,7 +1175,8 @@ with tab_rank:
 
                         st.write(f"🔍 {_r}位: {_cbc['name']} の情報を収集中...")
                         try:
-                            _t5_db_cache = clinic_db_manager.build_db_cache([_cbc["name"]])
+                            _t5_db_creds = _get_gcp_creds(sheets_creds_file)
+                            _t5_db_cache = clinic_db_manager.build_db_cache([_cbc["name"]], creds_data=_t5_db_creds, sheet_url=db_sheet_url)
                             if _t5_db_cache:
                                 st.write(f"　→ DB参照")
                             _scraped = collect_clinic_info(
@@ -1229,9 +1243,17 @@ with tab_rank:
 # ════════════════════════════════════════════════════════
 with tab_cases:
     st.title("🗄️ 案件データ")
-    st.caption("量産ジャンルで使う案件（クリニック・商品・ブランド等）を事前収集して蓄積します。DB登録済みの案件は記事生成時にスクレイピングをスキップします。")
+    st.caption("量産ジャンルで使う案件を事前収集して蓄積します。DB登録済みの案件は記事生成時にスクレイピングをスキップします。")
 
-    _db = clinic_db_manager.load_db()
+    _db_creds = _get_gcp_creds(sheets_creds_file)
+    if not db_sheet_url:
+        st.warning("サイドバーで「案件DB スプレッドシートURL」を入力してください。未設定の場合はローカルJSONに保存されます（Streamlit Cloud再起動で消えます）。")
+    elif not _db_creds:
+        st.warning("Google Sheets 認証が未設定です。ローカルJSONにフォールバックします。")
+    else:
+        st.caption("✅ Google Sheets DB に接続中")
+
+    _db = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=db_sheet_url)
 
     # ── フィルター & 統計 ─────────────────────────────────
     _all_genres_db = sorted(set(g for e in _db.values() for g in e.get("genres", [])))
@@ -1243,7 +1265,7 @@ with tab_cases:
             key="db_genre_filter",
         )
     with _db_c2:
-        st.metric("登録院数", len(_db))
+        st.metric("登録件数", len(_db))
 
     _filtered_names = [
         name for name, entry in _db.items()
@@ -1252,14 +1274,14 @@ with tab_cases:
 
     # ── 新規追加フォーム ──────────────────────────────────
     st.divider()
-    st.subheader("＋ 新規院を追加")
+    st.subheader("＋ 新規追加")
     with st.form("db_add_form"):
         _db_fa, _db_fb, _db_fc = st.columns([2, 2, 2])
-        _db_new_name   = _db_fa.text_input("クリニック名", placeholder="TCB東京中央美容外科")
-        _db_new_domain = _db_fb.text_input("ドメイン / URL", placeholder="tcb.net")
+        _db_new_name   = _db_fa.text_input("案件名（クリニック名・商品名等）", placeholder="TCB東京中央美容外科")
+        _db_new_domain = _db_fb.text_input("URL（ドメイン or パス指定）", placeholder="tcb.net  または  tcb.net/osaka/umeda/")
         _db_new_genres = _db_fc.text_input("ジャンル（カンマ区切り）", placeholder="美容外科, 二重")
         _db_btn_a, _db_btn_b = st.columns(2)
-        _db_add_now  = _db_btn_a.form_submit_button("追加して情報を取得", type="primary")
+        _db_add_now  = _db_btn_a.form_submit_button("追加してサイトをクロール取得", type="primary")
         _db_add_only = _db_btn_b.form_submit_button("登録のみ（後で取得）")
 
     def _db_parse_genres(raw: str) -> list:
@@ -1268,9 +1290,9 @@ with tab_cases:
     if _db_add_now or _db_add_only:
         _errs_db = []
         if not _db_new_name.strip():
-            _errs_db.append("クリニック名を入力してください")
+            _errs_db.append("案件名を入力してください")
         if not _db_new_domain.strip():
-            _errs_db.append("ドメイン / URLを入力してください")
+            _errs_db.append("URL / ドメインを入力してください")
         if _db_add_now and not claude_key:
             _errs_db.append("Claude API Key が未設定です")
         for _e in _errs_db:
@@ -1279,19 +1301,26 @@ with tab_cases:
         if not _errs_db:
             _g_list = _db_parse_genres(_db_new_genres)
             if _db_add_only:
-                clinic_db_manager.upsert_clinic(_db_new_name.strip(), _db_new_domain.strip(), _g_list, "")
+                clinic_db_manager.upsert_clinic(
+                    _db_new_name.strip(), _db_new_domain.strip(), _g_list, "",
+                    creds_data=_db_creds, sheet_url=db_sheet_url,
+                )
                 st.success(f"「{_db_new_name.strip()}」を登録しました。後で「再取得」してください。")
                 st.rerun()
             else:
-                with st.spinner(f"{_db_new_name.strip()} の情報を取得中..."):
+                with st.spinner(f"{_db_new_name.strip()} のサイトをクロール中（最大20ページ）..."):
                     try:
                         _scraped_new = collect_clinic_info(
                             [{"name": _db_new_name.strip(), "domain": _db_new_domain.strip()}],
                             _g_list[0] if _g_list else "",
                             claude_key,
+                            full_crawl=True,
                         )
                         _info_new = _scraped_new.get(_db_new_name.strip(), "[取得失敗]")
-                        clinic_db_manager.upsert_clinic(_db_new_name.strip(), _db_new_domain.strip(), _g_list, _info_new)
+                        clinic_db_manager.upsert_clinic(
+                            _db_new_name.strip(), _db_new_domain.strip(), _g_list, _info_new,
+                            creds_data=_db_creds, sheet_url=db_sheet_url,
+                        )
                         st.success(f"「{_db_new_name.strip()}」をDBに追加しました")
                         st.rerun()
                     except Exception as _e_new:
@@ -1300,39 +1329,43 @@ with tab_cases:
     # ── 一括再取得 ────────────────────────────────────────
     if _filtered_names:
         st.divider()
-        _batch_label = f"「{_db_genre_filter}」を一括再取得" if _db_genre_filter != "すべて" else "全院を一括再取得"
-        if st.button(f"🔄 {_batch_label}（{len(_filtered_names)} 院）", key="db_batch_refresh"):
+        _batch_label = f"「{_db_genre_filter}」を一括再取得" if _db_genre_filter != "すべて" else "全件を一括再取得"
+        if st.button(f"🔄 {_batch_label}（{len(_filtered_names)} 件・サイトクロール）", key="db_batch_refresh"):
             if not claude_key:
                 st.error("Claude API Key が未設定です")
             else:
                 with st.status("一括取得中...", expanded=True) as _db_batch_status:
-                    _db_latest = clinic_db_manager.load_db()
+                    _db_latest = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=db_sheet_url)
                     for _dn in _filtered_names:
                         _de = _db_latest.get(_dn, {})
-                        st.write(f"🔍 {_dn} を取得中...")
+                        st.write(f"🔍 {_dn} をクロール中...")
                         try:
                             _r_scraped = collect_clinic_info(
                                 [{"name": _dn, "domain": _de.get("domain", _dn)}],
                                 _de.get("genres", [""])[0] if _de.get("genres") else "",
                                 claude_key,
+                                full_crawl=True,
                             )
                             _r_info = _r_scraped.get(_dn, "[取得失敗]")
-                            clinic_db_manager.upsert_clinic(_dn, _de.get("domain", ""), _de.get("genres", []), _r_info)
+                            clinic_db_manager.upsert_clinic(
+                                _dn, _de.get("domain", ""), _de.get("genres", []), _r_info,
+                                creds_data=_db_creds, sheet_url=db_sheet_url,
+                            )
                             st.write("　→ ✅ 完了")
                         except Exception as _de2:
                             st.write(f"　→ ❌ エラー: {_de2}")
                     _db_batch_status.update(label="✅ 一括取得完了", state="complete")
                 st.rerun()
 
-    # ── 登録済み院一覧 ────────────────────────────────────
+    # ── 登録済み一覧 ──────────────────────────────────────
     st.divider()
     if not _db:
-        st.info("まだ院が登録されていません。上のフォームから追加してください。")
+        st.info("まだ登録されていません。上のフォームから追加してください。")
     elif not _filtered_names:
-        st.info("このジャンルに該当する院がありません。")
+        st.info("このジャンルに該当する案件がありません。")
     else:
-        st.caption(f"**{len(_filtered_names)} 院**{'（フィルター後）' if _db_genre_filter != 'すべて' else ''}")
-        _db_reload = clinic_db_manager.load_db()
+        st.caption(f"**{len(_filtered_names)} 件**{'（フィルター後）' if _db_genre_filter != 'すべて' else ''}")
+        _db_reload = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=db_sheet_url)
         for _dn in sorted(_filtered_names):
             _de = _db_reload.get(_dn, {})
             _d_genres = "、".join(_de.get("genres", []))
@@ -1340,7 +1373,7 @@ with tab_cases:
             _d_has_info = bool(_de.get("info"))
             _d_label = f"{'🟢' if _d_has_info else '🟡'} {_dn}　｜　更新: {_d_updated}　｜　{_d_genres}"
             with st.expander(_d_label, expanded=False):
-                st.caption(f"ドメイン: {_de.get('domain', '')}")
+                st.caption(f"URL: {_de.get('domain', '')}")
                 _d_info = _de.get("info", "（未取得）")
                 st.text_area(
                     "取得済み情報",
@@ -1349,24 +1382,28 @@ with tab_cases:
                     key=f"db_info_{_dn}",
                 )
                 _db_rc1, _db_rc2 = st.columns(2)
-                if _db_rc1.button("🔄 再取得", key=f"db_refresh_{_dn}"):
+                if _db_rc1.button("🔄 再クロール", key=f"db_refresh_{_dn}"):
                     if not claude_key:
                         st.error("Claude API Key が未設定です")
                     else:
-                        with st.spinner(f"{_dn} を再取得中..."):
+                        with st.spinner(f"{_dn} を再クロール中..."):
                             try:
                                 _rr_scraped = collect_clinic_info(
                                     [{"name": _dn, "domain": _de.get("domain", _dn)}],
                                     _de.get("genres", [""])[0] if _de.get("genres") else "",
                                     claude_key,
+                                    full_crawl=True,
                                 )
                                 _rr_info = _rr_scraped.get(_dn, "[取得失敗]")
-                                clinic_db_manager.upsert_clinic(_dn, _de.get("domain", ""), _de.get("genres", []), _rr_info)
+                                clinic_db_manager.upsert_clinic(
+                                    _dn, _de.get("domain", ""), _de.get("genres", []), _rr_info,
+                                    creds_data=_db_creds, sheet_url=db_sheet_url,
+                                )
                                 st.success("再取得完了")
                                 st.rerun()
                             except Exception as _rr_e:
                                 st.error(f"エラー: {_rr_e}")
                 if _db_rc2.button("🗑️ 削除", key=f"db_del_{_dn}"):
-                    clinic_db_manager.delete_clinic(_dn)
+                    clinic_db_manager.delete_clinic(_dn, creds_data=_db_creds, sheet_url=db_sheet_url)
                     st.success(f"「{_dn}」を削除しました")
                     st.rerun()
