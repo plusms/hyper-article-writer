@@ -278,6 +278,24 @@ _EXTRACTION_FIELDS = """\
 診療/施術の流れ（予約〜アフターケアまでのステップ）："""
 
 
+def extract_clinic_info_from_content(content: str, name: str, genre: str, claude_api_key: str) -> str:
+    """クロール済みコンテンツから指定ジャンルの情報を抽出する。案件DB保存用。"""
+    genre_note = (
+        f"「{genre}」に関する情報のみ抽出してください。料金詳細は「{genre}」のプランのみ記載してください。\n"
+        if genre else ""
+    )
+    prompt = f"""以下の{name}のWebサイト内容から情報を抽出してください。
+{genre_note}取得できない項目は「[要確認]」と記載してください。補完・推測は一切しないでください。
+
+{content[:30000]}
+
+出力は「【{name}】」の見出しで始め、以下の形式で記載してください：
+
+【{name}】
+{_EXTRACTION_FIELDS}"""
+    return _claude_call(claude_api_key, prompt, max_tokens=8192)
+
+
 def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None, full_crawl: bool = False) -> dict:
     if not clinics:
         return {}
