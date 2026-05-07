@@ -1,4 +1,6 @@
+import base64
 import json
+import requests
 import anthropic
 from typing import Optional
 
@@ -9,46 +11,44 @@ try:
 except ImportError:
     _GENAI_AVAILABLE = False
 
-_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
-_VISION_MODEL = "gemini-2.0-flash"
+try:
+    import openai as _openai_lib
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _OPENAI_AVAILABLE = False
+
+_IMAGE_MODEL = "gemini-3.1-flash-image-preview"   # backward compat alias
+_IMAGE_MODEL_GEMINI = "gemini-3.1-flash-image-preview"
+_IMAGE_MODEL_DALLE  = "dall-e-3"
 
 
+# ── プロンプト生成（シングルテンプレート）────────────────────────
 def generate_image_prompts(
     structure_text: str,
     site_config: dict,
     claude_api_key: str,
     slug: str,
 ) -> list[dict]:
-    """Claude で各H2/H3向けの画像プロンプトJSON を生成する。"""
+    """Claude でH2/H3向けの画像プロンプトJSONを生成する（シングルテンプレート）。"""
     templates = site_config.get("image_templates", [])
     if not templates:
         return []
-
-    templates_text = ""
-    for t in templates:
-        templates_text += (
-            f"\n### テンプレート名: {t['name']}\n"
-            f"使用シーン: {t.get('usage_scene', '')}\n"
-            f"ベースプロンプト:\n```\n{t['base_prompt']}\n```\n"
-        )
+    base_prompt = templates[0].get("base_prompt", "").strip()
+    if not base_prompt:
+        return []
 
     prompt = f"""あなたは画像プロンプト生成の専門家です。
-以下の記事構成と画像テンプレートを元に、記事に挿入すべき画像のプロンプトをJSON形式で出力してください。
+以下の記事構成を読み、記事に挿入すべき画像を3〜5箇所選定し、下記テンプレートをベースにプロンプトをJSON形式で出力してください。
 
-## 利用可能な画像テンプレート
-{templates_text}
+## 画像テンプレート（ベースプロンプト）
+```
+{base_prompt}
+```
 
-## テンプレート選択ルール
-- テンプレートの「使用シーン」をもとに、各H2/H3に最適なテンプレートを選ぶ
-- 同じテンプレートを2回連続して使わない
-
-## 実行手順
-1. 記事構成（H2/H3）を読み込み、画像を挿入すべき箇所を3〜5箇所選定する
-2. 各箇所に最適なテンプレートを選択する
-3. テンプレートの{{{{変数名}}}}を記事の内容（H2/H3のテキスト・説明）に合わせて差し替える
-   - 構造・カラーコード・レイアウトは変更しない
-   - テキスト内容のみを記事内容に合わせて差し替える
-4. filenameは「{slug}-英単語.webp」形式（記事内重複なし・英小文字・ハイフン区切り可）
+## 使用ルール
+- テンプレートの {{{{変数名}}}} を記事の各H2/H3の内容に合わせて差し替える
+- 構造・カラーコード・レイアウトは変更しない。テキスト内容のみ差し替える
+- filenameは「{slug}-英単語.webp」形式（重複なし・英小文字・ハイフン区切り可）
 
 ## 記事構成
 {structure_text}
@@ -56,15 +56,13 @@ def generate_image_prompts(
 ## 出力形式（JSON配列のみ・説明文・コードフェンス不要）
 [
   {{
-    "position": "挿入位置の見出しテキスト（H2またはH3のテキストをそのまま）",
+    "position": "挿入位置の見出しテキスト",
     "filename": "{slug}-word.webp",
     "alt": "画像の内容説明（日本語20〜40字）",
-    "template": "テンプレート名",
     "prompt": "（変数差し替え済みのプロンプト全文）"
   }}
 ]
 """
-
     client = anthropic.Anthropic(api_key=claude_api_key)
     msg = client.messages.create(
         model="claude-sonnet-4-6",
@@ -79,16 +77,14 @@ def generate_image_prompts(
     return json.loads(text)
 
 
+# ── 見本画像 → テンプレート＋トンマナ自動生成（Claude Vision）──
 def generate_template_from_image(
     image_bytes: bytes,
     mime_type: str,
     site_config: dict,
-    gemini_api_key: str,
+    claude_api_key: str,
 ) -> str:
-    """参照画像を解析して再利用可能なプロンプトテンプレートを生成する。"""
-    if not _GENAI_AVAILABLE:
-        raise ImportError("google-genai がインストールされていません")
-
+    """見本画像をClaude Visionで解析して再利用可能なプロンプトテンプレートを生成する。"""
     color_instruction = ""
     if site_config:
         colors = site_config.get("design_rules", {}).get("colors", {})
@@ -157,48 +153,49 @@ def generate_template_from_image(
         "- 元画像のテキスト・イラスト内容をそのまま変数化せずに出力すること"
     )
 
-    client = _google_genai.Client(api_key=gemini_api_key)
-    response = client.models.generate_content(
-        model=_VISION_MODEL,
-        contents=[
-            _google_genai_types.Part(
-                inline_data=_google_genai_types.Blob(mime_type=mime_type, data=image_bytes)
-            ),
-            meta_prompt,
-        ],
+    image_data = base64.standard_b64encode(image_bytes).decode("utf-8")
+    client = anthropic.Anthropic(api_key=claude_api_key)
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": image_data}},
+            {"type": "text", "text": meta_prompt},
+        ]}],
     )
-    return response.text.strip()
+    return msg.content[0].text.strip()
 
 
-def generate_image_preview(prompt: str, gemini_api_key: str) -> Optional[bytes]:
-    """プロンプトから画像プレビューを生成して bytes を返す。失敗時は None。"""
-    if not _GENAI_AVAILABLE:
-        raise ImportError("google-genai がインストールされていません")
-    client = _google_genai.Client(api_key=gemini_api_key)
-    response = client.models.generate_content(
-        model=_IMAGE_MODEL,
-        contents=prompt,
-        config=_google_genai_types.GenerateContentConfig(
-            response_modalities=["IMAGE"],
-        ),
+def generate_tone_from_image(
+    image_bytes: bytes,
+    mime_type: str,
+    claude_api_key: str,
+) -> str:
+    """見本画像からサイトのトンマナを一言で生成する。"""
+    image_data = base64.standard_b64encode(image_bytes).decode("utf-8")
+    client = anthropic.Anthropic(api_key=claude_api_key)
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=100,
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": image_data}},
+            {"type": "text", "text": "この画像のデザインスタイル・雰囲気・トンマナを一言で表現してください（例: 医療的でクリーン、ビジネスライク、ポップで明るい）。30文字以内で出力してください。説明文不要。"},
+        ]}],
     )
-    for part in response.candidates[0].content.parts:
-        if part.inline_data and part.inline_data.data:
-            return part.inline_data.data
-    return None
+    return msg.content[0].text.strip()
 
 
-def generate_image_bytes(
-    prompt: str, gemini_api_key: str, model_override: Optional[str] = None
+# ── 画像生成（Gemini）────────────────────────────────────────
+def _generate_image_bytes_gemini(
+    prompt: str,
+    gemini_api_key: str,
+    model_override: Optional[str] = None,
 ) -> Optional[bytes]:
-    """Gemini/Imagen で画像を生成し bytes を返す。失敗時は None。"""
     if not _GENAI_AVAILABLE:
         raise ImportError("google-genai がインストールされていません")
-    model = model_override or _IMAGE_MODEL
+    model = model_override or _IMAGE_MODEL_GEMINI
     client = _google_genai.Client(api_key=gemini_api_key)
-
     if "imagen" in model.lower():
-        # Imagen系: generate_images API
         response = client.models.generate_images(
             model=model,
             prompt=prompt,
@@ -208,15 +205,71 @@ def generate_image_bytes(
             return response.generated_images[0].image.image_bytes
         return None
     else:
-        # Gemini系: generate_content + response_modalities
         response = client.models.generate_content(
             model=model,
             contents=prompt,
-            config=_google_genai_types.GenerateContentConfig(
-                response_modalities=["IMAGE"],
-            ),
+            config=_google_genai_types.GenerateContentConfig(response_modalities=["IMAGE"]),
         )
         for part in response.candidates[0].content.parts:
             if part.inline_data and part.inline_data.data:
                 return part.inline_data.data
         return None
+
+
+# ── 画像生成（DALL-E）────────────────────────────────────────
+def _generate_image_bytes_dalle(
+    prompt: str,
+    openai_api_key: str,
+) -> Optional[bytes]:
+    if not _OPENAI_AVAILABLE:
+        raise ImportError("openai がインストールされていません（pip install openai）")
+    client = _openai_lib.OpenAI(api_key=openai_api_key)
+    response = client.images.generate(
+        model=_IMAGE_MODEL_DALLE,
+        prompt=prompt,
+        size="1024x1024",
+        quality="standard",
+        n=1,
+        response_format="url",
+    )
+    url = response.data[0].url
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    return r.content
+
+
+# ── 統合インターフェース ────────────────────────────────────
+def generate_image_bytes(
+    prompt: str,
+    gemini_api_key: str = "",
+    openai_api_key: str = "",
+    provider: str = "gemini",
+    model_override: Optional[str] = None,
+) -> Optional[bytes]:
+    """指定プロバイダーで画像を生成して bytes を返す。"""
+    if provider == "dalle":
+        return _generate_image_bytes_dalle(prompt, openai_api_key)
+    return _generate_image_bytes_gemini(prompt, gemini_api_key, model_override)
+
+
+def generate_image_preview(
+    prompt: str,
+    gemini_api_key: str = "",
+    openai_api_key: str = "",
+    provider: str = "gemini",
+) -> Optional[bytes]:
+    """プロンプトから画像プレビューを生成して bytes を返す。"""
+    if provider == "dalle":
+        return _generate_image_bytes_dalle(prompt, openai_api_key)
+    if not _GENAI_AVAILABLE:
+        raise ImportError("google-genai がインストールされていません")
+    client = _google_genai.Client(api_key=gemini_api_key)
+    response = client.models.generate_content(
+        model=_IMAGE_MODEL_GEMINI,
+        contents=prompt,
+        config=_google_genai_types.GenerateContentConfig(response_modalities=["IMAGE"]),
+    )
+    for part in response.candidates[0].content.parts:
+        if part.inline_data and part.inline_data.data:
+            return part.inline_data.data
+    return None

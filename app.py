@@ -86,6 +86,21 @@ with st.sidebar:
     else:
         gemini_key = st.text_input("Gemini API Key（画像生成用）", type="password")
 
+    _openai_key_default = _secret("OPENAI_API_KEY")
+    if _openai_key_default:
+        st.caption("OpenAI API Key: Secrets から読込済み")
+        openai_key = _openai_key_default
+    else:
+        openai_key = st.text_input("OpenAI API Key（DALL-E画像生成用）", type="password")
+
+    image_provider = st.radio(
+        "画像生成AI",
+        ["gemini", "dalle"],
+        format_func=lambda x: "Gemini" if x == "gemini" else "DALL-E 3 (ChatGPT)",
+        horizontal=True,
+        key="image_provider",
+    )
+
     _gcp_in_secrets = _secret("gcp_service_account.type") or _secret("GCP_SERVICE_ACCOUNT_JSON")
     if _gcp_in_secrets:
         st.caption("Google Sheets 認証: Secrets から読込済み")
@@ -452,11 +467,10 @@ with _safe_tab(tab_custom):
             competitor_urls.append(u.strip())
 
     st.divider()
-    _out_c1, _out_c2 = st.columns([2, 1])
-    output_tab_sel = _out_c1.selectbox(
+    output_tab_sel = st.selectbox(
         "スプシ書き込み先タブ（任意）", ["（書き込まない）"] + ARTICLE_TABS, key="t_out_tab",
+        help="選択すると生成完了後にスプシへ自動書き込みします。メインKWが一致する行を優先し、なければ次の空き行に書き込みます。",
     )
-    output_row_num = _out_c2.number_input("行番号", min_value=2, value=2, step=1, key="t_row_num")
 
     st.divider()
     if st.button("🚀 実行", type="primary", use_container_width=True, key="run_test"):
@@ -531,6 +545,18 @@ with _safe_tab(tab_custom):
                         "main_kw":        main_kw,
                         "debug":          output.get("debug"),
                         "clinics":        all_clinics,
+                        "_inputs": {
+                            "article_type":   article_type,
+                            "site_name":      site_name,
+                            "genre":          genre,
+                            "main_kw":        main_kw,
+                            "sub_kw":         sub_kw,
+                            "related_kw":     related_kw,
+                            "recommended":    recommended,
+                            "custom_block":   additional_block,
+                            "clinics":        valid_clinics,
+                            "competitor_urls": competitor_urls,
+                        },
                     }
                     s.update(label="✅ 完了", state="complete")
                     _save_output_cache(main_kw, st.session_state["t2_last"])
@@ -538,16 +564,31 @@ with _safe_tab(tab_custom):
                     if output_tab_sel != "（書き込まない）" and article_sheet_url:
                         creds_out = _get_gcp_creds(sheets_creds_file)
                         if creds_out:
-                            st.write(f"📊 [{output_tab_sel}] タブ 行{output_row_num} に書き込み中...")
+                            st.write(f"📊 [{output_tab_sel}] タブに書き込み中...")
                             try:
                                 ws_out = get_sheet(article_sheet_url, creds_out, tab_name=output_tab_sel)
-                                write_output_row(ws_out, int(output_row_num), {
+                                _all_vals = ws_out.get_all_values()
+                                _target_row = None
+                                for _ri, _rd in enumerate(_all_vals[1:], start=2):
+                                    _pd = _rd + [""] * (15 - len(_rd))
+                                    if _pd[3] == main_kw and not _pd[11]:
+                                        _target_row = _ri
+                                        break
+                                if _target_row is None:
+                                    for _ri, _rd in enumerate(_all_vals[1:], start=2):
+                                        _pd = _rd + [""] * (15 - len(_rd))
+                                        if _pd[3] and not _pd[11]:
+                                            _target_row = _ri
+                                            break
+                                if _target_row is None:
+                                    _target_row = len(_all_vals) + 1
+                                write_output_row(ws_out, _target_row, {
                                     "title":     structure["title"],
                                     "meta":      structure["meta"],
                                     "html":      output["html"],
                                     "todo_list": output["todo_list"],
                                 })
-                                st.success(f"[{output_tab_sel}] 行{output_row_num}に書き込みました")
+                                st.success(f"[{output_tab_sel}] 行{_target_row}に書き込みました")
                             except Exception as we:
                                 st.warning(f"スプシ書き込みエラー: {we}")
 
@@ -555,23 +596,91 @@ with _safe_tab(tab_custom):
                     s.update(label="❌ エラー", state="error")
                     st.error(str(e))
 
-    # ── 過去の生成結果（リロード対策）────────────────────────────
+    # ── 過去の生成結果（履歴・入力復元）────────────────────────────
     _cache_hist = _load_output_cache()
     if _cache_hist:
-        with st.expander(f"📂 過去の生成結果（最新 {len(_cache_hist)} 件）", expanded=False):
+        with st.expander(f"📂 履歴から復元（最新 {len(_cache_hist)} 件）", expanded=False):
             _cache_labels = [
                 f"{d.get('main_kw', '(不明)')}  —  {d['_cache_file'][:15]}"
                 for d in _cache_hist
             ]
             _cache_sel_idx = st.selectbox(
-                "読み込む記事を選択", range(len(_cache_labels)),
+                "記事を選択", range(len(_cache_labels)),
                 format_func=lambda i: _cache_labels[i],
                 key="cache_hist_sel",
             )
-            if st.button("⬆️ この記事を読み込む", key="cache_hist_load"):
+            _hcol1, _hcol2 = st.columns(2)
+            if _hcol1.button("📄 生成結果を表示", key="cache_hist_load"):
                 _loaded = {k: v for k, v in _cache_hist[_cache_sel_idx].items() if k != "_cache_file"}
                 st.session_state["t2_last"] = _loaded
                 st.rerun()
+            if _hcol2.button("✏️ 入力条件を復元", key="cache_hist_inputs"):
+                _inp = _cache_hist[_cache_sel_idx].get("_inputs", {})
+                if _inp:
+                    _atype = _inp.get("article_type", "地域")
+                    if _atype in ["地域", "比較", "商標", "ノウハウ"]:
+                        st.session_state["test_type"] = _atype
+                    st.session_state["t_site"]       = _inp.get("site_name", "")
+                    st.session_state["t_genre"]      = _inp.get("genre", "")
+                    st.session_state["t_main_kw"]    = _inp.get("main_kw", "")
+                    st.session_state["t_sub_kw"]     = _inp.get("sub_kw", "")
+                    st.session_state["t_related_kw"] = _inp.get("related_kw", "")
+                    st.session_state["t_rec"]        = _inp.get("recommended", "")
+                    st.session_state["t_custom"]     = _inp.get("custom_block", "")
+                    _hist_clinics = _inp.get("clinics", [])
+                    st.session_state["test_clinics"] = _hist_clinics or [{"name": "", "domain": ""}]
+                    _hist_comps = _inp.get("competitor_urls", [])
+                    for _ci2 in range(5):
+                        st.session_state[f"t_comp_{_ci2}"] = _hist_comps[_ci2] if _ci2 < len(_hist_comps) else ""
+                    st.rerun()
+                else:
+                    st.warning("この履歴には入力条件が保存されていません（古いキャッシュ）")
+
+    # ── スプシ行から読み込む ─────────────────────────────────────
+    with st.expander("📊 スプシ行から読み込む", expanded=False):
+        if not article_sheet_url:
+            st.caption("サイドバーで「記事スプレッドシートURL」を設定すると使えます。")
+        else:
+            _sl_col1, _sl_col2 = st.columns([2, 1])
+            _sl_tab = _sl_col1.selectbox("タブ", ARTICLE_TABS, key="t2_load_tab")
+            _sl_row = _sl_col2.number_input("行番号", min_value=2, value=2, step=1, key="t2_load_row")
+            if st.button("📥 この行を読み込む", key="t2_load_row_btn"):
+                _sl_creds = _get_gcp_creds(sheets_creds_file)
+                if not _sl_creds:
+                    st.error("Google Sheets 認証情報が未設定です")
+                else:
+                    try:
+                        _sl_ws = get_sheet(article_sheet_url, _sl_creds, tab_name=_sl_tab)
+                        _sl_rows = read_input_rows(_sl_ws, default_article_type=_sl_tab)
+                        _sl_data = next((r for r in _sl_rows if r["row_index"] == int(_sl_row)), None)
+                        if not _sl_data:
+                            st.warning(f"行 {_sl_row} にデータが見つかりませんでした")
+                        else:
+                            _atype2 = _sl_data.get("article_type", "地域")
+                            if _atype2 in ["地域", "比較", "商標", "ノウハウ"]:
+                                st.session_state["test_type"] = _atype2
+                            st.session_state["t_site"]       = _sl_data.get("site_name", "")
+                            st.session_state["t_genre"]      = _sl_data.get("genre", "")
+                            st.session_state["t_main_kw"]    = _sl_data.get("main_kw", "")
+                            st.session_state["t_sub_kw"]     = _sl_data.get("sub_kw", "")
+                            st.session_state["t_related_kw"] = _sl_data.get("related_kw", "")
+                            st.session_state["t_rec"]        = _sl_data.get("recommended", "")
+                            st.session_state["t_custom"]     = _sl_data.get("custom_block", "")
+                            _sl_clinics_raw = _sl_data.get("clinics_raw", "")
+                            _sl_clinics = []
+                            for _slc in _sl_clinics_raw.split(","):
+                                _slc = _slc.strip()
+                                if "::" in _slc:
+                                    _cn, _cd = _slc.split("::", 1)
+                                    _sl_clinics.append({"name": _cn.strip(), "domain": _cd.strip()})
+                            st.session_state["test_clinics"] = _sl_clinics or [{"name": "", "domain": ""}]
+                            _sl_comps = [u.strip() for u in _sl_data.get("competitor_urls_raw", "").split(",") if u.strip()]
+                            for _ci3 in range(5):
+                                st.session_state[f"t_comp_{_ci3}"] = _sl_comps[_ci3] if _ci3 < len(_sl_comps) else ""
+                            st.success(f"行 {_sl_row} を読み込みました")
+                            st.rerun()
+                    except Exception as _sle:
+                        st.error(f"読み込みエラー: {_sle}")
 
     # ── 生成結果表示（session_stateから常時表示）────────────────
     _t2_last = st.session_state.get("t2_last")
@@ -635,7 +744,9 @@ with _safe_tab(tab_custom):
 
         if st.button("🖼️ 画像を生成してDriveにアップロード", key="t2_img_gen", type="primary"):
             errs_img = []
-            if not gemini_key:
+            if image_provider == "dalle" and not openai_key:
+                errs_img.append("DALL-E を使うには OpenAI API Key が必要です（サイドバーから入力してください）")
+            elif image_provider == "gemini" and not gemini_key:
                 errs_img.append("Gemini API Key が未設定です（サイドバーから入力してください）")
             if not _img_slug.strip():
                 errs_img.append("スラッグを入力してください")
@@ -664,7 +775,10 @@ with _safe_tab(tab_custom):
                             for i, p in enumerate(prompts):
                                 st.write(f"🎨 画像生成中 ({i+1}/{len(prompts)}): {p['filename']}...")
                                 img_bytes = image_generator.generate_image_bytes(
-                                    p["prompt"], gemini_key,
+                                    p["prompt"],
+                                    gemini_api_key=gemini_key,
+                                    openai_api_key=openai_key,
+                                    provider=image_provider,
                                     model_override=_img_model_override.strip() or None,
                                 )
                                 if img_bytes:
@@ -788,26 +902,18 @@ with _safe_tab(tab_settings):
                 st.markdown("---")
 
                 # ── 3. 画像テンプレート管理 ──────────────────────────
-                st.markdown("### 🖼️ 3. 画像テンプレート管理")
-                st.caption("AIに渡す画像生成プロンプトのテンプレートを管理します。")
+                st.markdown("### 🖼️ 3. 画像テンプレート（ベースプロンプト）")
+                st.caption("見本画像から自動生成するか、直接入力してください。記事生成時の画像プロンプトのベースになります。")
                 _existing_tmpls = _config4.get("image_templates", [])
-                _updated_tmpls = []
-                for _ti, _tmpl in enumerate(_existing_tmpls):
-                    with st.expander(f"テンプレート {_ti+1}: {_tmpl.get('name', '(無名)')}", expanded=False):
-                        _t_name  = st.text_input("テンプレート名",  value=_tmpl.get("name", ""),       key=f"tname_{_current_site4}_{_ti}")
-                        _t_scene = st.text_input("使用シーン説明",  value=_tmpl.get("usage_scene", ""), key=f"tscene_{_current_site4}_{_ti}")
-                        _t_base  = st.text_area("ベースプロンプト", value=_tmpl.get("base_prompt", ""), key=f"tbase_{_current_site4}_{_ti}", height=200)
-                        _t_keep  = st.checkbox("このテンプレートを保持", value=True,                   key=f"tkeep_{_current_site4}_{_ti}")
-                        if _t_keep:
-                            _updated_tmpls.append({"name": _t_name, "usage_scene": _t_scene, "base_prompt": _t_base})
-
-                st.markdown("**＋ 新規テンプレートを追加**（名前を入力して保存するだけでOK）")
-                _new_tname  = st.text_input("新テンプレート名", key=f"new_tname_{_current_site4}",  placeholder="カスタム型名")
-                _new_tscene = st.text_input("新使用シーン",     key=f"new_tscene_{_current_site4}", placeholder="使用するシーンの説明")
-                _default_tbase = st.session_state.get("t4_generated_tmpl", "")
-                _new_tbase  = st.text_area("新ベースプロンプト", key=f"new_tbase_{_current_site4}", height=200, value=_default_tbase)
-                if _new_tname.strip():
-                    _updated_tmpls.append({"name": _new_tname.strip(), "usage_scene": _new_tscene, "base_prompt": _new_tbase})
+                _default_base = _existing_tmpls[0].get("base_prompt", "") if _existing_tmpls else ""
+                _img_base_prompt = st.text_area(
+                    "ベースプロンプト",
+                    value=_default_base,
+                    key=f"img_prompt_{_current_site4}",
+                    height=250,
+                    placeholder="下の「見本画像から自動生成」ボタンで生成するか、直接入力してください。",
+                )
+                _updated_tmpls = [{"base_prompt": _img_base_prompt}] if _img_base_prompt.strip() else []
                 st.markdown("---")
 
                 # ── 4. HTMLパーツ ────────────────────────────────────
@@ -895,10 +1001,10 @@ with _safe_tab(tab_settings):
                 else:
                     st.error("保存に失敗しました。")
 
-            # ── 画像からプロンプト自動生成 ──────────────────────────
+            # ── 見本画像からテンプレート自動生成 ──────────────────────
             st.markdown("---")
-            st.markdown("### 📷 画像からプロンプト自動生成")
-            st.caption("型となる画像をアップすると構造を解析してプロンプトを生成します。生成後、上の「新ベースプロンプト」に貼り付けて保存してください。")
+            st.markdown("### 📷 見本画像からテンプレート自動生成")
+            st.caption("見本画像をアップすると、構造・デザインを解析してテンプレートとトンマナを自動で保存します。")
 
             _t4_img_upload = st.file_uploader(
                 "画像をアップ（jpg / png / webp）",
@@ -906,35 +1012,32 @@ with _safe_tab(tab_settings):
                 key=f"t4_img_upload_{_current_site4}",
             )
             if _t4_img_upload is not None:
-                _t4_col_img, _t4_col_btn = st.columns([2, 1])
-                with _t4_col_img:
-                    st.image(_t4_img_upload, use_container_width=True)
-                with _t4_col_btn:
-                    st.caption(f"解析モデル: `{image_generator._VISION_MODEL}`")
-                    if st.button("🔍 プロンプト自動生成", key=f"btn_gen_tmpl_{_current_site4}", type="primary"):
-                        if not gemini_key:
-                            st.error("Gemini API Key が未設定です（サイドバーから入力してください）")
-                        else:
-                            with st.spinner("画像を解析中..."):
-                                try:
-                                    _t4_img_upload.seek(0)
-                                    _t4_mime = _t4_img_upload.type or "image/png"
-                                    _t4_img_bytes = _t4_img_upload.read()
-                                    _t4_generated = image_generator.generate_template_from_image(
-                                        _t4_img_bytes, _t4_mime, _config4, gemini_key
-                                    )
-                                    st.session_state["t4_generated_tmpl"] = _t4_generated
-                                    st.success("生成完了！下のテキストをコピーして「新ベースプロンプト」に貼り付け、保存してください。")
-                                except Exception as _t4_e:
-                                    st.error(f"生成エラー: {_t4_e}")
-
-            if st.session_state.get("t4_generated_tmpl"):
-                st.text_area(
-                    "生成されたプロンプト（コピーして上の「新ベースプロンプト」に貼り付け）",
-                    value=st.session_state["t4_generated_tmpl"],
-                    height=300,
-                    key="t4_gen_result_display",
-                )
+                st.image(_t4_img_upload, width=400)
+                if st.button("✨ テンプレートを自動生成して保存", key=f"btn_gen_tmpl_{_current_site4}", type="primary"):
+                    if not claude_key:
+                        st.error("Claude API Key が未設定です（サイドバーから入力してください）")
+                    else:
+                        with st.spinner("画像を解析中..."):
+                            try:
+                                _t4_img_upload.seek(0)
+                                _t4_mime = _t4_img_upload.type or "image/png"
+                                _t4_img_bytes = _t4_img_upload.read()
+                                _cfg_now = site_config_manager.load_site_config(_current_site4)
+                                _t4_generated = image_generator.generate_template_from_image(
+                                    _t4_img_bytes, _t4_mime, _cfg_now, claude_key
+                                )
+                                _t4_tone = image_generator.generate_tone_from_image(
+                                    _t4_img_bytes, _t4_mime, claude_key
+                                )
+                                _cfg_now["image_templates"] = [{"base_prompt": _t4_generated}]
+                                _cfg_now.setdefault("design_rules", {})["tone"] = _t4_tone
+                                if site_config_manager.save_site_config(_current_site4, _cfg_now):
+                                    st.success(f"✅ テンプレートとトンマナ（{_t4_tone}）を保存しました。ページを確認してください。")
+                                    st.rerun()
+                                else:
+                                    st.error("保存に失敗しました。")
+                            except Exception as _t4_e:
+                                st.error(f"生成エラー: {_t4_e}")
 
             # ── 画像プレビュー生成 ───────────────────────────────────
             st.markdown("---")
@@ -944,36 +1047,36 @@ with _safe_tab(tab_settings):
             _preview_config = site_config_manager.load_site_config(_current_site4)
             _preview_tmpls = _preview_config.get("image_templates", [])
             if not _preview_tmpls:
-                st.info("テンプレートがまだ登録されていません。上の設定から追加・保存してください。")
+                st.info("テンプレートがまだ登録されていません。上の設定から保存するか、見本画像から自動生成してください。")
             else:
-                _preview_names = [t.get("name", f"テンプレート{i+1}") for i, t in enumerate(_preview_tmpls)]
-                _preview_sel = st.selectbox(
-                    "テンプレートを選択",
-                    range(len(_preview_names)),
-                    format_func=lambda i: _preview_names[i],
-                    key=f"preview_tmpl_sel_{_current_site4}",
-                )
                 _preview_prompt = st.text_area(
-                    "プロンプト（変数を実際の値に書き換えてから生成）",
-                    value=_preview_tmpls[_preview_sel].get("base_prompt", ""),
+                    "プロンプト（{{変数}} を実際の値に書き換えてから生成）",
+                    value=_preview_tmpls[0].get("base_prompt", ""),
                     height=300,
-                    key=f"preview_prompt_{_current_site4}_{_preview_sel}",
+                    key=f"preview_prompt_{_current_site4}",
                 )
                 _col_prev_btn, _col_prev_info = st.columns([1, 3])
                 with _col_prev_btn:
                     _run_preview = st.button("🎨 プレビュー生成", key=f"btn_preview_{_current_site4}", type="primary")
                 with _col_prev_info:
-                    st.caption(f"生成モデル: `{image_generator._IMAGE_MODEL}`")
+                    st.caption(f"生成AI: {'DALL-E 3' if image_provider == 'dalle' else 'Gemini'}")
 
                 if _run_preview:
-                    if not gemini_key:
-                        st.error("Gemini API Key が未設定です（サイドバーから入力してください）")
+                    _prev_key_ok = openai_key if image_provider == "dalle" else gemini_key
+                    _prev_key_label = "OpenAI API Key" if image_provider == "dalle" else "Gemini API Key"
+                    if not _prev_key_ok:
+                        st.error(f"{_prev_key_label} が未設定です（サイドバーから入力してください）")
                     elif not _preview_prompt.strip():
                         st.error("プロンプトを入力してください")
                     else:
                         with st.spinner("画像生成中..."):
                             try:
-                                _prev_bytes = image_generator.generate_image_preview(_preview_prompt, gemini_key)
+                                _prev_bytes = image_generator.generate_image_preview(
+                                    _preview_prompt,
+                                    gemini_api_key=gemini_key,
+                                    openai_api_key=openai_key,
+                                    provider=image_provider,
+                                )
                                 if _prev_bytes:
                                     st.image(_prev_bytes, caption="生成プレビュー", use_container_width=True)
                                 else:
