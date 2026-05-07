@@ -1438,55 +1438,52 @@ with _safe_tab(tab_cases):
 
     # ── 新規追加フォーム ──────────────────────────────────
     st.subheader("＋ 新規追加")
-    st.caption("複数ジャンル指定時はサイトを1回クロールして、ジャンルごとに個別抽出します。")
+
+    _existing_genres = list(clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url).keys())
+    _genre_options = _existing_genres + ["＋ 新規ジャンル"]
+    _db_genre_sel = st.selectbox("ジャンル", _genre_options, key="db_genre_sel")
+    if _db_genre_sel == "＋ 新規ジャンル":
+        _db_new_genre = st.text_input("新規ジャンル名", placeholder="例：AGA治療", key="db_new_genre_input")
+    else:
+        _db_new_genre = _db_genre_sel
+
     with st.form("db_add_form"):
-        _db_fa, _db_fb, _db_fc = st.columns([2, 2, 2])
+        _db_fa, _db_fb = st.columns([2, 2])
         _db_new_name   = _db_fa.text_input("案件名（クリニック名・商品名等）", placeholder="TCB東京中央美容外科")
         _db_new_domain = _db_fb.text_input("URL（ドメイン or パス指定）", placeholder="tcb.net  または  tcb.net/osaka/umeda/")
-        _db_new_genres = _db_fc.text_input("ジャンル（カンマ区切り）", placeholder="美容外科, 二重")
-        _db_btn_a, _db_btn_b = st.columns(2)
-        _db_add_now  = _db_btn_a.form_submit_button("追加してサイトをクロール取得", type="primary")
-        _db_add_only = _db_btn_b.form_submit_button("登録のみ（後で取得）")
+        _db_add_now = st.form_submit_button("追加してクロール", type="primary", use_container_width=True)
 
-    def _db_parse_genres(raw: str) -> list:
-        return [g.strip() for g in raw.split(",") if g.strip()]
-
-    if _db_add_now or _db_add_only:
+    if _db_add_now:
         _errs_db = []
         if not _db_new_name.strip():
             _errs_db.append("案件名を入力してください")
         if not _db_new_domain.strip():
             _errs_db.append("URL / ドメインを入力してください")
-        if _db_add_now and not claude_key:
+        if not _db_new_genre.strip():
+            _errs_db.append("ジャンルを入力してください")
+        if not claude_key:
             _errs_db.append("Claude API Key が未設定です")
         for _e in _errs_db:
             st.error(_e)
 
         if not _errs_db:
-            _g_list = _db_parse_genres(_db_new_genres) or ["未分類"]
             _name_new = _db_new_name.strip()
             _domain_new = _db_new_domain.strip()
+            _genre_new = _db_new_genre.strip()
 
-            if _db_add_only:
-                for _g in _g_list:
-                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _g, "", creds_data=_db_creds, sheet_url=_active_db_url)
-                st.success(f"「{_name_new}」を {', '.join(_g_list)} に登録しました。後で「再クロール」してください。")
-                st.rerun()
-            else:
-                with st.status(f"{_name_new} のサイトをクロール中（最大20ページ）...", expanded=True) as _add_status:
-                    try:
-                        _start_url = _domain_new if _domain_new.startswith("http") else f"https://{_domain_new}"
-                        st.write("🔍 クロール中...")
-                        _content_new = crawl_site(_start_url, _g_list[0], max_pages=20)
-                        for _g in _g_list:
-                            st.write(f"🤖 「{_g}」向けに情報抽出中...")
-                            _info_g = extract_clinic_info_from_content(_content_new, _name_new, _g, claude_key, db_type=_db_type_sel)
-                            clinic_db_manager.upsert_clinic(_name_new, _domain_new, _g, _info_g, creds_data=_db_creds, sheet_url=_active_db_url)
-                        _add_status.update(label=f"✅ 「{_name_new}」を {len(_g_list)} ジャンルに追加しました", state="complete")
-                        st.rerun()
-                    except Exception as _e_new:
-                        _add_status.update(label="❌ エラー", state="error")
-                        st.error(f"取得エラー: {_e_new}")
+            with st.status(f"{_name_new} のサイトをクロール中（最大20ページ）...", expanded=True) as _add_status:
+                try:
+                    _start_url = _domain_new if _domain_new.startswith("http") else f"https://{_domain_new}"
+                    st.write("🔍 クロール中...")
+                    _content_new = crawl_site(_start_url, _genre_new, max_pages=20)
+                    st.write(f"🤖 「{_genre_new}」向けに情報抽出中...")
+                    _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel)
+                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, creds_data=_db_creds, sheet_url=_active_db_url)
+                    _add_status.update(label=f"✅ 「{_name_new}」を「{_genre_new}」に追加しました", state="complete")
+                    st.rerun()
+                except Exception as _e_new:
+                    _add_status.update(label="❌ エラー", state="error")
+                    st.error(f"取得エラー: {_e_new}")
 
     # ── ジャンル別タブ表示 ──────────────────────────────────
     st.divider()
