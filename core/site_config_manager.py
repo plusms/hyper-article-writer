@@ -2,6 +2,8 @@ import json
 import os
 from typing import Any, Dict, List
 
+from bs4 import BeautifulSoup
+
 SITES_CONFIG_DIR = "config/sites"
 
 
@@ -76,6 +78,55 @@ def delete_site_config(site_name: str) -> bool:
     if os.path.exists(path):
         os.remove(path)
     return True
+
+
+def parse_parts_page(html_content: str) -> List[Dict[str, Any]]:
+    """パーツ置き場HTMLから <h2 id="..."> ＋ <textarea> のペアを抽出してcomponentsリストを返す。"""
+    soup = BeautifulSoup(html_content, "html.parser")
+    components = []
+
+    for h2 in soup.find_all("h2", id=True):
+        h2_name = h2.get_text(strip=True)
+
+        # h2 以降・次の h2 の前までの兄弟要素を収集
+        block = []
+        for sib in h2.next_siblings:
+            if getattr(sib, "name", None) == "h2":
+                break
+            block.append(sib)
+
+        # h3 と textarea の位置を記録
+        h3_positions = [(i, s) for i, s in enumerate(block) if getattr(s, "name", None) == "h3"]
+        ta_positions  = [(i, s) for i, s in enumerate(block) if getattr(s, "name", None) == "textarea"]
+
+        if not ta_positions:
+            continue
+
+        if h3_positions:
+            # h3 ごとに「h3 より後・次 h3 より前」の最初の textarea を対応付ける
+            for hi, (h3_idx, h3_tag) in enumerate(h3_positions):
+                next_h3_idx = h3_positions[hi + 1][0] if hi + 1 < len(h3_positions) else len(block)
+                ta_in_range = [ta for ta_i, ta in ta_positions if h3_idx < ta_i < next_h3_idx]
+                if not ta_in_range:
+                    continue
+                pattern = ta_in_range[0].get_text().strip()
+                if not pattern:
+                    continue
+                h3_name = h3_tag.get_text(strip=True)
+                components.append({
+                    "name": f"{h2_name}（{h3_name}）",
+                    "pattern": pattern,
+                    "active": True,
+                })
+        else:
+            # h3 なし — 説明文のみの textarea（「ソースを簡素化…」など）はスキップ
+            for _, ta in ta_positions:
+                pattern = ta.get_text().strip()
+                if pattern and not pattern.startswith("ソースを簡素化"):
+                    components.append({"name": h2_name, "pattern": pattern, "active": True})
+                    break
+
+    return components
 
 
 def format_site_parts(components: List[Dict[str, Any]]) -> str:

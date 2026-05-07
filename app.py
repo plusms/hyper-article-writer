@@ -812,6 +812,41 @@ with _safe_tab(tab_settings):
 
                 # ── 4. HTMLパーツ ────────────────────────────────────
                 st.markdown("### 🧩 4. HTMLパーツ")
+                st.caption("パーツ置き場のHTMLファイルをアップすると自動でパーツ一覧を取り込めます。")
+                _parts_upload = st.file_uploader(
+                    "パーツ置き場HTML（.html / .htm）",
+                    type=["html", "htm"],
+                    key=f"parts_html_upload_{_current_site4}",
+                )
+                if _parts_upload is not None:
+                    _parts_upload.seek(0)
+                    _parts_html_bytes = _parts_upload.read()
+                    _parts_html_str = _parts_html_bytes.decode("utf-8", errors="replace")
+                    _parsed_components = site_config_manager.parse_parts_page(_parts_html_str)
+                    st.caption(f"📋 {len(_parsed_components)} 件のパーツを検出しました")
+                    with st.expander("検出内容を確認する"):
+                        for _pc in _parsed_components:
+                            st.markdown(f"- **{_pc['name']}**")
+                    _import_mode = st.radio(
+                        "インポート方式",
+                        ["上書き（既存パーツをすべて置き換え）", "追記（既存パーツに追加）"],
+                        key=f"parts_import_mode_{_current_site4}",
+                        horizontal=True,
+                    )
+                    if st.button("✅ このパーツ一覧をインポートする", key=f"parts_import_btn_{_current_site4}", type="primary"):
+                        _cfg_now = site_config_manager.load_site_config(_current_site4)
+                        if "追記" in _import_mode:
+                            _existing_names = {c["name"] for c in _cfg_now.get("components", [])}
+                            _merged = _cfg_now.get("components", []) + [c for c in _parsed_components if c["name"] not in _existing_names]
+                            _cfg_now["components"] = _merged
+                        else:
+                            _cfg_now["components"] = _parsed_components
+                        if site_config_manager.save_site_config(_current_site4, _cfg_now):
+                            st.success(f"{len(_parsed_components)} 件をインポートしました。ページをリロードして確認してください。")
+                            st.rerun()
+                        else:
+                            st.error("保存に失敗しました。")
+                st.markdown("---")
                 st.caption("各パーツの {{変数名}} は記事生成時にAIが実際の内容に置き換えます。有効チェックを外すと使用されません。")
                 _existing_comps = _config4.get("components", [])
                 _updated_comps = []
