@@ -6,6 +6,70 @@ from bs4 import BeautifulSoup
 
 SITES_CONFIG_DIR = "config/sites"
 
+# ── 固定23スロット ──────────────────────────────────────────────
+FIXED_COMPONENT_SCHEMA: List[str] = [
+    "H2",
+    "H3",
+    "小見出し",
+    "箇条書き（リスト）",
+    "箇条書き（チェックリスト）",
+    "箇条書き（数字）",
+    "ボックス①（枠のみ、背景色なし）",
+    "ボックス②（背景色あり）",
+    "補足ボックス",
+    "まとめボックス",
+    "右寄せリンク",
+    "ナンバリングパーツ",
+    "ステップパーツ・フローパーツ",
+    "画像",
+    "メリット・デメリット",
+    "口コミ",
+    "マーカー",
+    "太文字",
+    "小文字",
+    "テーブル",
+    "スクロールテーブル",
+    "タブ切り替えテーブル",
+    "CTAボタン",
+]
+
+# スロット → (name内の必須KW, name内の除外KW, textarea内から抜き出すタグ/クラス名)
+_SLOT_RULES: Dict[str, tuple] = {
+    "H2":                           (["大見出し"], [],             "h2"),
+    "H3":                           (["大見出し"], [],             "h3"),
+    "小見出し":                      (["大見出し"], [],             "subhead"),
+    "箇条書き（リスト）":             (["番号なし"], [],             None),
+    "箇条書き（チェックリスト）":      (["チェック"], [],             None),
+    "箇条書き（数字）":               (["番号付き"], [],             None),
+    "ボックス①（枠のみ、背景色なし）": (["ボーダー"], [],             None),
+    "ボックス②（背景色あり）":        (["背景色あり"], [],           None),
+    "補足ボックス":                   (["補足"],    [],             None),
+    "まとめボックス":                 (["まとめ"],  ["調査"],        None),
+    "右寄せリンク":                   (["右寄せ"],  [],             None),
+    "ナンバリングパーツ":             (["ナンバリング"], [],          None),
+    "ステップパーツ・フローパーツ":    (["フロー"],  [],             None),
+    "画像":                           (["コンテンツ幅"], [],         None),
+    "メリット・デメリット":           (["メリット"], [],             None),
+    "口コミ":                         (["口コミ"],  [],             None),
+    "マーカー":                       (["文字装飾"], [],            "marker"),
+    "太文字":                         (["文字装飾"], [],            "bold"),
+    "小文字":                         (["文字装飾"], [],            "text-small"),
+    "テーブル":                       (["テーブル"], ["スクロール", "タブ"], None),
+    "スクロールテーブル":             (["スクロール", "通常"], [],   None),
+    "タブ切り替えテーブル":           (["タブ切り替え"], [],         None),
+    "CTAボタン":                     (["CTA"],     [],             None),
+}
+
+
+def _extract_element(pattern: str, selector: str) -> str:
+    """textareaの内容から特定タグ or CSSクラスの要素を抽出して返す。"""
+    s = BeautifulSoup(pattern, "html.parser")
+    if selector in ("h2", "h3", "h4"):
+        el = s.find(selector)
+    else:
+        el = s.find(class_=selector)
+    return str(el).strip() if el else pattern
+
 
 def get_default_site_config() -> Dict[str, Any]:
     return {
@@ -22,13 +86,8 @@ def get_default_site_config() -> Dict[str, Any]:
             },
         },
         "components": [
-            {"name": "大見出し", "pattern": "<h2>{{title}}</h2>", "active": True},
-            {"name": "小見出し (h3)", "pattern": "<h3>{{title}}</h3>", "active": True},
-            {"name": "テーブル", "pattern": '<table class="table">\n    {{content}}\n</table>', "active": True},
-            {"name": "シンプルボックス", "pattern": '<div class="simple-box">\n    {{content}}\n</div>', "active": True},
-            {"name": "番号付きリスト", "pattern": "<ol>\n    {{content}}\n</ol>", "active": True},
-            {"name": "番号なしリスト", "pattern": "<ul>\n    {{content}}\n</ul>", "active": True},
-            {"name": "CTA", "pattern": '<div class="c-btn">\n    {{link}}\n</div>', "active": True},
+            {"name": slot, "pattern": "", "active": True}
+            for slot in FIXED_COMPONENT_SCHEMA
         ],
         "clinic_block_templates": [],
     }
@@ -81,21 +140,21 @@ def delete_site_config(site_name: str) -> bool:
 
 
 def parse_parts_page(html_content: str) -> List[Dict[str, Any]]:
-    """パーツ置き場HTMLから <h2 id="..."> ＋ <textarea> のペアを抽出してcomponentsリストを返す。"""
+    """パーツ置き場HTMLから固定23スロットにマッピングしてcomponentsリストを返す。
+    マッチするパターンが見つからないスロットは pattern="" で登録する。
+    """
     soup = BeautifulSoup(html_content, "html.parser")
-    components = []
 
+    # Step1: HTML全体から (表示名, textareaテキスト) ペアを収集
+    raw: List[tuple] = []
     for h2 in soup.find_all("h2", id=True):
         h2_name = h2.get_text(strip=True)
-
-        # h2 以降・次の h2 の前までの兄弟要素を収集
         block = []
         for sib in h2.next_siblings:
             if getattr(sib, "name", None) == "h2":
                 break
             block.append(sib)
 
-        # h3 と textarea の位置を記録
         h3_positions = [(i, s) for i, s in enumerate(block) if getattr(s, "name", None) == "h3"]
         ta_positions  = [(i, s) for i, s in enumerate(block) if getattr(s, "name", None) == "textarea"]
 
@@ -103,28 +162,34 @@ def parse_parts_page(html_content: str) -> List[Dict[str, Any]]:
             continue
 
         if h3_positions:
-            # h3 ごとに「h3 より後・次 h3 より前」の最初の textarea を対応付ける
             for hi, (h3_idx, h3_tag) in enumerate(h3_positions):
                 next_h3_idx = h3_positions[hi + 1][0] if hi + 1 < len(h3_positions) else len(block)
                 ta_in_range = [ta for ta_i, ta in ta_positions if h3_idx < ta_i < next_h3_idx]
-                if not ta_in_range:
-                    continue
-                pattern = ta_in_range[0].get_text().strip()
-                if not pattern:
-                    continue
-                h3_name = h3_tag.get_text(strip=True)
-                components.append({
-                    "name": f"{h2_name}（{h3_name}）",
-                    "pattern": pattern,
-                    "active": True,
-                })
+                if ta_in_range:
+                    pat = ta_in_range[0].get_text().strip()
+                    if pat:
+                        raw.append((f"{h2_name}（{h3_tag.get_text(strip=True)}）", pat))
         else:
-            # h3 なし — 説明文のみの textarea（「ソースを簡素化…」など）はスキップ
             for _, ta in ta_positions:
-                pattern = ta.get_text().strip()
-                if pattern and not pattern.startswith("ソースを簡素化"):
-                    components.append({"name": h2_name, "pattern": pattern, "active": True})
+                pat = ta.get_text().strip()
+                if pat and not pat.startswith("ソースを簡素化"):
+                    raw.append((h2_name, pat))
                     break
+
+    # Step2: 固定スロットごとにベストマッチを探す
+    components = []
+    for slot in FIXED_COMPONENT_SCHEMA:
+        pattern = ""
+        if slot in _SLOT_RULES:
+            required, excluded, extract_sel = _SLOT_RULES[slot]
+            for name, pat in raw:
+                if not all(kw in name for kw in required):
+                    continue
+                if any(kw in name for kw in excluded):
+                    continue
+                pattern = _extract_element(pat, extract_sel) if extract_sel else pat
+                break
+        components.append({"name": slot, "pattern": pattern, "active": True})
 
     return components
 
