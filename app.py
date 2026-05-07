@@ -1494,8 +1494,10 @@ with _safe_tab(tab_cases):
                     _add_status.update(label=f"✅ 「{_name_new}」を「{_genre_new}」に追加しました", state="complete")
                     st.rerun()
                 except Exception as _e_new:
+                    import traceback as _tb
                     _add_status.update(label="❌ エラー", state="error")
-                    st.error(f"取得エラー: {_e_new}")
+                    st.error(f"取得エラー: {type(_e_new).__name__}: {_e_new}")
+                    st.code(_tb.format_exc())
 
     # ── ジャンル別タブ表示 ──────────────────────────────────
     st.divider()
