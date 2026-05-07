@@ -17,6 +17,9 @@ _SYSTEM_TABS = {"clinic_db"}  # old single-tab name; skip when listing genre tab
 def _get_spreadsheet(creds_data: dict, sheet_url: str):
     creds = Credentials.from_service_account_info(creds_data, scopes=_SCOPES)
     gc = gspread.authorize(creds)
+    sheet_url = sheet_url.strip()
+    if not sheet_url.startswith("http"):
+        return gc.open_by_key(sheet_url)
     return gc.open_by_url(sheet_url)
 
 

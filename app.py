@@ -1434,7 +1434,7 @@ with _safe_tab(tab_cases):
     elif not _db_creds:
         st.warning("Google Sheets 認証が未設定です。ローカルJSONにフォールバックします。")
     else:
-        st.caption("✅ Google Sheets DB に接続中")
+        st.caption(f"✅ Google Sheets DB に接続中　｜　URL: `{_active_db_url[:60]}...`")
 
     # ── 新規追加フォーム ──────────────────────────────────
     st.subheader("＋ 新規追加")
