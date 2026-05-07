@@ -80,20 +80,19 @@ def upsert_clinic(name: str, domain: str, genre: str, info: str, creds_data=None
     """指定ジャンルのタブに1件upsert。"""
     today = str(date.today())
     if creds_data and sheet_url:
-        try:
-            spreadsheet = _get_spreadsheet(creds_data, sheet_url)
-            ws = _get_or_create_tab(spreadsheet, genre)
-            all_values = ws.get_all_values()
-            all_names = [r[0] for r in all_values[1:] if r]
-            row_data = [name, domain, info, today]
-            if name in all_names:
-                row_idx = all_names.index(name) + 2
-                ws.update(f"A{row_idx}:D{row_idx}", [row_data])
-            else:
-                ws.append_row(row_data)
-            return True
-        except Exception:
-            pass
+        # Sheets設定がある場合はSheetsのみ。エラーは呼び出し元に伝播させる
+        spreadsheet = _get_spreadsheet(creds_data, sheet_url)
+        ws = _get_or_create_tab(spreadsheet, genre)
+        all_values = ws.get_all_values()
+        all_names = [r[0] for r in all_values[1:] if r]
+        row_data = [name, domain, info, today]
+        if name in all_names:
+            row_idx = all_names.index(name) + 2
+            ws.update(f"A{row_idx}:D{row_idx}", [row_data])
+        else:
+            ws.append_row(row_data)
+        return True
+    # Sheets未設定時のみローカルフォールバック
     db = _load_local()
     if genre not in db:
         db[genre] = {}
@@ -107,20 +106,17 @@ def delete_clinic(name: str, genre: str = "", creds_data=None, sheet_url=None) -
     genre指定なし → 全タブから削除
     """
     if creds_data and sheet_url:
-        try:
-            spreadsheet = _get_spreadsheet(creds_data, sheet_url)
-            tabs = [ws.title for ws in spreadsheet.worksheets() if ws.title not in _SYSTEM_TABS]
-            target_tabs = [genre] if genre and genre in tabs else tabs
-            for tab_name in target_tabs:
-                ws = spreadsheet.worksheet(tab_name)
-                all_values = ws.get_all_values()
-                for i, row in enumerate(all_values[1:], start=2):
-                    if row and row[0] == name:
-                        ws.delete_rows(i)
-                        break
-            return True
-        except Exception:
-            pass
+        spreadsheet = _get_spreadsheet(creds_data, sheet_url)
+        tabs = [ws.title for ws in spreadsheet.worksheets() if ws.title not in _SYSTEM_TABS]
+        target_tabs = [genre] if genre and genre in tabs else tabs
+        for tab_name in target_tabs:
+            ws = spreadsheet.worksheet(tab_name)
+            all_values = ws.get_all_values()
+            for i, row in enumerate(all_values[1:], start=2):
+                if row and row[0] == name:
+                    ws.delete_rows(i)
+                    break
+        return True
     db = _load_local()
     if genre:
         if genre in db and name in db[genre]:
