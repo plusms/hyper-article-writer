@@ -11,6 +11,7 @@ from core.researcher import (
     analyze_competitors, collect_clinic_info,
     discover_clinics_from_competitors, auto_discover_clinics,
     crawl_site, extract_clinic_info_from_content,
+    DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE,
 )
 from core.planner import generate_structure
 from core.writer import generate_body, quality_check
@@ -58,8 +59,9 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
 _claude_key_default  = _secret("CLAUDE_API_KEY")
 _gemini_key_default  = _secret("GEMINI_API_KEY")
 _drive_folder_id          = _secret("DRIVE_PARENT_FOLDER_ID", "1CHqNruWiOVdeJPs7Nyd3Nfjt3sLxMc2c")
-_article_sheet_url_default = _secret("ARTICLE_SHEET_URL")
-_db_sheet_url_default      = _secret("CLINIC_DB_SHEET_URL")
+_article_sheet_url_default    = _secret("ARTICLE_SHEET_URL")
+_db_sheet_url_default         = _secret("CLINIC_DB_SHEET_URL")
+_lifestyle_sheet_url_default  = _secret("LIFESTYLE_DB_SHEET_URL")
 
 # ── サイドバー：設定 ──────────────────────────────────────
 with st.sidebar:
@@ -105,13 +107,23 @@ with st.sidebar:
         )
 
     if _db_sheet_url_default:
-        st.caption("案件DB スプシ: Secrets から読込済み")
+        st.caption("クリニックDB スプシ: Secrets から読込済み")
         db_sheet_url = _db_sheet_url_default
     else:
         db_sheet_url = st.text_input(
-            "案件DB スプレッドシートURL",
+            "クリニックDB スプレッドシートURL",
             placeholder="https://docs.google.com/spreadsheets/d/...",
             key="db_sheet_url_input",
+        )
+
+    if _lifestyle_sheet_url_default:
+        st.caption("ライフスタイルDB スプシ: Secrets から読込済み")
+        lifestyle_sheet_url = _lifestyle_sheet_url_default
+    else:
+        lifestyle_sheet_url = st.text_input(
+            "ライフスタイルDB スプレッドシートURL",
+            placeholder="https://docs.google.com/spreadsheets/d/...",
+            key="lifestyle_sheet_url_input",
         )
 
     st.divider()
@@ -249,11 +261,14 @@ with _safe_tab(tab_batch):
     if not article_sheet_url:
         st.warning("サイドバーで「記事スプレッドシートURL」を設定してください。")
 
-    _batch_col1, _batch_col2 = st.columns([2, 1])
+    _batch_col1, _batch_col2, _batch_col3 = st.columns([2, 1, 1])
     batch_tab_sel = _batch_col1.selectbox(
         "処理するタブ", ARTICLE_TABS, key="batch_tab_sel",
     )
-    dry_run = _batch_col2.checkbox("ドライラン", help="APIを叩かず対象行だけ確認")
+    batch_db_type = _batch_col2.selectbox(
+        "DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="batch_db_type",
+    )
+    dry_run = _batch_col3.checkbox("ドライラン", help="APIを叩かず対象行だけ確認")
 
     if st.button("🚀 実行開始", type="primary", use_container_width=True, key="run_batch"):
         creds_data = _get_gcp_creds(sheets_creds_file)
@@ -315,8 +330,9 @@ with _safe_tab(tab_batch):
                                 inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"]
                             )
                         inputs["clinics"] = inputs["clinics"] + discovered
-                        _batch_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in inputs["clinics"]], genre=inputs.get("genre", ""), creds_data=creds_data, sheet_url=db_sheet_url)
-                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache)
+                        _batch_active_db_url = db_sheet_url if batch_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
+                        _batch_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in inputs["clinics"]], genre=inputs.get("genre", ""), creds_data=creds_data, sheet_url=_batch_active_db_url)
+                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache, db_type=batch_db_type)
                         structure = generate_structure(inputs, comp, clinics, claude_key)
                         output    = generate_body(inputs, structure, clinics, claude_key, comp,
                                                   site_parts=_batch_site_parts)
@@ -362,7 +378,9 @@ with _safe_tab(tab_custom):
 
     st.divider()
 
-    article_type = st.radio("記事タイプ", ["地域", "比較", "商標", "ノウハウ"], horizontal=True, key="test_type")
+    _t2_type_col, _t2_db_col = st.columns([3, 1])
+    article_type = _t2_type_col.radio("記事タイプ", ["地域", "比較", "商標", "ノウハウ"], horizontal=True, key="test_type")
+    custom_db_type = _t2_db_col.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="custom_db_type")
 
     single_defaults: dict = {}
     if article_sheet_url:
@@ -511,10 +529,11 @@ with _safe_tab(tab_custom):
                     inputs["clinics"] = all_clinics
                     st.write("🏥 クリニック情報収集中...")
                     _t2_db_creds = _get_gcp_creds(sheets_creds_file)
-                    _t2_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in all_clinics], genre=genre, creds_data=_t2_db_creds, sheet_url=db_sheet_url)
+                    _t2_active_db_url = db_sheet_url if custom_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
+                    _t2_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in all_clinics], genre=genre, creds_data=_t2_db_creds, sheet_url=_t2_active_db_url)
                     if _t2_db_cache:
                         st.write(f"　→ DB参照: {len(_t2_db_cache)} 案件（スクレイピングスキップ）")
-                    clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache)
+                    clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache, db_type=custom_db_type)
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key)
                     st.write("✍️ 本文生成中（Claude）...")
@@ -1101,10 +1120,12 @@ with _safe_tab(tab_rank):
 
     st.divider()
 
-    _cb_col1, _cb_col2 = st.columns(2)
+    _cb_col1, _cb_col2, _cb_col3 = st.columns([2, 2, 1])
     with _cb_col1:
         _cb_main_kw = st.text_input("メインKW", key="cb_main_kw")
         _cb_sub_kw = st.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
+    with _cb_col3:
+        _cb_db_type = st.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
     with _cb_col2:
         _cb_criteria = st.text_area(
             "選び方コンテンツ（全文ペースト）",
@@ -1212,12 +1233,13 @@ with _safe_tab(tab_rank):
                         st.write(f"🔍 {_r}位: {_cbc['name']} の情報を収集中...")
                         try:
                             _t5_db_creds = _get_gcp_creds(sheets_creds_file)
-                            _t5_db_cache = clinic_db_manager.build_db_cache([_cbc["name"]], genre="", creds_data=_t5_db_creds, sheet_url=db_sheet_url)
+                            _t5_active_db_url = db_sheet_url if _cb_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
+                            _t5_db_cache = clinic_db_manager.build_db_cache([_cbc["name"]], genre="", creds_data=_t5_db_creds, sheet_url=_t5_active_db_url)
                             if _t5_db_cache:
                                 st.write(f"　→ DB参照")
                             _scraped = collect_clinic_info(
                                 [{"name": _cbc["name"], "domain": _clinic_url or _cbc["name"]}],
-                                "", claude_key, db_cache=_t5_db_cache,
+                                "", claude_key, db_cache=_t5_db_cache, db_type=_cb_db_type,
                             )
                             _scraped_text = _scraped.get(_cbc["name"], "（取得失敗）")
                         except Exception:
@@ -1281,9 +1303,13 @@ with _safe_tab(tab_cases):
     st.title("🗄️ 商品データベース")
     st.caption("量産ジャンルで使う案件を事前収集して蓄積します。ジャンルごとにタブ分けされ、DB登録済みの案件は記事生成時にスクレイピングをスキップします。")
 
+    _db_type_sel = st.radio("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], horizontal=True, key="db_tab_type")
+    _active_db_url = db_sheet_url if _db_type_sel == DB_TYPE_CLINIC else lifestyle_sheet_url
+
     _db_creds = _get_gcp_creds(sheets_creds_file)
-    if not db_sheet_url:
-        st.warning("サイドバーで「案件DB スプレッドシートURL」を入力してください。未設定の場合はローカルJSONに保存されます（Streamlit Cloud再起動で消えます）。")
+    if not _active_db_url:
+        _url_label = "クリニックDB" if _db_type_sel == DB_TYPE_CLINIC else "ライフスタイルDB"
+        st.warning(f"サイドバーで「{_url_label} スプレッドシートURL」を入力してください。未設定の場合はローカルJSONに保存されます（Streamlit Cloud再起動で消えます）。")
     elif not _db_creds:
         st.warning("Google Sheets 認証が未設定です。ローカルJSONにフォールバックします。")
     else:
@@ -1322,7 +1348,7 @@ with _safe_tab(tab_cases):
 
             if _db_add_only:
                 for _g in _g_list:
-                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _g, "", creds_data=_db_creds, sheet_url=db_sheet_url)
+                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _g, "", creds_data=_db_creds, sheet_url=_active_db_url)
                 st.success(f"「{_name_new}」を {', '.join(_g_list)} に登録しました。後で「再クロール」してください。")
                 st.rerun()
             else:
@@ -1333,8 +1359,8 @@ with _safe_tab(tab_cases):
                         _content_new = crawl_site(_start_url, _g_list[0], max_pages=20)
                         for _g in _g_list:
                             st.write(f"🤖 「{_g}」向けに情報抽出中...")
-                            _info_g = extract_clinic_info_from_content(_content_new, _name_new, _g, claude_key)
-                            clinic_db_manager.upsert_clinic(_name_new, _domain_new, _g, _info_g, creds_data=_db_creds, sheet_url=db_sheet_url)
+                            _info_g = extract_clinic_info_from_content(_content_new, _name_new, _g, claude_key, db_type=_db_type_sel)
+                            clinic_db_manager.upsert_clinic(_name_new, _domain_new, _g, _info_g, creds_data=_db_creds, sheet_url=_active_db_url)
                         _add_status.update(label=f"✅ 「{_name_new}」を {len(_g_list)} ジャンルに追加しました", state="complete")
                         st.rerun()
                     except Exception as _e_new:
@@ -1343,7 +1369,7 @@ with _safe_tab(tab_cases):
 
     # ── ジャンル別タブ表示 ──────────────────────────────────
     st.divider()
-    _db_nested = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=db_sheet_url)
+    _db_nested = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
     _all_genre_names = list(_db_nested.keys())
 
     if not _all_genre_names:
@@ -1364,7 +1390,7 @@ with _safe_tab(tab_cases):
                             st.error("Claude API Key が未設定です")
                         else:
                             with st.status("一括取得中...", expanded=True) as _batch_st:
-                                _full_db_now = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=db_sheet_url)
+                                _full_db_now = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
                                 for _dn in sorted(_g_entries):
                                     _de = _g_entries[_dn]
                                     st.write(f"🔍 {_dn} をクロール中...")
@@ -1374,8 +1400,8 @@ with _safe_tab(tab_cases):
                                         _start = _dom if _dom.startswith("http") else f"https://{_dom}"
                                         _content_b = crawl_site(_start, _clinic_genres_all[0] if _clinic_genres_all else "", max_pages=20)
                                         for _cg in _clinic_genres_all:
-                                            _ci = extract_clinic_info_from_content(_content_b, _dn, _cg, claude_key)
-                                            clinic_db_manager.upsert_clinic(_dn, _dom, _cg, _ci, creds_data=_db_creds, sheet_url=db_sheet_url)
+                                            _ci = extract_clinic_info_from_content(_content_b, _dn, _cg, claude_key, db_type=_db_type_sel)
+                                            clinic_db_manager.upsert_clinic(_dn, _dom, _cg, _ci, creds_data=_db_creds, sheet_url=_active_db_url)
                                         st.write("　→ ✅ 完了")
                                     except Exception as _be:
                                         st.write(f"　→ ❌ エラー: {_be}")
@@ -1408,19 +1434,19 @@ with _safe_tab(tab_cases):
                                 else:
                                     with st.spinner(f"{_dn} を再クロール中..."):
                                         try:
-                                            _full_db2 = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=db_sheet_url)
+                                            _full_db2 = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
                                             _clinic_genres2 = [g for g, ge in _full_db2.items() if _dn in ge]
                                             _dom2 = _de.get("domain", _dn)
                                             _start2 = _dom2 if _dom2.startswith("http") else f"https://{_dom2}"
                                             _content2 = crawl_site(_start2, _clinic_genres2[0] if _clinic_genres2 else "", max_pages=20)
                                             for _cg2 in _clinic_genres2:
-                                                _ci2 = extract_clinic_info_from_content(_content2, _dn, _cg2, claude_key)
-                                                clinic_db_manager.upsert_clinic(_dn, _dom2, _cg2, _ci2, creds_data=_db_creds, sheet_url=db_sheet_url)
+                                                _ci2 = extract_clinic_info_from_content(_content2, _dn, _cg2, claude_key, db_type=_db_type_sel)
+                                                clinic_db_manager.upsert_clinic(_dn, _dom2, _cg2, _ci2, creds_data=_db_creds, sheet_url=_active_db_url)
                                             st.success(f"再取得完了（{len(_clinic_genres2)} ジャンル更新）")
                                             st.rerun()
                                         except Exception as _rr_e:
                                             st.error(f"エラー: {_rr_e}")
                             if _rc2.button(f"🗑️ このジャンルから削除", key=f"db_del_{_g_name}_{_dn}"):
-                                clinic_db_manager.delete_clinic(_dn, genre=_g_name, creds_data=_db_creds, sheet_url=db_sheet_url)
+                                clinic_db_manager.delete_clinic(_dn, genre=_g_name, creds_data=_db_creds, sheet_url=_active_db_url)
                                 st.success(f"「{_dn}」を「{_g_name}」から削除しました")
                                 st.rerun()

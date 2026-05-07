@@ -263,26 +263,50 @@ def crawl_site(start_url: str, genre: str, max_pages: int = 20) -> str:
     return "\n\n".join(collected)
 
 
-_EXTRACTION_FIELDS = """\
+DB_TYPE_CLINIC     = "クリニック"
+DB_TYPE_LIFESTYLE  = "ライフスタイル"
+
+_CLINIC_FIELDS = """\
 院名：
 住所：
-アクセス（最寄り駅・徒歩分数）：
 診療時間：
 休診日：
 予約方法：
 料金詳細（プランごと・全プラン・税込/税抜を記載）：
-諸費用（診察料・カウンセリング料・麻酔代・薬代・送料・アフターケア代等）：
-支払い方法（カード・ローン・現金）：
-学割・割引・クーポン情報：
-実績情報（症例数・年間件数・在籍医師・認定資格・モニター有無等）：
-診療/施術の流れ（予約〜アフターケアまでのステップ）："""
+諸費用（診察料・カウンセリング料・麻酔代・薬代・アフターケア代等）：
+保証（再手術保証・返金保証等）：
+支払方法（カード・ローン・現金）：
+割引情報（学割・モニター・クーポン等）：
+実績（症例数・在籍医師・認定資格等）：
+配送情報（薬・サプリ等の配送有無・方法）：
+診療の流れ（予約〜アフターケアまでのステップ）：
+診察方法（対面・オンライン・電話）：
+途中解約（解約条件・違約金等）：
+参照URL：
+全国院数："""
+
+_LIFESTYLE_FIELDS = """\
+ブランド名：
+商品名（代表的なもの5つ）：
+料金：
+会社名：
+送料：
+配送情報："""
+
+# 後方互換
+_EXTRACTION_FIELDS = _CLINIC_FIELDS
 
 
-def extract_clinic_info_from_content(content: str, name: str, genre: str, claude_api_key: str) -> str:
+def _get_fields(db_type: str) -> str:
+    return _LIFESTYLE_FIELDS if db_type == DB_TYPE_LIFESTYLE else _CLINIC_FIELDS
+
+
+def extract_clinic_info_from_content(content: str, name: str, genre: str, claude_api_key: str, db_type: str = DB_TYPE_CLINIC) -> str:
     """クロール済みコンテンツから指定ジャンルの情報を抽出する。案件DB保存用。"""
+    fields = _get_fields(db_type)
     genre_note = (
         f"「{genre}」に関する情報のみ抽出してください。料金詳細は「{genre}」のプランのみ記載してください。\n"
-        if genre else ""
+        if genre and db_type == DB_TYPE_CLINIC else ""
     )
     prompt = f"""以下の{name}のWebサイト内容から情報を抽出してください。
 {genre_note}取得できない項目は「[要確認]」と記載してください。補完・推測は一切しないでください。
@@ -292,11 +316,11 @@ def extract_clinic_info_from_content(content: str, name: str, genre: str, claude
 出力は「【{name}】」の見出しで始め、以下の形式で記載してください：
 
 【{name}】
-{_EXTRACTION_FIELDS}"""
+{fields}"""
     return _claude_call(claude_api_key, prompt, max_tokens=8192)
 
 
-def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None, full_crawl: bool = False) -> dict:
+def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None, full_crawl: bool = False, db_type: str = DB_TYPE_CLINIC) -> dict:
     if not clinics:
         return {}
 
@@ -316,6 +340,7 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
             domain_or_url = clinic["domain"]
             start_url = domain_or_url if domain_or_url.startswith("http") else f"https://{domain_or_url}"
             content = crawl_site(start_url, genre, max_pages=20)
+            fields = _get_fields(db_type)
             prompt = f"""以下の{name}のWebサイト内容から情報を抽出してください。
 取得できない項目は「[要確認]」と記載してください。補完・推測は一切しないでください。
 
@@ -324,7 +349,7 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
 出力は「【{name}】」の見出しで始め、以下の形式で記載してください：
 
 【{name}】
-{_EXTRACTION_FIELDS}"""
+{fields}"""
             scraped_results[name] = _claude_call(claude_api_key, prompt, max_tokens=8192)
     else:
         # 記事生成時：従来通り main + 料金ページのみ、一括抽出
@@ -355,8 +380,9 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
 
             fetched[name] = content
 
+        fields = _get_fields(db_type)
         clinic_blocks = "\n\n".join(
-            f"【{name}】\nWebサイト内容：\n{content[:6000]}\n\n{_EXTRACTION_FIELDS}"
+            f"【{name}】\nWebサイト内容：\n{content[:6000]}\n\n{fields}"
             for name, content in fetched.items()
         )
         prompt = f"""以下の各クリニックについて、提供されたWebサイト内容から情報を抽出してください。
