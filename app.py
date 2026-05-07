@@ -126,25 +126,6 @@ with st.sidebar:
             key="lifestyle_sheet_url_input",
         )
 
-    st.divider()
-    st.markdown(
-        "**スプシ入力列**\n"
-        "A: サイト名　B: ジャンル\n"
-        "C: 記事タイプ　D: メインKW\n"
-        "E: サブKW\n"
-        "F: 掲載クリニック\n"
-        "　`TCB::tcb.net, 湘南::s-b-c.net`\n"
-        "G: 競合URL（カンマ区切り）\n"
-        "H: 追加指示（任意）\n"
-        "I: 最訴求プラン（任意）\n"
-        "J: 関連KW（任意・改行区切り）\n\n"
-        "**自動書き込み**\n"
-        "K: ステータス\n"
-        "L: タイトル　M: メタ\n"
-        "N: HTML　O: 要確認リスト\n\n"
-        "**設定タブ**\n"
-        "記事タイプ別デフォルト追加指示"
-    )
 
 
 if st.session_state.get("main_nav", "📝 コンテンツ作成") == "📝 コンテンツ作成":
