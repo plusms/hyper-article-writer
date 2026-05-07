@@ -25,13 +25,28 @@ COL_STATUS    = 10  # K（0始まり）
 COL_OUT_START = 11  # L〜O（タイトル・メタ・HTML・要確認）
 
 
-def get_sheet(sheet_url: str, creds_data: dict) -> gspread.Worksheet:
+_HEADER = ["サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
+           "掲載クリニック", "競合URL", "追加指示", "最訴求プラン", "関連KW",
+           "ステータス", "タイトル", "メタ", "HTML", "要確認"]
+
+ARTICLE_TABS = ["ノウハウ", "地域", "比較", "商標"]
+
+
+def get_sheet(sheet_url: str, creds_data: dict, tab_name: str = "") -> gspread.Worksheet:
     creds = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
     gc = gspread.authorize(creds)
-    return gc.open_by_url(sheet_url).sheet1
+    ss = gc.open_by_url(sheet_url)
+    if not tab_name:
+        return ss.sheet1
+    try:
+        return ss.worksheet(tab_name)
+    except gspread.WorksheetNotFound:
+        ws = ss.add_worksheet(title=tab_name, rows=1000, cols=len(_HEADER))
+        ws.update("A1:O1", [_HEADER])
+        return ws
 
 
-def read_input_rows(ws: gspread.Worksheet) -> list:
+def read_input_rows(ws: gspread.Worksheet, default_article_type: str = "") -> list:
     """2行目以降を読み込んでdictのリストで返す（1行目はヘッダー）。"""
     all_values = ws.get_all_values()
     rows = []
@@ -41,7 +56,7 @@ def read_input_rows(ws: gspread.Worksheet) -> list:
             "row_index":           i,
             "site_name":           padded[0],
             "genre":               padded[1],
-            "article_type":        padded[2],
+            "article_type":        padded[2] or default_article_type,
             "main_kw":             padded[3],
             "sub_kw":              padded[4],
             "clinics_raw":         padded[5],

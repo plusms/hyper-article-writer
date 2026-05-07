@@ -16,7 +16,7 @@ from core.planner import generate_structure
 from core.writer import generate_body, quality_check
 from core.sheets import (
     read_input_rows, write_output_row, write_status, get_sheet,
-    get_settings_sheet, read_defaults,
+    get_settings_sheet, read_defaults, ARTICLE_TABS,
 )
 from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
 
@@ -57,8 +57,9 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
 # ── APIキー（Secrets優先 → サイドバー入力 fallback）──────────
 _claude_key_default  = _secret("CLAUDE_API_KEY")
 _gemini_key_default  = _secret("GEMINI_API_KEY")
-_drive_folder_id     = _secret("DRIVE_PARENT_FOLDER_ID", "1CHqNruWiOVdeJPs7Nyd3Nfjt3sLxMc2c")
-_db_sheet_url_default = _secret("CLINIC_DB_SHEET_URL")
+_drive_folder_id          = _secret("DRIVE_PARENT_FOLDER_ID", "1CHqNruWiOVdeJPs7Nyd3Nfjt3sLxMc2c")
+_article_sheet_url_default = _secret("ARTICLE_SHEET_URL")
+_db_sheet_url_default      = _secret("CLINIC_DB_SHEET_URL")
 
 # ── サイドバー：設定 ──────────────────────────────────────
 with st.sidebar:
@@ -93,6 +94,16 @@ with st.sidebar:
             st.success("認証ファイル読み込み済み")
 
     st.divider()
+    if _article_sheet_url_default:
+        st.caption("記事スプシ: Secrets から読込済み")
+        article_sheet_url = _article_sheet_url_default
+    else:
+        article_sheet_url = st.text_input(
+            "記事スプレッドシートURL",
+            placeholder="https://docs.google.com/spreadsheets/d/...",
+            key="article_sheet_url_input",
+        )
+
     if _db_sheet_url_default:
         st.caption("案件DB スプシ: Secrets から読込済み")
         db_sheet_url = _db_sheet_url_default
@@ -233,22 +244,24 @@ def _render_topic_checkboxes(article_type: str, key_prefix: str) -> list[str]:
 # ════════════════════════════════════════════════════════
 with _safe_tab(tab_batch):
     st.title("📋 一括作成")
-    st.caption("ノウハウ記事のみ処理します。K列（ステータス）が空欄でかつ記事タイプが「ノウハウ」の行だけ対象です。設定タブのデフォルト追加指示＋H列の追記内容を合算します。")
+    st.caption("K列（ステータス）が空欄の行を対象に一括生成します。設定タブのデフォルト追加指示＋H列の追記内容を合算します。")
 
-    sheet_url_batch = st.text_input(
-        "Google Sheet URL",
-        placeholder="https://docs.google.com/spreadsheets/d/...",
-        key="batch_sheet_url",
+    if not article_sheet_url:
+        st.warning("サイドバーで「記事スプレッドシートURL」を設定してください。")
+
+    _batch_col1, _batch_col2 = st.columns([2, 1])
+    batch_tab_sel = _batch_col1.selectbox(
+        "処理するタブ", ARTICLE_TABS, key="batch_tab_sel",
     )
-    dry_run = st.checkbox("ドライラン（APIを叩かず対象行だけ確認）")
+    dry_run = _batch_col2.checkbox("ドライラン", help="APIを叩かず対象行だけ確認")
 
     if st.button("🚀 実行開始", type="primary", use_container_width=True, key="run_batch"):
         creds_data = _get_gcp_creds(sheets_creds_file)
         errors = []
         if not creds_data:
             errors.append("Google Sheets 認証情報が未設定です")
-        if not sheet_url_batch:
-            errors.append("スプレッドシートURLを入力してください")
+        if not article_sheet_url:
+            errors.append("記事スプレッドシートURLが未設定です（サイドバーまたはSecrets）")
         if not dry_run:
             if not claude_key:  errors.append("Claude API Key が未設定です")
 
@@ -256,12 +269,12 @@ with _safe_tab(tab_batch):
             for e in errors:
                 st.error(e)
         else:
-            ws = get_sheet(sheet_url_batch, creds_data)
-            rows = read_input_rows(ws)
-            pending = [r for r in rows if not r.get("status") and r.get("article_type", "") == "ノウハウ"]
+            ws = get_sheet(article_sheet_url, creds_data, tab_name=batch_tab_sel)
+            rows = read_input_rows(ws, default_article_type=batch_tab_sel)
+            pending = [r for r in rows if not r.get("status")]
 
             try:
-                settings_ws = get_settings_sheet(sheet_url_batch, creds_data)
+                settings_ws = get_settings_sheet(article_sheet_url, creds_data)
                 defaults = read_defaults(settings_ws)
             except Exception:
                 defaults = {}
@@ -351,21 +364,16 @@ with _safe_tab(tab_custom):
 
     article_type = st.radio("記事タイプ", ["地域", "比較", "商標", "ノウハウ"], horizontal=True, key="test_type")
 
-    sheet_url_single = st.text_input(
-        "スプレッドシートURL（設定タブのデフォルトを読む）",
-        placeholder="https://docs.google.com/spreadsheets/d/...",
-        key="single_sheet_url",
-    )
     single_defaults: dict = {}
-    if sheet_url_single.strip():
-        creds_data_single = _get_gcp_creds(sheets_creds_file)
-        if creds_data_single:
+    if article_sheet_url:
+        _cds = _get_gcp_creds(sheets_creds_file)
+        if _cds:
             try:
-                _sws = get_settings_sheet(sheet_url_single.strip(), creds_data_single)
+                _sws = get_settings_sheet(article_sheet_url, _cds)
                 single_defaults = read_defaults(_sws)
-                st.success("設定タブ読み込み済み")
-            except Exception as _e:
-                st.warning(f"設定タブ読み込み失敗: {_e}")
+                st.caption("✅ 設定タブ読み込み済み（記事スプシより）")
+            except Exception:
+                pass
 
     st.divider()
 
@@ -398,7 +406,7 @@ with _safe_tab(tab_custom):
                 label_visibility="collapsed",
             )
         else:
-            st.caption("デフォルト：未設定（スプシURLを入力すると反映）")
+            st.caption("デフォルト：未設定（サイドバーで記事スプシを設定すると反映）")
 
         additional_block = st.text_area(
             "追加指示（任意）",
@@ -445,12 +453,11 @@ with _safe_tab(tab_custom):
             competitor_urls.append(u.strip())
 
     st.divider()
-    sheet_url_out = st.text_input(
-        "出力先スプレッドシートURL（任意）",
-        placeholder="https://docs.google.com/spreadsheets/d/...",
-        key="t_sheet_out",
+    _out_c1, _out_c2 = st.columns([2, 1])
+    output_tab_sel = _out_c1.selectbox(
+        "スプシ書き込み先タブ（任意）", ["（書き込まない）"] + ARTICLE_TABS, key="t_out_tab",
     )
-    output_row_num = st.number_input("書き込み行番号", min_value=2, value=2, step=1, key="t_row_num")
+    output_row_num = _out_c2.number_input("行番号", min_value=2, value=2, step=1, key="t_row_num")
 
     st.divider()
     if st.button("🚀 実行", type="primary", use_container_width=True, key="run_test"):
@@ -528,19 +535,19 @@ with _safe_tab(tab_custom):
                     s.update(label="✅ 完了", state="complete")
                     _save_output_cache(main_kw, st.session_state["t2_last"])
 
-                    if sheet_url_out.strip():
+                    if output_tab_sel != "（書き込まない）" and article_sheet_url:
                         creds_out = _get_gcp_creds(sheets_creds_file)
                         if creds_out:
-                            st.write("📊 スプレッドシートに書き込み中...")
+                            st.write(f"📊 [{output_tab_sel}] タブ 行{output_row_num} に書き込み中...")
                             try:
-                                ws_out = get_sheet(sheet_url_out.strip(), creds_out)
+                                ws_out = get_sheet(article_sheet_url, creds_out, tab_name=output_tab_sel)
                                 write_output_row(ws_out, int(output_row_num), {
                                     "title":     structure["title"],
                                     "meta":      structure["meta"],
                                     "html":      output["html"],
                                     "todo_list": output["todo_list"],
                                 })
-                                st.success(f"行{output_row_num}に書き込みました")
+                                st.success(f"[{output_tab_sel}] 行{output_row_num}に書き込みました")
                             except Exception as we:
                                 st.warning(f"スプシ書き込みエラー: {we}")
 
