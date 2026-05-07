@@ -29,11 +29,11 @@ def fetch_page_text(url: str) -> str:
         return f"[取得失敗: {e}]"
 
 
-def _claude_call(api_key: str, prompt: str, max_tokens: int = 4096) -> str:
+def _claude_call(api_key: str, prompt: str, max_tokens: int = 4096, model: str = "claude-haiku-4-5-20251001") -> str:
     try:
         client = anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=model,
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -311,13 +311,13 @@ def extract_clinic_info_from_content(content: str, name: str, genre: str, claude
     prompt = f"""以下の{name}のWebサイト内容から情報を抽出してください。
 {genre_note}取得できない項目は「[要確認]」と記載してください。補完・推測は一切しないでください。
 
-{content[:30000]}
+{content[:40000]}
 
 出力は「【{name}】」の見出しで始め、以下の形式で記載してください：
 
 【{name}】
 {fields}"""
-    return _claude_call(claude_api_key, prompt, max_tokens=8192)
+    return _claude_call(claude_api_key, prompt, max_tokens=8192, model="claude-sonnet-4-6")
 
 
 def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None, full_crawl: bool = False, db_type: str = DB_TYPE_CLINIC) -> dict:
@@ -350,7 +350,7 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
 
 【{name}】
 {fields}"""
-            scraped_results[name] = _claude_call(claude_api_key, prompt, max_tokens=8192)
+            scraped_results[name] = _claude_call(claude_api_key, prompt, max_tokens=8192, model="claude-sonnet-4-6")
     else:
         # 記事生成時：従来通り main + 料金ページのみ、一括抽出
         fetched = {}

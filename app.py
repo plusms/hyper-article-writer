@@ -10,7 +10,7 @@ from core.config import TOPICS
 from core.researcher import (
     analyze_competitors, collect_clinic_info,
     discover_clinics_from_competitors, auto_discover_clinics,
-    crawl_site, extract_clinic_info_from_content,
+    crawl_site, fetch_page_text, extract_clinic_info_from_content,
     DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE,
 )
 from core.planner import generate_structure
@@ -1450,7 +1450,13 @@ with _safe_tab(tab_cases):
     with st.form("db_add_form"):
         _db_fa, _db_fb = st.columns([2, 2])
         _db_new_name   = _db_fa.text_input("案件名（クリニック名・商品名等）", placeholder="TCB東京中央美容外科")
-        _db_new_domain = _db_fb.text_input("URL（ドメイン or パス指定）", placeholder="tcb.net  または  tcb.net/osaka/umeda/")
+        _db_new_domain = _db_fb.text_input("メインURL（ドメイン or パス指定）", placeholder="tcb.net  または  tcb.net/osaka/umeda/")
+        _db_new_extra_urls = st.text_area(
+            "追加クロールURL（任意・1行1URL）",
+            placeholder="https://tcb.net/price/\nhttps://tcb.net/payment/\n料金ページや支払いページのURLを直接指定すると取得精度が上がります",
+            height=90,
+            key="db_new_extra_urls",
+        )
         _db_add_now = st.form_submit_button("追加してクロール", type="primary", use_container_width=True)
 
     if _db_add_now:
@@ -1471,12 +1477,18 @@ with _safe_tab(tab_cases):
             _domain_new = _db_new_domain.strip()
             _genre_new = _db_new_genre.strip()
 
-            with st.status(f"{_name_new} のサイトをクロール中（最大20ページ）...", expanded=True) as _add_status:
+            _extra_urls_list = [u.strip() for u in _db_new_extra_urls.splitlines() if u.strip() and u.strip().startswith("http")]
+            with st.status(f"{_name_new} のサイトをクロール中...", expanded=True) as _add_status:
                 try:
                     _start_url = _domain_new if _domain_new.startswith("http") else f"https://{_domain_new}"
-                    st.write("🔍 クロール中...")
+                    st.write("🔍 メインURLをクロール中（最大20ページ）...")
                     _content_new = crawl_site(_start_url, _genre_new, max_pages=20)
-                    st.write(f"🤖 「{_genre_new}」向けに情報抽出中...")
+                    for _eu in _extra_urls_list:
+                        st.write(f"🔍 追加URL取得中: {_eu}")
+                        _eu_content = fetch_page_text(_eu)
+                        if not _eu_content.startswith("[取得失敗"):
+                            _content_new += f"\n\n--- 追加URL: {_eu} ---\n{_eu_content}"
+                    st.write(f"🤖 「{_genre_new}」向けに情報抽出中（Sonnet）...")
                     _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel)
                     clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, creds_data=_db_creds, sheet_url=_active_db_url)
                     _add_status.update(label=f"✅ 「{_name_new}」を「{_genre_new}」に追加しました", state="complete")
@@ -1538,13 +1550,20 @@ with _safe_tab(tab_cases):
                         _d_label = f"{'🟢' if _d_has_info else '🟡'} {_dn}　｜　更新: {_d_updated}"
                         with st.expander(_d_label, expanded=False):
                             st.caption(f"URL: {_de.get('domain', '')}")
-                            _d_info = _de.get("info", "（未取得）")
-                            st.text_area(
-                                "取得済み情報",
-                                value=_d_info[:2000] + ("..." if len(_d_info) > 2000 else ""),
-                                height=200, disabled=True,
+                            _d_info = _de.get("info", "")
+                            _d_info_edited = st.text_area(
+                                "取得済み情報（直接編集可）",
+                                value=_d_info,
+                                height=200,
                                 key=f"db_info_{_g_name}_{_dn}",
                             )
+                            if st.button("💾 この内容で保存", key=f"db_save_manual_{_g_name}_{_dn}"):
+                                clinic_db_manager.upsert_clinic(
+                                    _dn, _de.get("domain", ""), _g_name, _d_info_edited,
+                                    creds_data=_db_creds, sheet_url=_active_db_url,
+                                )
+                                st.success("保存しました")
+                                st.rerun()
                             _rc1, _rc2 = st.columns(2)
                             if _rc1.button("🔄 再クロール（全ジャンル更新）", key=f"db_refresh_{_g_name}_{_dn}"):
                                 if not claude_key:
