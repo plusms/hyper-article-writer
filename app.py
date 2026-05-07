@@ -338,6 +338,7 @@ with _safe_tab(tab_batch):
                             "meta":      structure["meta"],
                             "html":      output["html"],
                             "todo_list": output["todo_list"],
+                            "clinics":   inputs["clinics"],
                         })
                         write_status(ws, row_num, "完了")
 
@@ -587,6 +588,7 @@ with _safe_tab(tab_custom):
                                     "meta":      structure["meta"],
                                     "html":      output["html"],
                                     "todo_list": output["todo_list"],
+                                    "clinics":   all_clinics,
                                 })
                                 st.success(f"[{output_tab_sel}] 行{_target_row}に書き込みました")
                             except Exception as we:

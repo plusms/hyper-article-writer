@@ -27,7 +27,7 @@ COL_OUT_START = 11  # L〜O（タイトル・メタ・HTML・要確認）
 
 _HEADER = ["サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
            "掲載クリニック", "競合URL", "追加指示", "最訴求プラン", "関連KW",
-           "ステータス", "タイトル", "メタ", "HTML", "要確認"]
+           "ステータス", "タイトル", "メタ", "HTML", "要確認", "掲載院一覧"]
 
 ARTICLE_TABS = ["ノウハウ", "地域", "比較", "商標"]
 
@@ -74,13 +74,18 @@ def write_status(ws: gspread.Worksheet, row_index: int, status: str) -> None:
 
 
 def write_output_row(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
+    clinics = data.get("clinics", [])
+    clinic_list_str = ", ".join(
+        f"{c['name']}::{c.get('domain', '')}" for c in clinics if c.get("name")
+    )
     ws.update(
-        f"L{row_index}:O{row_index}",
+        f"L{row_index}:P{row_index}",
         [[
             data.get("title", ""),
             data.get("meta", ""),
             data.get("html", ""),
             data.get("todo_list", ""),
+            clinic_list_str,
         ]]
     )
 
