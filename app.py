@@ -100,6 +100,13 @@ with st.sidebar:
         horizontal=True,
         key="image_provider",
     )
+    research_provider = st.radio(
+        "リサーチAI（競合分析・クリニック収集）",
+        ["claude", "gemini"],
+        format_func=lambda x: "Claude (Haiku)" if x == "claude" else "Gemini Flash",
+        horizontal=True,
+        key="research_provider",
+    )
 
     _gcp_in_secrets = _secret("gcp_service_account.type") or _secret("GCP_SERVICE_ACCOUNT_JSON")
     if _gcp_in_secrets:
@@ -316,19 +323,19 @@ with _safe_tab(tab_batch):
                             _sc = site_config_manager.load_site_config(_batch_site_name)
                             _batch_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
 
-                        comp   = analyze_competitors(inputs["competitor_urls"], claude_key)
+                        comp   = analyze_competitors(inputs["competitor_urls"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
                         if inputs["competitor_urls"]:
                             discovered = discover_clinics_from_competitors(
-                                comp["raw_pages"], inputs["clinics"], claude_key
+                                comp["raw_pages"], inputs["clinics"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider
                             )
                         else:
                             discovered = auto_discover_clinics(
-                                inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"]
+                                inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"], gemini_api_key=gemini_key, research_provider=research_provider
                             )
                         inputs["clinics"] = inputs["clinics"] + discovered
                         _batch_active_db_url = db_sheet_url if batch_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
                         _batch_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in inputs["clinics"]], genre=inputs.get("genre", ""), creds_data=creds_data, sheet_url=_batch_active_db_url)
-                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache, db_type=batch_db_type)
+                        clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache, db_type=batch_db_type, gemini_api_key=gemini_key, research_provider=research_provider)
                         structure = generate_structure(inputs, comp, clinics, claude_key)
                         output    = generate_body(inputs, structure, clinics, claude_key, comp,
                                                   site_parts=_batch_site_parts)
@@ -509,15 +516,15 @@ with _safe_tab(tab_custom):
             with st.status("生成中...", expanded=True) as s:
                 try:
                     st.write("🔍 競合分析中...")
-                    comp = analyze_competitors(competitor_urls, claude_key)
+                    comp = analyze_competitors(competitor_urls, claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
                     st.write("🤖 クリニック自動探索中...")
                     if competitor_urls:
                         discovered = discover_clinics_from_competitors(
-                            comp["raw_pages"], valid_clinics, claude_key
+                            comp["raw_pages"], valid_clinics, claude_key, gemini_api_key=gemini_key, research_provider=research_provider
                         )
                     else:
                         discovered = auto_discover_clinics(
-                            main_kw, genre, claude_key, valid_clinics
+                            main_kw, genre, claude_key, valid_clinics, gemini_api_key=gemini_key, research_provider=research_provider
                         )
                     all_clinics = valid_clinics + discovered
                     if discovered:
@@ -529,7 +536,7 @@ with _safe_tab(tab_custom):
                     _t2_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in all_clinics], genre=genre, creds_data=_t2_db_creds, sheet_url=_t2_active_db_url)
                     if _t2_db_cache:
                         st.write(f"　→ DB参照: {len(_t2_db_cache)} 案件（スクレイピングスキップ）")
-                    clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache, db_type=custom_db_type)
+                    clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache, db_type=custom_db_type, gemini_api_key=gemini_key, research_provider=research_provider)
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key)
                     st.write("✍️ 本文生成中（Claude）...")
@@ -1361,6 +1368,7 @@ with _safe_tab(tab_rank):
                             _scraped = collect_clinic_info(
                                 [{"name": _cbc["name"], "domain": _clinic_url or _cbc["name"]}],
                                 "", claude_key, db_cache=_t5_db_cache, db_type=_cb_db_type,
+                                gemini_api_key=gemini_key, research_provider=research_provider,
                             )
                             _scraped_text = _scraped.get(_cbc["name"], "（取得失敗）")
                         except Exception:
