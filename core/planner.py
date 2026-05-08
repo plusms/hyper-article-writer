@@ -32,7 +32,15 @@ def _llm_call(claude_api_key: str, prompt: str, gemini_api_key: str = "", provid
 
 def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude") -> dict:
     article_type = inputs["article_type"]
-    clinics_list = "\n".join(f"- {c['name']} ({c['domain']})" for c in inputs["clinics"])
+    clinics_list_parts = []
+    for c in inputs["clinics"]:
+        entry = f"- {c['name']} ({c['domain']})"
+        if c.get("recommended"):
+            entry += f"\n  最訴求プラン: {c['recommended']}"
+        if c.get("appeal"):
+            entry += f"\n  強み・比較優位性: {c['appeal']}"
+        clinics_list_parts.append(entry)
+    clinics_list = "\n".join(clinics_list_parts)
     clinic_info_text = "\n\n".join(
         f"【{name}】\n{info}" for name, info in clinic_info.items()
     )

@@ -421,8 +421,6 @@ with _safe_tab(tab_custom):
             help="構成の網羅性チェックに使用。検索面からそのままコピペできます。",
             height=120,
         )
-        recommended = st.text_input("最訴求プラン（任意）", key="t_rec",
-                                    placeholder="TCB / セマグルチド0.5mg")
 
     with col_right:
         st.subheader("追加指示")
@@ -437,42 +435,60 @@ with _safe_tab(tab_custom):
         else:
             st.caption("デフォルト：未設定（サイドバーで記事スプシを設定すると反映）")
 
-        additional_block = st.text_area(
-            "追加指示（任意）",
-            height=100, key="t_custom",
-            placeholder="例：GLP-1の仕組みを解説するセクションを追加してほしい",
-        )
-        additional_intent = st.text_area(
-            "↑の意図・切り口（任意）",
-            height=80, key="t_custom_intent",
-            placeholder="例：GLP-1の特徴を他剤との違いから入ることで、既存薬に慣れたユーザーが新鮮に受け取れるようにしたい",
-        )
+        if "custom_blocks" not in st.session_state:
+            st.session_state.custom_blocks = [{"text": "", "intent": ""}]
+
+        cb_to_remove = []
+        for i, cb in enumerate(st.session_state.custom_blocks):
+            cb_cols = st.columns([11, 1])
+            t = cb_cols[0].text_area(
+                f"追加指示 {i + 1}（任意）",
+                value=cb["text"], height=80, key=f"cb_text_{i}",
+                placeholder="例：GLP-1の仕組みを解説するセクションを追加してほしい",
+            )
+            if len(st.session_state.custom_blocks) > 1 and cb_cols[1].button("✕", key=f"cb_rm_{i}"):
+                cb_to_remove.append(i)
+            intent = st.text_area(
+                "　↑の意図・切り口（任意）",
+                value=cb["intent"], height=60, key=f"cb_intent_{i}",
+                placeholder="例：既存薬に慣れたユーザーが新鮮に受け取れるようにしたい",
+            )
+            st.session_state.custom_blocks[i] = {"text": t, "intent": intent}
+        for idx in reversed(cb_to_remove):
+            st.session_state.custom_blocks.pop(idx)
+        if st.button("＋ 追加指示を追加", key="cb_add"):
+            st.session_state.custom_blocks.append({"text": "", "intent": ""})
+            st.rerun()
 
     st.divider()
     st.subheader("含めるセクション")
     selected_topics = _render_topic_checkboxes(article_type, key_prefix="t")
 
     st.divider()
-    st.subheader("掲載クリニック")
+    st.subheader("掲載案件")
     if "test_clinics" not in st.session_state:
-        st.session_state.test_clinics = [{"name": "", "domain": ""}]
-
-    c_h = st.columns([3, 3, 1])
-    c_h[0].caption("クリニック名")
-    c_h[1].caption("ドメイン（例: tcb.net）")
+        st.session_state.test_clinics = [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
+    for _c in st.session_state.test_clinics:
+        _c.setdefault("recommended", "")
+        _c.setdefault("appeal", "")
 
     to_remove = []
     for i, c in enumerate(st.session_state.test_clinics):
-        c0, c1, c2 = st.columns([3, 3, 1])
-        n = c0.text_input("", value=c["name"],   key=f"tcn_{i}", placeholder="TCB", label_visibility="collapsed")
-        d = c1.text_input("", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...", label_visibility="collapsed")
-        if c2.button("✕", key=f"trm_{i}") and len(st.session_state.test_clinics) > 1:
+        is_first = (i == 0)
+        st.caption("案件 1（最上位）" if is_first else f"案件 {i + 1}")
+        tc0, tc1, tc2 = st.columns([3, 3, 1])
+        n = tc0.text_input("案件名", value=c["name"],   key=f"tcn_{i}", placeholder="TCB東京中央美容外科")
+        d = tc1.text_input("ドメイン", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...")
+        if tc2.button("✕", key=f"trm_{i}") and len(st.session_state.test_clinics) > 1:
             to_remove.append(i)
-        st.session_state.test_clinics[i] = {"name": n, "domain": d}
+        rec_label = "最訴求プラン（マスト）" if is_first else "最訴求プラン（任意）"
+        r = st.text_input(rec_label, value=c["recommended"], key=f"tcr_{i}", placeholder="例：セマグルチド0.5mgプラン / 人中短縮術")
+        a = st.text_area("強み・比較優位性（任意）", value=c["appeal"], height=70, key=f"tca_{i}", placeholder="例：他社より処方量が1段階上から始められる。カウンセリングで確認済み")
+        st.session_state.test_clinics[i] = {"name": n, "domain": d, "recommended": r, "appeal": a}
     for idx in reversed(to_remove):
         st.session_state.test_clinics.pop(idx)
-    if st.button("＋ クリニックを追加", key="t_add"):
-        st.session_state.test_clinics.append({"name": "", "domain": ""})
+    if st.button("＋ 案件を追加", key="t_add"):
+        st.session_state.test_clinics.append({"name": "", "domain": "", "recommended": "", "appeal": ""})
         st.rerun()
 
     st.subheader("競合URL")
@@ -487,21 +503,7 @@ with _safe_tab(tab_custom):
             competitor_urls.append(u.strip())
 
     st.divider()
-    with st.expander("🎯 訴求インプット（任意・注力記事向け）"):
-        st.caption("クリニックの強み・競合比較・カウンセリング体験など。AIが記事の訴求・CV動線に反映します。")
-        st.text_area(
-            "第1訴求（最重要）", height=80, key="t_appeal_1",
-            placeholder="例：DMMフィナスのGLP-1はMYメディカルと比べて処方量が1段階上から開始できる。カウンセリングで確認済み",
-        )
-        st.text_area(
-            "第2訴求（任意）", height=80, key="t_appeal_2",
-            placeholder="例：他社より定期縛りが短い（3ヶ月→2ヶ月）のでリスクを気にするユーザーに刺さる",
-        )
-        st.text_area(
-            "第3訴求（任意）", height=80, key="t_appeal_3",
-            placeholder="例：最近「成分で比較したい」訴求でCV伸びている競合が出てきた",
-        )
-    with st.expander("👤 ユーザー認識インプット（任意・注力記事向け）"):
+    with st.expander("👤 ユーザー認識インプット（任意）"):
         st.caption("このKWで検索するユーザーの前提知識・思い込み。AIが説明の深さ・切り口を調整します。")
         st.text_area(
             "ユーザーの前提・認識",
@@ -534,25 +536,24 @@ with _safe_tab(tab_custom):
                 _single_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
                 _single_site_config = _sc
 
-            combined_block = "\n".join(filter(None, [default_block_val, additional_block]))
+            _cb_texts   = [cb["text"].strip()  for cb in st.session_state.get("custom_blocks", []) if cb["text"].strip()]
+            _cb_intents = [cb["intent"].strip() for cb in st.session_state.get("custom_blocks", []) if cb["intent"].strip()]
+            combined_block  = "\n".join(filter(None, [default_block_val] + _cb_texts))
+            combined_intent = "\n".join(_cb_intents)
+            _first_valid = next((c for c in st.session_state.test_clinics if c["name"] and c["domain"]), None)
             inputs = {
                 "article_type":    article_type,
                 "site_name":       site_name,
                 "main_kw":         main_kw,
                 "sub_kw":          [k.strip() for k in sub_kw.split(",") if k.strip()],
                 "genre":           genre,
-                "recommended":     recommended,
+                "recommended":     _first_valid["recommended"].strip() if _first_valid else "",
                 "custom_block":    combined_block,
-                "custom_intent":   st.session_state.get("t_custom_intent", "").strip(),
+                "custom_intent":   combined_intent,
                 "related_kw":      related_kw,
                 "clinics":         valid_clinics,
                 "competitor_urls": competitor_urls,
                 "selected_topics": selected_topics,
-                "appeal_points":   [
-                    st.session_state.get("t_appeal_1", "").strip(),
-                    st.session_state.get("t_appeal_2", "").strip(),
-                    st.session_state.get("t_appeal_3", "").strip(),
-                ],
                 "user_awareness":  st.session_state.get("t_user_awareness", "").strip(),
             }
             with st.status("生成中...", expanded=True) as s:

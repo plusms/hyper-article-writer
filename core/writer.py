@@ -388,6 +388,18 @@ def _build_body_prompt(
     else:
         clinic_restriction = "クリニック指定なし：クリニック紹介セクションは設けない。\n"
 
+    clinic_context_note = ""
+    _clinics_with_context = [c for c in inputs.get("clinics", []) if c.get("recommended") or c.get("appeal")]
+    if _clinics_with_context:
+        clinic_context_note = "【案件別 訴求情報】\n"
+        for c in inputs.get("clinics", []):
+            if c.get("recommended") or c.get("appeal"):
+                clinic_context_note += f"■ {c['name']}\n"
+                if c.get("recommended"):
+                    clinic_context_note += f"  最訴求プラン: {c['recommended']}\n"
+                if c.get("appeal"):
+                    clinic_context_note += f"  強み・比較優位性: {c['appeal']}\n"
+
     competitor_note = (
         f"【競合分析サマリー（差別化・網羅性チェックに使用）】\n"
         f"{competitor_analysis.get('analysis', '')[:2000]}\n"
@@ -425,7 +437,7 @@ def _build_body_prompt(
 【{type_context}】
 【メインKW】{inputs['main_kw']}
 【サブKW】{', '.join(inputs['sub_kw'])}
-{recommended_note}{appeal_note}{user_awareness_note}{custom_intent_note}
+{recommended_note}{appeal_note}{user_awareness_note}{custom_intent_note}{clinic_context_note}
 {clinic_restriction}
 {competitor_note}
 【記事全体の構成（把握用）】
