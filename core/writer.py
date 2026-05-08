@@ -356,6 +356,22 @@ def _build_body_prompt(
         "※このプランを冒頭・おすすめセクションで最上位に配置してください。\n"
     ) if inputs.get("recommended") else ""
 
+    appeal_note = ""
+    _appeals = [a for a in inputs.get("appeal_points", []) if a and a.strip()]
+    if _appeals:
+        appeal_note = "【訴求インプット（優先度順）】\n"
+        for i, ap in enumerate(_appeals, 1):
+            appeal_note += f"第{i}訴求: {ap}\n"
+        appeal_note += "※第1訴求を最も強調した表現で本文に反映する。専用H2は不要、各H3の文脈に自然に組み込む。\n"
+
+    user_awareness_note = ""
+    if inputs.get("user_awareness", "").strip():
+        user_awareness_note = f"【ユーザーの前提・認識レベル】\n{inputs['user_awareness']}\n※この認識状態に合わせて説明の深さ・切り口・トーンを調整する。\n"
+
+    custom_intent_note = ""
+    if inputs.get("custom_intent", "").strip():
+        custom_intent_note = f"【追加指示の意図・切り口】\n{inputs['custom_intent']}\n※追加指示をこの意図・切り口で本文に組み込む。\n"
+
     if article_type == "商標" and len(clinic_names) == 1:
         clinic_restriction = (
             f"【掲載クリニック（1院専用）】\n"
@@ -409,7 +425,7 @@ def _build_body_prompt(
 【{type_context}】
 【メインKW】{inputs['main_kw']}
 【サブKW】{', '.join(inputs['sub_kw'])}
-{recommended_note}
+{recommended_note}{appeal_note}{user_awareness_note}{custom_intent_note}
 {clinic_restriction}
 {competitor_note}
 【記事全体の構成（把握用）】
@@ -527,7 +543,42 @@ def generate_body(
     return _finish(raw)
 
 
-def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude") -> str:
+def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude", check_mode: str = "standard") -> str:
+    def _call_llm(p: str) -> str:
+        if article_provider == "gemini" and gemini_api_key:
+            return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": p}])
+        client = anthropic.Anthropic(api_key=claude_api_key)
+        msg = client.messages.create(
+            model="claude-sonnet-4-6", max_tokens=4096,
+            messages=[{"role": "user", "content": p}],
+        )
+        return msg.content[0].text
+
+    if check_mode == "reader_rejection":
+        prompt = f"""以下の記事HTML（{article_type}記事）を読んだユーザーが「この記事で最も推奨されているクリニック（または選択肢）を選ばない理由」を、読者目線で徹底的に洗い出してください。
+
+【メインKW】{main_kw}
+【サブKW】{', '.join(sub_kw)}
+
+【記事HTML】
+{html[:8000]}
+
+些細な点も含め、なるべく多く・具体的に出してください。
+
+## 出力形式
+
+### 読者が選ばない理由
+| # | 理由（読者目線での具体的な不安・疑問・不満） | 該当箇所（セクション名またはテキスト引用） |
+|---|------------------------------------------|----------------------------------------|
+| 1 | ... | ... |
+
+### 修正提案
+| # | 修正方針（何をどう書き換えるか・どのセクションに何を追加するか） |
+|---|---------------------------------------------------------------|
+| 1 | ... |
+"""
+        return _call_llm(prompt)
+
     criteria = _get_quality_criteria(article_type)
 
     prompt = f"""以下の記事HTML（{article_type}記事）の品質チェックを実施してください。
@@ -559,12 +610,4 @@ def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, clau
 Q〇, Q〇, Q〇 …（問題なしの項目番号を列挙）
 """
 
-    if article_provider == "gemini" and gemini_api_key:
-        return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": prompt}])
-    client = anthropic.Anthropic(api_key=claude_api_key)
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return message.content[0].text
+    return _call_llm(prompt)

@@ -75,6 +75,23 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
             )
 
     custom_note = f"\n【追加指示】\n{inputs['custom_block']}" if inputs.get("custom_block") else ""
+
+    appeal_note = ""
+    _appeals = [a for a in inputs.get("appeal_points", []) if a and a.strip()]
+    if _appeals:
+        appeal_note = "\n【訴求インプット（優先度順）】\n"
+        for i, ap in enumerate(_appeals, 1):
+            appeal_note += f"第{i}訴求: {ap}\n"
+        appeal_note += "※第1訴求を最も目立つ位置・強調度で記事に反映する。専用H2は不要、記事全体の訴求軸として使う。\n"
+
+    user_awareness_note = ""
+    if inputs.get("user_awareness", "").strip():
+        user_awareness_note = f"\n【ユーザーの前提・認識レベル】\n{inputs['user_awareness']}\n※この認識状態を踏まえて、説明の深さ・切り口を調整する。\n"
+
+    custom_intent_note = ""
+    if inputs.get("custom_intent", "").strip():
+        custom_intent_note = f"\n【追加指示の意図・切り口】\n{inputs['custom_intent']}\n※追加指示をこの意図・切り口で記事に組み込む。\n"
+
     related_kw_note = (
         f"\n【関連KW】\n{inputs['related_kw']}\n"
         "※重要なトピックが抜けていれば独立H2/H3を追加してよい。"
@@ -124,7 +141,7 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
 {type_note}
 【メインKW】{inputs['main_kw']}
 【サブKW】{', '.join(inputs['sub_kw'])}
-{custom_note}
+{custom_note}{custom_intent_note}{appeal_note}{user_awareness_note}
 {related_kw_note}
 {recommended_note}
 {clinics_note}

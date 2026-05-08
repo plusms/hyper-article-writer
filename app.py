@@ -442,6 +442,11 @@ with _safe_tab(tab_custom):
             height=100, key="t_custom",
             placeholder="例：GLP-1の仕組みを解説するセクションを追加してほしい",
         )
+        additional_intent = st.text_area(
+            "↑の意図・切り口（任意）",
+            height=80, key="t_custom_intent",
+            placeholder="例：GLP-1の特徴を他剤との違いから入ることで、既存薬に慣れたユーザーが新鮮に受け取れるようにしたい",
+        )
 
     st.divider()
     st.subheader("含めるセクション")
@@ -482,6 +487,29 @@ with _safe_tab(tab_custom):
             competitor_urls.append(u.strip())
 
     st.divider()
+    with st.expander("🎯 訴求インプット（任意・注力記事向け）"):
+        st.caption("クリニックの強み・競合比較・カウンセリング体験など。AIが記事の訴求・CV動線に反映します。")
+        st.text_area(
+            "第1訴求（最重要）", height=80, key="t_appeal_1",
+            placeholder="例：DMMフィナスのGLP-1はMYメディカルと比べて処方量が1段階上から開始できる。カウンセリングで確認済み",
+        )
+        st.text_area(
+            "第2訴求（任意）", height=80, key="t_appeal_2",
+            placeholder="例：他社より定期縛りが短い（3ヶ月→2ヶ月）のでリスクを気にするユーザーに刺さる",
+        )
+        st.text_area(
+            "第3訴求（任意）", height=80, key="t_appeal_3",
+            placeholder="例：最近「成分で比較したい」訴求でCV伸びている競合が出てきた",
+        )
+    with st.expander("👤 ユーザー認識インプット（任意・注力記事向け）"):
+        st.caption("このKWで検索するユーザーの前提知識・思い込み。AIが説明の深さ・切り口を調整します。")
+        st.text_area(
+            "ユーザーの前提・認識",
+            height=100, key="t_user_awareness",
+            placeholder="例：いびきで検索するユーザーはレーザー治療があまり浮かんでいない\n例：AGA治療 札幌で検索するユーザーはすでにオンライン診療を想定していそう",
+        )
+
+    st.divider()
     output_tab_sel = st.selectbox(
         "スプシ書き込み先タブ（任意）", ["（書き込まない）"] + ARTICLE_TABS, key="t_out_tab",
         help="選択すると生成完了後にスプシへ自動書き込みします。メインKWが一致する行を優先し、なければ次の空き行に書き込みます。",
@@ -515,10 +543,17 @@ with _safe_tab(tab_custom):
                 "genre":           genre,
                 "recommended":     recommended,
                 "custom_block":    combined_block,
+                "custom_intent":   st.session_state.get("t_custom_intent", "").strip(),
                 "related_kw":      related_kw,
                 "clinics":         valid_clinics,
                 "competitor_urls": competitor_urls,
                 "selected_topics": selected_topics,
+                "appeal_points":   [
+                    st.session_state.get("t_appeal_1", "").strip(),
+                    st.session_state.get("t_appeal_2", "").strip(),
+                    st.session_state.get("t_appeal_3", "").strip(),
+                ],
+                "user_awareness":  st.session_state.get("t_user_awareness", "").strip(),
             }
             with st.status("生成中...", expanded=True) as s:
                 try:
@@ -835,6 +870,13 @@ with _safe_tab(tab_custom):
 with _safe_tab(tab_qual):
     st.title("✅ 品質チェック")
     check_type    = st.radio("記事タイプ", ["地域", "比較", "商標", "ノウハウ"], horizontal=True, key="chk_type")
+    check_mode    = st.radio(
+        "チェックモード",
+        ["standard", "reader_rejection"],
+        format_func=lambda x: "標準チェック（フォーマット・ルール）" if x == "standard" else "読者視点チェック（1位を選ばない理由）",
+        horizontal=True,
+        key="chk_mode",
+    )
     check_main_kw = st.text_input("メインKW", key="chk_kw")
     check_sub_kw  = st.text_input("サブKW（カンマ区切り）", key="chk_sub")
     html_input    = st.text_area("HTMLを貼り付け", height=300, key="chk_html")
@@ -852,6 +894,7 @@ with _safe_tab(tab_qual):
                     claude_key,
                     gemini_api_key=gemini_key,
                     article_provider=article_provider,
+                    check_mode=check_mode,
                 )
                 st.markdown(result)
 
