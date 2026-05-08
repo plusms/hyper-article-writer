@@ -411,8 +411,8 @@ with _safe_tab(tab_custom):
     with col_left:
         st.subheader("基本情報")
         site_name = st.text_input("サイト名", key="t_site")
-        genre     = st.text_input("ジャンル ＊", key="t_genre", placeholder="クマ取り / AGA治療 / 医療ダイエット")
-        main_kw   = st.text_input("メインKW ＊", key="t_main_kw")
+        genre     = st.text_input("ジャンル *", key="t_genre", placeholder="クマ取り / AGA治療 / 医療ダイエット")
+        main_kw   = st.text_input("メインKW *", key="t_main_kw")
         sub_kw    = st.text_input("サブKW（カンマ区切り）", key="t_sub_kw")
         related_kw = st.text_area(
             "関連KW（任意・改行区切り）",
@@ -475,11 +475,11 @@ with _safe_tab(tab_custom):
         is_first = (i == 0)
         st.caption("案件 1（最上位）" if is_first else f"案件 {i + 1}")
         tc0, tc1, tc2 = st.columns([3, 3, 1])
-        n = tc0.text_input("案件名 ＊", value=c["name"],   key=f"tcn_{i}", placeholder="TCB東京中央美容外科")
-        d = tc1.text_input("ドメイン ＊", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...")
+        n = tc0.text_input("案件名 *", value=c["name"],   key=f"tcn_{i}", placeholder="TCB東京中央美容外科")
+        d = tc1.text_input("ドメイン *", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...")
         if tc2.button("✕", key=f"trm_{i}") and len(st.session_state.test_clinics) > 1:
             to_remove.append(i)
-        rec_label = "最訴求プラン ＊" if is_first else "最訴求プラン（任意）"
+        rec_label = "最訴求プラン *" if is_first else "最訴求プラン（任意）"
         r = st.text_input(rec_label, value=c["recommended"], key=f"tcr_{i}", placeholder="例：セマグルチド0.5mgプラン / 人中短縮術")
         a = st.text_area("強み・比較優位性（任意）", value=c["appeal"], height=70, key=f"tca_{i}", placeholder="例：他社より処方量が1段階上から始められる。カウンセリングで確認済み")
         st.session_state.test_clinics[i] = {"name": n, "domain": d, "recommended": r, "appeal": a}
@@ -1300,38 +1300,37 @@ with _safe_tab(tab_rank):
 
     st.divider()
 
-    _cb_col1, _cb_col2, _cb_col3 = st.columns([2, 2, 1])
-    with _cb_col1:
-        _cb_main_kw = st.text_input("メインKW", key="cb_main_kw")
-        _cb_sub_kw = st.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
-    with _cb_col3:
-        _cb_db_type = st.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
-    with _cb_col2:
-        _cb_criteria = st.text_area(
-            "選び方コンテンツ（全文ペースト）",
-            height=120, key="cb_criteria",
-            placeholder="記事内の「○○の選び方」セクションの文章をそのまま貼り付けてください。",
-        )
+    _cb_kw_col1, _cb_kw_col2, _cb_kw_col3 = st.columns([3, 3, 1])
+    _cb_main_kw = _cb_kw_col1.text_input("メインKW", key="cb_main_kw")
+    _cb_sub_kw  = _cb_kw_col2.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
+    _cb_db_type = _cb_kw_col3.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
+    _cb_criteria = st.text_area(
+        "記事内の「選び方」セクション（文章をそのまま貼り付け）",
+        height=120, key="cb_criteria",
+        placeholder="記事内の「○○の選び方」セクションの文章をそのまま貼り付けてください。",
+    )
 
     st.divider()
-    st.subheader("掲載院一覧")
+    st.subheader("掲載案件一覧")
+    st.caption("カスタム作成タブで記事生成後、スプシのP列（掲載院一覧）の内容をコピーして貼り付けてください。")
     _cb_clinic_paste = st.text_area(
-        "Tab2の「掲載院一覧」をペースト",
+        "",
         height=150, key="cb_clinic_paste",
+        label_visibility="collapsed",
         placeholder="1. TCB東京中央美容外科 大阪院::https://tcb.net/osaka\n2. 湘南美容クリニック 梅田院::https://s-b-c.net/\n3. 品川スキンクリニック 大阪院::[要確認]",
     )
 
-    if st.button("📋 院一覧をパース", key="cb_parse_btn"):
+    if st.button("📋 案件リストを読み込む", key="cb_parse_btn"):
         if _cb_clinic_paste.strip():
             st.session_state["cb_clinics"] = clinic_block_writer.parse_clinic_list(_cb_clinic_paste)
             st.rerun()
         else:
-            st.warning("院一覧を入力してください")
+            st.warning("案件リストを貼り付けてください")
 
     _cb_clinics = st.session_state.get("cb_clinics", [])
 
     if _cb_clinics:
-        st.caption(f"パース結果: {len(_cb_clinics)} 院")
+        st.caption(f"読み込み完了: {len(_cb_clinics)} 案件")
         st.divider()
         st.subheader("各院の入力情報")
 
