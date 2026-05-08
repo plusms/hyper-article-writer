@@ -271,14 +271,14 @@ with _safe_tab(tab_batch):
     if not article_sheet_url:
         st.warning("サイドバーで「記事スプレッドシートURL」を設定してください。")
 
-    _batch_col1, _batch_col2, _batch_col3 = st.columns([2, 1, 1])
+    _batch_col1, _batch_col2 = st.columns([2, 1])
     batch_tab_sel = _batch_col1.selectbox(
         "処理するタブ", ARTICLE_TABS, key="batch_tab_sel",
     )
     batch_db_type = _batch_col2.selectbox(
         "DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="batch_db_type",
     )
-    dry_run = _batch_col3.checkbox("ドライラン", help="APIを叩かず対象行だけ確認")
+    dry_run = st.toggle("ドライラン（APIを使わず対象行の確認のみ）", key="batch_dry_run")
 
     if st.button("🚀 実行開始", type="primary", use_container_width=True, key="run_batch"):
         creds_data = _get_gcp_creds(sheets_creds_file)
@@ -411,8 +411,8 @@ with _safe_tab(tab_custom):
     with col_left:
         st.subheader("基本情報")
         site_name = st.text_input("サイト名", key="t_site")
-        genre     = st.text_input("ジャンル", key="t_genre", placeholder="クマ取り / AGA治療 / 医療ダイエット")
-        main_kw   = st.text_input("メインKW", key="t_main_kw")
+        genre     = st.text_input("ジャンル ＊", key="t_genre", placeholder="クマ取り / AGA治療 / 医療ダイエット")
+        main_kw   = st.text_input("メインKW ＊", key="t_main_kw")
         sub_kw    = st.text_input("サブKW（カンマ区切り）", key="t_sub_kw")
         related_kw = st.text_area(
             "関連KW（任意・改行区切り）",
@@ -432,8 +432,6 @@ with _safe_tab(tab_custom):
                 disabled=True, key="t_default_preview",
                 label_visibility="collapsed",
             )
-        else:
-            st.caption("デフォルト：未設定（サイドバーで記事スプシを設定すると反映）")
 
         if "custom_blocks" not in st.session_state:
             st.session_state.custom_blocks = [{"text": "", "intent": ""}]
@@ -449,7 +447,7 @@ with _safe_tab(tab_custom):
             if len(st.session_state.custom_blocks) > 1 and cb_cols[1].button("✕", key=f"cb_rm_{i}"):
                 cb_to_remove.append(i)
             intent = st.text_area(
-                "　↑の意図・切り口（任意）",
+                "追加指示の意図（任意）",
                 value=cb["intent"], height=60, key=f"cb_intent_{i}",
                 placeholder="例：既存薬に慣れたユーザーが新鮮に受け取れるようにしたい",
             )
@@ -477,11 +475,11 @@ with _safe_tab(tab_custom):
         is_first = (i == 0)
         st.caption("案件 1（最上位）" if is_first else f"案件 {i + 1}")
         tc0, tc1, tc2 = st.columns([3, 3, 1])
-        n = tc0.text_input("案件名", value=c["name"],   key=f"tcn_{i}", placeholder="TCB東京中央美容外科")
-        d = tc1.text_input("ドメイン", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...")
+        n = tc0.text_input("案件名 ＊", value=c["name"],   key=f"tcn_{i}", placeholder="TCB東京中央美容外科")
+        d = tc1.text_input("ドメイン ＊", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...")
         if tc2.button("✕", key=f"trm_{i}") and len(st.session_state.test_clinics) > 1:
             to_remove.append(i)
-        rec_label = "最訴求プラン（マスト）" if is_first else "最訴求プラン（任意）"
+        rec_label = "最訴求プラン ＊" if is_first else "最訴求プラン（任意）"
         r = st.text_input(rec_label, value=c["recommended"], key=f"tcr_{i}", placeholder="例：セマグルチド0.5mgプラン / 人中短縮術")
         a = st.text_area("強み・比較優位性（任意）", value=c["appeal"], height=70, key=f"tca_{i}", placeholder="例：他社より処方量が1段階上から始められる。カウンセリングで確認済み")
         st.session_state.test_clinics[i] = {"name": n, "domain": d, "recommended": r, "appeal": a}
