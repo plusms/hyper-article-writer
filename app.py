@@ -903,7 +903,7 @@ with _safe_tab(tab_qual):
 # ════════════════════════════════════════════════════════
 with _safe_tab(tab_settings):
     st.title("⚙️ サイト設定")
-    st.caption("サイト別のカラー・トンマナ・画像テンプレート・HTMLパーツを登録します。")
+    st.caption("サイト別の画像テンプレート・HTMLパーツを登録します。")
 
     sites_list = site_config_manager.list_sites()
     col_left4, col_right4 = st.columns([1, 2])
@@ -932,53 +932,81 @@ with _safe_tab(tab_settings):
         else:
             st.subheader(f"「{_current_site4}」の設定")
 
+            # ── 1. 画像テンプレート ──────────────────────────────────
+            st.markdown("### 🖼️ 1. 画像テンプレート")
+            _existing_tmpls = _config4.get("image_templates", [])
+            _is_custom = bool(_existing_tmpls) and "base_prompt" in _existing_tmpls[0]
+            _img_mode = st.radio(
+                "設定方法",
+                ["layout", "upload"],
+                index=1 if _is_custom else 0,
+                format_func=lambda x: "組み込みレイアウトから選ぶ" if x == "layout" else "見本画像からカスタム生成",
+                horizontal=True,
+                key=f"img_mode_{_current_site4}",
+                label_visibility="collapsed",
+            )
+
+            if _img_mode == "layout":
+                _current_layout = (
+                    _existing_tmpls[0].get("layout_type", "side_by_side_3")
+                    if _existing_tmpls and "layout_type" in _existing_tmpls[0] else "side_by_side_3"
+                )
+                _layout_keys = list(image_generator.BUILTIN_TEMPLATES.keys())
+                _selected_layout = st.radio(
+                    "レイアウト",
+                    _layout_keys,
+                    index=_layout_keys.index(_current_layout) if _current_layout in _layout_keys else 0,
+                    format_func=lambda k: image_generator.BUILTIN_TEMPLATES[k]["name"],
+                    key=f"img_layout_{_current_site4}",
+                    label_visibility="collapsed",
+                )
+                with st.expander("選択中のプロンプトを確認"):
+                    st.code(image_generator.BUILTIN_TEMPLATES[_selected_layout]["base_prompt"], language="")
+                if st.button("💾 このレイアウトで保存", key=f"btn_save_layout_{_current_site4}"):
+                    _cfg_now = site_config_manager.load_site_config(_current_site4)
+                    _cfg_now["image_templates"] = [{"layout_type": _selected_layout}]
+                    if site_config_manager.save_site_config(_current_site4, _cfg_now):
+                        st.success("保存しました。")
+                        st.rerun()
+                    else:
+                        st.error("保存に失敗しました。")
+
+            else:
+                st.caption("見本画像をアップすると、構造・デザインを解析してカスタムテンプレートを生成・保存します。")
+                _t4_img_upload = st.file_uploader(
+                    "画像をアップ（jpg / png / webp）",
+                    type=["jpg", "jpeg", "png", "webp"],
+                    key=f"t4_img_upload_{_current_site4}",
+                )
+                if _t4_img_upload is not None:
+                    st.image(_t4_img_upload, width=400)
+                    if st.button("✨ テンプレートを自動生成して保存", key=f"btn_gen_tmpl_{_current_site4}", type="primary"):
+                        if not claude_key:
+                            st.error("Claude API Key が未設定です（サイドバーから入力してください）")
+                        else:
+                            with st.spinner("画像を解析中..."):
+                                try:
+                                    _t4_img_upload.seek(0)
+                                    _t4_mime = _t4_img_upload.type or "image/png"
+                                    _t4_img_bytes = _t4_img_upload.read()
+                                    _cfg_now = site_config_manager.load_site_config(_current_site4)
+                                    _t4_generated = image_generator.generate_template_from_image(
+                                        _t4_img_bytes, _t4_mime, _cfg_now, claude_key
+                                    )
+                                    _cfg_now["image_templates"] = [{"base_prompt": _t4_generated}]
+                                    if site_config_manager.save_site_config(_current_site4, _cfg_now):
+                                        st.success("✅ テンプレートを保存しました。")
+                                        st.rerun()
+                                    else:
+                                        st.error("保存に失敗しました。")
+                                except Exception as _t4_e:
+                                    st.error(f"生成エラー: {_t4_e}")
+
+            st.markdown("---")
+
+            # ── 2. HTMLパーツ ────────────────────────────────────────
             with st.form(f"site_form_{_current_site4}"):
-
-                # ── 1. カラー設定 ────────────────────────────────────
-                st.markdown("### 🎨 1. カラー設定")
-                st.caption("画像プロンプト内で使用する色。デフォルトはティール系カラー。")
-                _colors4 = _config4.get("design_rules", {}).get("colors", {})
-                _cc1, _cc2, _cc3, _cc4 = st.columns(4)
-                with _cc1:
-                    _color_main  = st.color_picker("メイン",       value=_colors4.get("main",          "#47c1d3"), key=f"color_main_{_current_site4}")
-                    _color_text  = st.color_picker("テキスト",     value=_colors4.get("text",          "#333333"), key=f"color_text_{_current_site4}")
-                with _cc2:
-                    _color_acc_r = st.color_picker("アクセント赤", value=_colors4.get("accent_red",    "#fe766b"), key=f"color_acc_r_{_current_site4}")
-                    _color_bg_w  = st.color_picker("背景白",       value=_colors4.get("bg_white",      "#FFFFFF"), key=f"color_bg_w_{_current_site4}")
-                with _cc3:
-                    _color_acc_y = st.color_picker("アクセント黄", value=_colors4.get("accent_yellow", "#ffd711"), key=f"color_acc_y_{_current_site4}")
-                    _color_bg_g  = st.color_picker("背景グレー",   value=_colors4.get("bg_gray",       "#eeeeee"), key=f"color_bg_g_{_current_site4}")
-                with _cc4:
-                    _color_acc_o = st.color_picker("アクセント橙", value=_colors4.get("accent_orange", "#fd9b23"), key=f"color_acc_o_{_current_site4}")
-                st.markdown("---")
-
-                # ── 2. トンマナ ──────────────────────────────────────
-                st.markdown("### 📝 2. トンマナ")
-                _tone4 = st.text_input(
-                    "画像トンマナ（AIへの指示）",
-                    value=_config4.get("design_rules", {}).get("tone", ""),
-                    placeholder="医療的でクリーン、ビジネスライク、など",
-                    key=f"tone_{_current_site4}",
-                )
-                st.markdown("---")
-
-                # ── 3. 画像テンプレート管理 ──────────────────────────
-                st.markdown("### 🖼️ 3. 画像テンプレート（ベースプロンプト）")
-                st.caption("見本画像から自動生成するか、直接入力してください。記事生成時の画像プロンプトのベースになります。")
-                _existing_tmpls = _config4.get("image_templates", [])
-                _default_base = _existing_tmpls[0].get("base_prompt", "") if _existing_tmpls else ""
-                _img_base_prompt = st.text_area(
-                    "ベースプロンプト",
-                    value=_default_base,
-                    key=f"img_prompt_{_current_site4}",
-                    height=250,
-                    placeholder="下の「見本画像から自動生成」ボタンで生成するか、直接入力してください。",
-                )
-                _updated_tmpls = [{"base_prompt": _img_base_prompt}] if _img_base_prompt.strip() else []
-                st.markdown("---")
-
-                # ── 4. HTMLパーツ ────────────────────────────────────
-                st.markdown("### 🧩 4. HTMLパーツ")
+                st.markdown("### 🧩 2. HTMLパーツ")
                 st.caption("パーツ置き場のHTMLファイルをアップすると自動でパーツ一覧を取り込めます。")
                 _parts_upload = st.file_uploader(
                     "パーツ置き場HTML（.html / .htm）",
@@ -1038,112 +1066,13 @@ with _safe_tab(tab_settings):
                 _submitted4 = st.form_submit_button("💾 設定を保存する", type="primary")
 
             if _submitted4:
-                _new_config4 = {
-                    "design_rules": {
-                        "tone": _tone4,
-                        "colors": {
-                            "main":          _color_main,
-                            "accent_red":    _color_acc_r,
-                            "accent_yellow": _color_acc_y,
-                            "accent_orange": _color_acc_o,
-                            "bg_white":      _color_bg_w,
-                            "bg_gray":       _color_bg_g,
-                            "text":          _color_text,
-                        },
-                    },
-                    "image_templates": _updated_tmpls,
-                    "components": _updated_comps,
-                    "clinic_block_templates": _config4.get("clinic_block_templates", []),  # 既存値を保持
-                }
-                if site_config_manager.save_site_config(_current_site4, _new_config4):
-                    st.session_state.pop("t4_generated_tmpl", None)
+                _cfg_now = site_config_manager.load_site_config(_current_site4)
+                _cfg_now["components"] = _updated_comps
+                if site_config_manager.save_site_config(_current_site4, _cfg_now):
                     st.success(f"「{_current_site4}」の設定を保存しました。")
                     st.rerun()
                 else:
                     st.error("保存に失敗しました。")
-
-            # ── 見本画像からテンプレート自動生成 ──────────────────────
-            st.markdown("---")
-            st.markdown("### 📷 見本画像からテンプレート自動生成")
-            st.caption("見本画像をアップすると、構造・デザインを解析してテンプレートとトンマナを自動で保存します。")
-
-            _t4_img_upload = st.file_uploader(
-                "画像をアップ（jpg / png / webp）",
-                type=["jpg", "jpeg", "png", "webp"],
-                key=f"t4_img_upload_{_current_site4}",
-            )
-            if _t4_img_upload is not None:
-                st.image(_t4_img_upload, width=400)
-                if st.button("✨ テンプレートを自動生成して保存", key=f"btn_gen_tmpl_{_current_site4}", type="primary"):
-                    if not claude_key:
-                        st.error("Claude API Key が未設定です（サイドバーから入力してください）")
-                    else:
-                        with st.spinner("画像を解析中..."):
-                            try:
-                                _t4_img_upload.seek(0)
-                                _t4_mime = _t4_img_upload.type or "image/png"
-                                _t4_img_bytes = _t4_img_upload.read()
-                                _cfg_now = site_config_manager.load_site_config(_current_site4)
-                                _t4_generated = image_generator.generate_template_from_image(
-                                    _t4_img_bytes, _t4_mime, _cfg_now, claude_key
-                                )
-                                _t4_tone = image_generator.generate_tone_from_image(
-                                    _t4_img_bytes, _t4_mime, claude_key
-                                )
-                                _cfg_now["image_templates"] = [{"base_prompt": _t4_generated}]
-                                _cfg_now.setdefault("design_rules", {})["tone"] = _t4_tone
-                                if site_config_manager.save_site_config(_current_site4, _cfg_now):
-                                    st.success(f"✅ テンプレートとトンマナ（{_t4_tone}）を保存しました。ページを確認してください。")
-                                    st.rerun()
-                                else:
-                                    st.error("保存に失敗しました。")
-                            except Exception as _t4_e:
-                                st.error(f"生成エラー: {_t4_e}")
-
-            # ── 画像プレビュー生成 ───────────────────────────────────
-            st.markdown("---")
-            st.markdown("### 🎨 画像プレビュー生成")
-            st.caption("テンプレートのプロンプトで実際の画像をプレビューできます。{{変数}} は実際の値に書き換えてから生成してください。")
-
-            _preview_config = site_config_manager.load_site_config(_current_site4)
-            _preview_tmpls = _preview_config.get("image_templates", [])
-            if not _preview_tmpls:
-                st.info("テンプレートがまだ登録されていません。上の設定から保存するか、見本画像から自動生成してください。")
-            else:
-                _preview_prompt = st.text_area(
-                    "プロンプト（{{変数}} を実際の値に書き換えてから生成）",
-                    value=_preview_tmpls[0].get("base_prompt", ""),
-                    height=300,
-                    key=f"preview_prompt_{_current_site4}",
-                )
-                _col_prev_btn, _col_prev_info = st.columns([1, 3])
-                with _col_prev_btn:
-                    _run_preview = st.button("🎨 プレビュー生成", key=f"btn_preview_{_current_site4}", type="primary")
-                with _col_prev_info:
-                    st.caption(f"生成AI: {'DALL-E 3' if image_provider == 'dalle' else 'Gemini'}")
-
-                if _run_preview:
-                    _prev_key_ok = openai_key if image_provider == "dalle" else gemini_key
-                    _prev_key_label = "OpenAI API Key" if image_provider == "dalle" else "Gemini API Key"
-                    if not _prev_key_ok:
-                        st.error(f"{_prev_key_label} が未設定です（サイドバーから入力してください）")
-                    elif not _preview_prompt.strip():
-                        st.error("プロンプトを入力してください")
-                    else:
-                        with st.spinner("画像生成中..."):
-                            try:
-                                _prev_bytes = image_generator.generate_image_preview(
-                                    _preview_prompt,
-                                    gemini_api_key=gemini_key,
-                                    openai_api_key=openai_key,
-                                    provider=image_provider,
-                                )
-                                if _prev_bytes:
-                                    st.image(_prev_bytes, caption="生成プレビュー", use_container_width=True)
-                                else:
-                                    st.error("画像データが取得できませんでした")
-                            except Exception as _prev_e:
-                                st.error(f"生成エラー: {_prev_e}")
 
             # ── クリニックブロックテンプレート管理 ─────────────────────
             st.markdown("---")
