@@ -447,7 +447,7 @@ def _build_body_prompt(
 {h2_scope}
 
 【クリニック情報（このデータのみ使用・補完・推測禁止）】
-{clinic_info_text[:3000] if clinic_info_text else "（情報なし）"}
+{clinic_info_text[:12000] if clinic_info_text else "（情報なし）"}
 
 {WRITING_RULES}
 {type_instruction}
