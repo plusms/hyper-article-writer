@@ -326,7 +326,7 @@ def _get_fields(db_type: str) -> str:
     return _LIFESTYLE_FIELDS if db_type == DB_TYPE_LIFESTYLE else _CLINIC_FIELDS
 
 
-def extract_clinic_info_from_content(content: str, name: str, genre: str, claude_api_key: str, db_type: str = DB_TYPE_CLINIC) -> str:
+def extract_clinic_info_from_content(content: str, name: str, genre: str, claude_api_key: str, db_type: str = DB_TYPE_CLINIC, gemini_api_key: str = "", research_provider: str = "claude") -> str:
     """クロール済みコンテンツから指定ジャンルの情報を抽出する。案件DB保存用。"""
     fields = _get_fields(db_type)
     genre_note = (
@@ -342,7 +342,7 @@ def extract_clinic_info_from_content(content: str, name: str, genre: str, claude
 
 【{name}】
 {fields}"""
-    return _claude_call(claude_api_key, prompt, max_tokens=8192, model="claude-sonnet-4-6")
+    return _research_call(prompt, claude_api_key, gemini_api_key, research_provider, max_tokens=8192)
 
 
 def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None, full_crawl: bool = False, db_type: str = DB_TYPE_CLINIC, gemini_api_key: str = "", research_provider: str = "claude") -> dict:
@@ -375,7 +375,7 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
 
 【{name}】
 {fields}"""
-            scraped_results[name] = _claude_call(claude_api_key, prompt, max_tokens=8192, model="claude-sonnet-4-6")
+            scraped_results[name] = _research_call(prompt, claude_api_key, gemini_api_key, research_provider, max_tokens=8192)
     else:
         # 記事生成時：従来通り main + 料金ページのみ、一括抽出
         fetched = {}

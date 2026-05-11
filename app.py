@@ -1476,8 +1476,9 @@ with _safe_tab(tab_cases):
                         _eu_content = fetch_page_text(_eu)
                         if not _eu_content.startswith("[取得失敗"):
                             _content_new += f"\n\n--- 追加URL: {_eu} ---\n{_eu_content}"
-                    st.write(f"🤖 「{_genre_new}」向けに情報抽出中（Sonnet）...")
-                    _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel)
+                    _provider_label_db = "Gemini Flash" if research_provider == "gemini" else "Claude Sonnet"
+                    st.write(f"🤖 「{_genre_new}」向けに情報抽出中（{_provider_label_db}）...")
+                    _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider)
                     clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, creds_data=_db_creds, sheet_url=_active_db_url)
                     _add_status.update(label=f"✅ 「{_name_new}」を「{_genre_new}」に追加しました", state="complete")
                     st.rerun()
@@ -1520,7 +1521,7 @@ with _safe_tab(tab_cases):
                                         _start = _dom if _dom.startswith("http") else f"https://{_dom}"
                                         _content_b = crawl_site(_start, _clinic_genres_all[0] if _clinic_genres_all else "", max_pages=20)
                                         for _cg in _clinic_genres_all:
-                                            _ci = extract_clinic_info_from_content(_content_b, _dn, _cg, claude_key, db_type=_db_type_sel)
+                                            _ci = extract_clinic_info_from_content(_content_b, _dn, _cg, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider)
                                             clinic_db_manager.upsert_clinic(_dn, _dom, _cg, _ci, creds_data=_db_creds, sheet_url=_active_db_url)
                                         st.write("　→ ✅ 完了")
                                     except Exception as _be:
@@ -1567,7 +1568,7 @@ with _safe_tab(tab_cases):
                                             _start2 = _dom2 if _dom2.startswith("http") else f"https://{_dom2}"
                                             _content2 = crawl_site(_start2, _clinic_genres2[0] if _clinic_genres2 else "", max_pages=20)
                                             for _cg2 in _clinic_genres2:
-                                                _ci2 = extract_clinic_info_from_content(_content2, _dn, _cg2, claude_key, db_type=_db_type_sel)
+                                                _ci2 = extract_clinic_info_from_content(_content2, _dn, _cg2, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider)
                                                 clinic_db_manager.upsert_clinic(_dn, _dom2, _cg2, _ci2, creds_data=_db_creds, sheet_url=_active_db_url)
                                             st.success(f"再取得完了（{len(_clinic_genres2)} ジャンル更新）")
                                             st.rerun()
