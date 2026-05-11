@@ -111,8 +111,14 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
         "※記事構成の中でこのプランを最上位に配置してください。"
     ) if inputs.get("recommended") else ""
 
+    _clinic_count = inputs.get("clinic_count", 0)
+    if _clinic_count > 0:
+        _count_rule = f"掲載院数：{_clinic_count}院（厳守。おすすめクリニック紹介H2に{_clinic_count}院分のH3を設けること）"
+    else:
+        _count_rule = "掲載院数：競合の掲載院数に合わせること（競合分析を参照して適切な院数を判断）"
     clinics_note = (
-        "\n【クリニック紹介の制約】\n"
+        f"\n【クリニック紹介の制約】\n"
+        f"{_count_rule}\n"
         "紹介するクリニックは以下のリストに限定する。\n"
         "リスト外のクリニックの[要確認]セクションは出力しない。\n"
         "クリニックが0件の場合、クリニック紹介H2自体を設けない。"

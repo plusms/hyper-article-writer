@@ -467,7 +467,16 @@ with _safe_tab(tab_custom):
     selected_topics = _render_topic_checkboxes(article_type, key_prefix="t")
 
     st.divider()
-    st.subheader("掲載案件")
+    _ca_col1, _ca_col2 = st.columns([3, 1])
+    _ca_col1.subheader("掲載案件")
+    _ca_col2.markdown("<div style='padding-top:0.5rem'></div>", unsafe_allow_html=True)
+    clinic_count = int(_ca_col2.number_input(
+        "院数（任意）",
+        min_value=0, value=0, step=1,
+        key="t_clinic_count",
+        help="空白(0)にすると競合の掲載院数に自動で合わせます。指定すると必ずその院数で記事を生成します。",
+    ))
+    st.caption("※ここに入力した院は必ず記事に掲載されます。空欄のままでも自動探索で補完されます。")
     if "test_clinics" not in st.session_state:
         st.session_state.test_clinics = [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
     for _c in st.session_state.test_clinics:
@@ -557,6 +566,7 @@ with _safe_tab(tab_custom):
                 "competitor_urls": competitor_urls,
                 "selected_topics": selected_topics,
                 "user_awareness":  st.session_state.get("t_user_awareness", "").strip(),
+                "clinic_count":    clinic_count,
             }
             with st.status("生成中...", expanded=True) as s:
                 try:
@@ -571,6 +581,10 @@ with _safe_tab(tab_custom):
                         discovered = auto_discover_clinics(
                             main_kw, genre, claude_key, valid_clinics, gemini_api_key=gemini_key, research_provider=research_provider
                         )
+                    # 院数制限：valid_clinics（必須）は常に保持、discoveredをトリム
+                    if clinic_count > 0:
+                        n_discover = max(0, clinic_count - len(valid_clinics))
+                        discovered = discovered[:n_discover]
                     all_clinics = valid_clinics + discovered
                     if discovered:
                         st.write(f"　→ {len(discovered)} 件を自動追加: {', '.join(c['name'] for c in discovered)}")
@@ -1233,10 +1247,14 @@ with _safe_tab(tab_rank):
 
     st.divider()
 
-    _cb_kw_col1, _cb_kw_col2, _cb_kw_col3 = st.columns([3, 3, 1])
+    _cb_kw_col1, _cb_kw_col2, _cb_kw_col3, _cb_kw_col4 = st.columns([3, 3, 1, 1])
     _cb_main_kw = _cb_kw_col1.text_input("メインKW", key="cb_main_kw")
     _cb_sub_kw  = _cb_kw_col2.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
     _cb_db_type = _cb_kw_col3.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
+    _cb_clinic_count = int(_cb_kw_col4.number_input(
+        "院数（任意）", min_value=0, value=0, step=1, key="cb_clinic_count",
+        help="生成するブロック数を指定。0で全件生成。記事の掲載院数と揃えてください。",
+    ))
     _cb_criteria = st.text_area(
         "記事内の「選び方」セクション（文章をそのまま貼り付け）",
         height=120, key="cb_criteria",
@@ -1333,8 +1351,9 @@ with _safe_tab(tab_rank):
                     _cb_site_parts = site_config_manager.format_site_parts(_cb_site_cfg.get("components", []))
 
                 _cb_results = []
+                _cb_clinics_to_gen = _cb_clinics[:_cb_clinic_count] if _cb_clinic_count > 0 else _cb_clinics
                 with st.status("クリニックブロック生成中...", expanded=True) as _cb_status:
-                    for _cbc in _cb_clinics:
+                    for _cbc in _cb_clinics_to_gen:
                         _r = _cbc["rank"]
                         _clinic_url = st.session_state.get(f"cb_url_{_r}", _cbc.get("url", ""))
                         _link_url = st.session_state.get(f"cb_link_{_r}", _clinic_url)

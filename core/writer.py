@@ -372,6 +372,12 @@ def _build_body_prompt(
     if inputs.get("custom_intent", "").strip():
         custom_intent_note = f"【追加指示の意図・切り口】\n{inputs['custom_intent']}\n※追加指示をこの意図・切り口で本文に組み込む。\n"
 
+    _clinic_count = inputs.get("clinic_count", 0)
+    if _clinic_count > 0:
+        _count_instruction = f"掲載院数：{_clinic_count}院（紹介H2内のH3をちょうど{_clinic_count}個にすること）\n"
+    else:
+        _count_instruction = "掲載院数：競合の掲載院数に合わせた適切な数（多すぎず少なすぎず）\n"
+
     if article_type == "商標" and len(clinic_names) == 1:
         clinic_restriction = (
             f"【掲載クリニック（1院専用）】\n"
@@ -382,6 +388,7 @@ def _build_body_prompt(
     elif clinic_names:
         clinic_restriction = (
             f"【クリニック紹介の制約】\n"
+            f"{_count_instruction}"
             f"紹介できるクリニック：{', '.join(clinic_names)}\n"
             "このリスト以外のクリニックは紹介しない。[要確認]としても出力しない。\n"
         )
