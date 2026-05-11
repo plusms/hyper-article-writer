@@ -606,8 +606,8 @@ with _safe_tab(tab_custom):
                             "main_kw":        main_kw,
                             "sub_kw":         sub_kw,
                             "related_kw":     related_kw,
-                            "recommended":    recommended,
-                            "custom_block":   additional_block,
+                            "recommended":    inputs["recommended"],
+                            "custom_block":   combined_block,
                             "clinics":        valid_clinics,
                             "competitor_urls": competitor_urls,
                         },
@@ -1080,7 +1080,7 @@ with _safe_tab(tab_settings):
 
             # ── クリニックブロックテンプレート管理 ─────────────────────
             st.markdown("---")
-            st.markdown("### 🏥 6. クリニックブロックテンプレート")
+            st.markdown("### 🏥 3. クリニックブロックテンプレート")
             st.caption("おすすめクリニック紹介ブロックの構成・形式をテンプレートとして登録します。")
 
             _existing_cb_tmpls = _config4.get("clinic_block_templates", [])
