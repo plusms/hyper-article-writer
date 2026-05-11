@@ -372,6 +372,11 @@ def _build_body_prompt(
     if inputs.get("custom_intent", "").strip():
         custom_intent_note = f"【追加指示の意図・切り口】\n{inputs['custom_intent']}\n※追加指示をこの意図・切り口で本文に組み込む。\n"
 
+    custom_block_note = (
+        f"【追加指示（厳守）】\n{inputs['custom_block']}\n"
+        "※この指示を本文全体に反映すること。禁止事項は一切言及・記述しない。\n"
+    ) if inputs.get("custom_block", "").strip() else ""
+
     _clinic_count = inputs.get("clinic_count", 0)
     if _clinic_count > 0:
         _count_instruction = f"掲載院数：{_clinic_count}院（紹介H2内のH3をちょうど{_clinic_count}個にすること）\n"
@@ -462,7 +467,7 @@ def _build_body_prompt(
 【{type_context}】
 【メインKW】{inputs['main_kw']}
 【サブKW】{', '.join(inputs['sub_kw'])}
-{recommended_note}{appeal_note}{user_awareness_note}{custom_intent_note}{clinic_context_note}
+{custom_block_note}{recommended_note}{appeal_note}{user_awareness_note}{custom_intent_note}{clinic_context_note}
 {clinic_restriction}
 {competitor_note}
 【記事全体の構成（把握用）】
