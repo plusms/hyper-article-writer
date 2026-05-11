@@ -59,6 +59,7 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
 _claude_key_default  = _secret("CLAUDE_API_KEY")
 _gemini_key_default  = _secret("GEMINI_API_KEY")
 _drive_folder_id          = _secret("DRIVE_PARENT_FOLDER_ID", "1CHqNruWiOVdeJPs7Nyd3Nfjt3sLxMc2c")
+_site_cfg_parent_folder   = _secret("SITE_CONFIG_FOLDER_ID") or _drive_folder_id
 _article_sheet_url_default    = _secret("ARTICLE_SHEET_URL")
 _db_sheet_url_default         = _secret("CLINIC_DB_SHEET_URL")
 _lifestyle_sheet_url_default  = _secret("LIFESTYLE_DB_SHEET_URL")
@@ -329,8 +330,8 @@ with _safe_tab(tab_batch):
                         # サイトパーツ読み込み（site_nameが登録済みサイトと一致する場合のみ）
                         _batch_site_parts = ""
                         _batch_site_name = inputs.get("site_name", "")
-                        if _batch_site_name and _batch_site_name in site_config_manager.list_sites(_site_cfg_creds, _drive_folder_id):
-                            _sc = site_config_manager.load_site_config(_batch_site_name, _site_cfg_creds, _drive_folder_id)
+                        if _batch_site_name and _batch_site_name in site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder):
+                            _sc = site_config_manager.load_site_config(_batch_site_name, _site_cfg_creds, _site_cfg_parent_folder)
                             _batch_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
 
                         comp   = analyze_competitors(inputs["competitor_urls"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
@@ -377,7 +378,7 @@ with _safe_tab(tab_custom):
     st.caption("CV記事（地域・比較・商標）およびノウハウの単発生成。設定タブのデフォルト追加指示を自動適用します。")
 
     # ── サイトパーツ選択 ──────────────────────────────────
-    _registered_sites = site_config_manager.list_sites(_site_cfg_creds, _drive_folder_id)
+    _registered_sites = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
     _site_options = ["（なし）"] + _registered_sites
     selected_site_for_parts = st.selectbox(
         "サイトパーツを使用する",
@@ -386,7 +387,7 @@ with _safe_tab(tab_custom):
         help="登録済みサイトを選ぶと、そのサイトのHTMLパーツを記事生成に使用します。",
     )
     if selected_site_for_parts != "（なし）":
-        _preview_cfg = site_config_manager.load_site_config(selected_site_for_parts, _site_cfg_creds, _drive_folder_id)
+        _preview_cfg = site_config_manager.load_site_config(selected_site_for_parts, _site_cfg_creds, _site_cfg_parent_folder)
         _active_count = sum(1 for c in _preview_cfg.get("components", []) if c.get("active", True))
         st.caption(f"✅ {selected_site_for_parts}：有効パーツ {_active_count} 件")
 
@@ -533,7 +534,7 @@ with _safe_tab(tab_custom):
             _single_site_parts = ""
             _single_site_config = {}
             if selected_site_for_parts != "（なし）":
-                _sc = site_config_manager.load_site_config(selected_site_for_parts, _site_cfg_creds, _drive_folder_id)
+                _sc = site_config_manager.load_site_config(selected_site_for_parts, _site_cfg_creds, _site_cfg_parent_folder)
                 _single_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
                 _single_site_config = _sc
 
@@ -908,7 +909,7 @@ with _safe_tab(tab_settings):
     st.title("⚙️ サイト設定")
     st.caption("サイト別の画像テンプレート・HTMLパーツを登録します。")
 
-    sites_list = site_config_manager.list_sites(_site_cfg_creds, _drive_folder_id)
+    sites_list = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
     col_left4, col_right4 = st.columns([1, 2])
 
     with col_left4:
@@ -922,10 +923,10 @@ with _safe_tab(tab_settings):
             _config4 = site_config_manager.get_default_site_config()
         else:
             _current_site4 = _selected4
-            _config4 = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _drive_folder_id)
+            _config4 = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
             st.markdown("---")
             if st.button("🗑️ このサイトを削除", key="cfg_del"):
-                site_config_manager.delete_site_config(_current_site4, _site_cfg_creds, _drive_folder_id)
+                site_config_manager.delete_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
                 st.success(f"「{_current_site4}」を削除しました")
                 st.rerun()
 
@@ -966,9 +967,9 @@ with _safe_tab(tab_settings):
                 with st.expander("選択中のプロンプトを確認"):
                     st.code(image_generator.BUILTIN_TEMPLATES[_selected_layout]["base_prompt"], language="")
                 if st.button("💾 このレイアウトで保存", key=f"btn_save_layout_{_current_site4}"):
-                    _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _drive_folder_id)
+                    _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
                     _cfg_now["image_templates"] = [{"layout_type": _selected_layout}]
-                    if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _drive_folder_id):
+                    if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
                         st.success("保存しました。")
                         st.rerun()
                     else:
@@ -992,12 +993,12 @@ with _safe_tab(tab_settings):
                                     _t4_img_upload.seek(0)
                                     _t4_mime = _t4_img_upload.type or "image/png"
                                     _t4_img_bytes = _t4_img_upload.read()
-                                    _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _drive_folder_id)
+                                    _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
                                     _t4_generated = image_generator.generate_template_from_image(
                                         _t4_img_bytes, _t4_mime, _cfg_now, claude_key
                                     )
                                     _cfg_now["image_templates"] = [{"base_prompt": _t4_generated}]
-                                    if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _drive_folder_id):
+                                    if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
                                         st.success("✅ テンプレートを保存しました。")
                                         st.rerun()
                                     else:
@@ -1031,14 +1032,14 @@ with _safe_tab(tab_settings):
                     horizontal=True,
                 )
                 if st.button("✅ このパーツ一覧をインポートする", key=f"parts_import_btn_{_current_site4}", type="primary"):
-                    _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _drive_folder_id)
+                    _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
                     if "追記" in _import_mode:
                         _existing_names = {c["name"] for c in _cfg_now.get("components", [])}
                         _merged = _cfg_now.get("components", []) + [c for c in _parsed_components if c["name"] not in _existing_names]
                         _cfg_now["components"] = _merged
                     else:
                         _cfg_now["components"] = _parsed_components
-                    if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _drive_folder_id):
+                    if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
                         st.success(f"{len(_parsed_components)} 件をインポートしました。ページをリロードして確認してください。")
                         st.rerun()
                     else:
@@ -1069,9 +1070,9 @@ with _safe_tab(tab_settings):
                 _submitted4 = st.form_submit_button("💾 設定を保存する", type="primary")
 
             if _submitted4:
-                _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _drive_folder_id)
+                _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
                 _cfg_now["components"] = _updated_comps
-                if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _drive_folder_id):
+                if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
                     st.success(f"「{_current_site4}」の設定を保存しました。")
                     st.rerun()
                 else:
@@ -1190,9 +1191,9 @@ with _safe_tab(tab_settings):
                 _cb_submitted = st.form_submit_button("💾 クリニックブロックテンプレートを保存", type="primary")
 
             if _cb_submitted:
-                _cb_save_config = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _drive_folder_id)
+                _cb_save_config = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
                 _cb_save_config["clinic_block_templates"] = _updated_cb_tmpls
-                if site_config_manager.save_site_config(_current_site4, _cb_save_config, _site_cfg_creds, _drive_folder_id):
+                if site_config_manager.save_site_config(_current_site4, _cb_save_config, _site_cfg_creds, _site_cfg_parent_folder):
                     st.success("クリニックブロックテンプレートを保存しました。")
                     st.rerun()
                 else:
@@ -1206,7 +1207,7 @@ with _safe_tab(tab_rank):
     st.title("🏥 ランキングブロック")
     st.caption("おすすめ紹介ブロックのHTMLを案件ごとに生成します。「カスタム記事作成」タブの「掲載院一覧」をコピペして使ってください。")
 
-    _cb_sites = site_config_manager.list_sites(_site_cfg_creds, _drive_folder_id)
+    _cb_sites = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
     _cb_site_opts = ["（なし）"] + _cb_sites
     _cb_sel_site = st.selectbox("サイトを選択（テンプレート読込）", _cb_site_opts, key="cb_site_sel")
 
@@ -1214,7 +1215,7 @@ with _safe_tab(tab_rank):
     _cb_templates = []
     _cb_template_names = []
     if _cb_sel_site != "（なし）":
-        _cb_site_cfg = site_config_manager.load_site_config(_cb_sel_site, _site_cfg_creds, _drive_folder_id)
+        _cb_site_cfg = site_config_manager.load_site_config(_cb_sel_site, _site_cfg_creds, _site_cfg_parent_folder)
         _cb_templates = _cb_site_cfg.get("clinic_block_templates", [])
         _cb_template_names = [t.get("name", f"テンプレート{i+1}") for i, t in enumerate(_cb_templates)]
 
