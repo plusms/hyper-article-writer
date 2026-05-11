@@ -610,6 +610,8 @@ with _safe_tab(tab_custom):
                     _t2_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in all_clinics], genre=genre, creds_data=_t2_db_creds, sheet_url=_t2_active_db_url)
                     if _t2_db_cache:
                         st.write(f"　→ DB参照: {len(_t2_db_cache)} 案件（スクレイピングスキップ）")
+                    else:
+                        st.write(f"　→ DBヒット: 0件（スクレイピングで取得）")
                     clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache, db_type=custom_db_type, gemini_api_key=gemini_key, research_provider=research_provider)
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)

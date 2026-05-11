@@ -312,7 +312,7 @@ def parse_parts_page(html_content: str) -> List[Dict[str, Any]]:
 
 
 def format_site_parts(components: List[Dict[str, Any]]) -> str:
-    active = [c for c in components if c.get("active", True)]
+    active = [c for c in components if c.get("active", True) and c.get("pattern", "").strip()]
     if not active:
         return ""
     lines = [

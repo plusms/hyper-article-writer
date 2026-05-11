@@ -132,19 +132,29 @@ def delete_clinic(name: str, genre: str = "", creds_data=None, sheet_url=None) -
 
 
 def build_db_cache(clinic_names: list, genre: str = "", creds_data=None, sheet_url=None) -> dict:
-    """指定ジャンルのDBから案件名リストに一致するものだけ {name: info_str} で返す。"""
+    """指定ジャンルのDBから案件名リストに一致するものだけ {name: info_str} で返す。
+    ジャンル指定があれば先にそのタブを検索し、ヒットしなかった院は全ジャンル横断で再検索する。
+    """
+    result: dict = {}
+    remaining = list(clinic_names)
+
     if genre:
         flat = load_db(creds_data, sheet_url, genre=genre)
-        return {n: flat[n]["info"] for n in clinic_names if n in flat and flat[n].get("info")}
-    nested = load_db(creds_data, sheet_url)
-    result = {}
-    for name in clinic_names:
-        for genre_entries in nested.values():
-            if isinstance(genre_entries, dict) and name in genre_entries:
-                info = genre_entries[name].get("info", "")
-                if info:
-                    result[name] = info
-                    break
+        for name in clinic_names:
+            if name in flat and flat[name].get("info"):
+                result[name] = flat[name]["info"]
+                remaining.remove(name)
+
+    if remaining:
+        nested = load_db(creds_data, sheet_url)
+        for name in remaining:
+            for genre_entries in nested.values():
+                if isinstance(genre_entries, dict) and name in genre_entries:
+                    info = genre_entries[name].get("info", "")
+                    if info:
+                        result[name] = info
+                        break
+
     return result
 
 
