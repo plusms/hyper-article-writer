@@ -35,7 +35,11 @@ ARTICLE_TABS = ["ノウハウ", "地域", "比較", "商標"]
 def get_sheet(sheet_url: str, creds_data: dict, tab_name: str = "") -> gspread.Worksheet:
     creds = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
     gc = gspread.authorize(creds)
-    ss = gc.open_by_url(sheet_url)
+    sheet_url = sheet_url.strip()
+    if sheet_url.startswith("http"):
+        ss = gc.open_by_url(sheet_url)
+    else:
+        ss = gc.open_by_key(sheet_url)
     if not tab_name:
         return ss.sheet1
     try:
