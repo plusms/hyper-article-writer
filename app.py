@@ -588,6 +588,21 @@ with _safe_tab(tab_custom):
                     all_clinics = valid_clinics + discovered
                     if discovered:
                         st.write(f"　→ {len(discovered)} 件を自動追加: {', '.join(c['name'] for c in discovered)}")
+                    # 院数不足の場合：auto_discoverで補完 → それでも足りなければ指定数を実際の数に下げる
+                    if clinic_count > 0 and len(all_clinics) < clinic_count:
+                        _shortfall = clinic_count - len(all_clinics)
+                        st.write(f"　→ {_shortfall} 件不足のため追加探索中...")
+                        _extra = auto_discover_clinics(
+                            main_kw, genre, claude_key, all_clinics,
+                            gemini_api_key=gemini_key, research_provider=research_provider
+                        )
+                        all_clinics = all_clinics + _extra[:_shortfall]
+                        if _extra:
+                            st.write(f"　→ 補完: {', '.join(c['name'] for c in _extra[:_shortfall])}")
+                    # それでも足りない場合は実際の院数に合わせる（空白院を生成させない）
+                    if clinic_count > 0 and len(all_clinics) < clinic_count:
+                        st.write(f"　→ 院数を {len(all_clinics)} 院に調整（探索結果が{clinic_count}院に届かなかったため）")
+                        inputs["clinic_count"] = len(all_clinics)
                     inputs["clinics"] = all_clinics
                     st.write("🏥 クリニック情報収集中...")
                     _t2_db_creds = _get_gcp_creds(sheets_creds_file)
