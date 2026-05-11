@@ -631,21 +631,23 @@ with _safe_tab(tab_custom):
 
                     if output_tab_sel != "（書き込まない）" and article_sheet_url:
                         creds_out = _get_gcp_creds(sheets_creds_file)
-                        if creds_out:
+                        if not creds_out:
+                            st.warning("⚠️ スプシ書き込みスキップ：GCP認証が設定されていません（SecretsまたはJSONファイルを確認）")
+                        else:
                             st.write(f"📊 [{output_tab_sel}] タブに書き込み中...")
                             try:
                                 ws_out = get_sheet(article_sheet_url, creds_out, tab_name=output_tab_sel)
                                 _all_vals = ws_out.get_all_values()
                                 _target_row = None
                                 for _ri, _rd in enumerate(_all_vals[1:], start=2):
-                                    _pd = _rd + [""] * (15 - len(_rd))
+                                    _pd = _rd + [""] * (16 - len(_rd))
                                     if _pd[3] == main_kw and not _pd[11]:
                                         _target_row = _ri
                                         break
                                 if _target_row is None:
                                     for _ri, _rd in enumerate(_all_vals[1:], start=2):
-                                        _pd = _rd + [""] * (15 - len(_rd))
-                                        if _pd[3] and not _pd[11]:
+                                        _pd = _rd + [""] * (16 - len(_rd))
+                                        if not _pd[11]:
                                             _target_row = _ri
                                             break
                                 if _target_row is None:
@@ -659,7 +661,9 @@ with _safe_tab(tab_custom):
                                 })
                                 st.success(f"[{output_tab_sel}] 行{_target_row}に書き込みました")
                             except Exception as we:
+                                import traceback as _tb
                                 st.warning(f"スプシ書き込みエラー: {we}")
+                                st.code(_tb.format_exc())
 
                 except Exception as e:
                     s.update(label="❌ エラー", state="error")
