@@ -76,6 +76,7 @@ def generate_clinic_block(
     criteria_text: str,
     claude_api_key: str,
     site_parts: str = "",
+    reference_html: str = "",
 ) -> str:
     is_top3 = rank <= 3
     heading_type = template.get("heading_type", 1)
@@ -102,8 +103,11 @@ def generate_clinic_block(
                 for pt in price_table_templates
             )
             price_section = f"""
-【料金テーブル】
+【料金テーブル（厳守）】
 以下のHTMLテンプレートの{{{{変数}}}}を入力された料金データで埋めること。取得できない数値は[要確認]。
+- テーブルの直前に必ず小見出しパーツ（または小見出し相当のHTML）を置く
+- テーブル内に院名・クリニック名を含む行・セルを設けない
+- テンプレートの列数・構造を変えない
 {pt_text}
 
 入力された料金データ:
@@ -111,8 +115,11 @@ def generate_clinic_block(
 """
         elif price_data:
             price_section = f"""
-【料金テーブル】
+【料金テーブル（厳守）】
 以下の料金データをもとに料金テーブルHTMLを作成してください。
+- テーブルの直前に必ず小見出しパーツ（または小見出し相当のHTML）を置く
+- テーブル内に院名・クリニック名を含む行・セルを設けない
+- 全院で列数・列名を統一する（項目を追加・削除しない）
 {price_data}
 """
 
@@ -120,9 +127,13 @@ def generate_clinic_block(
     if "basic_info" in active_components and basic_info_fields:
         field_names = [BASIC_INFO_FIELD_LABELS.get(f, f) for f in basic_info_fields]
         basic_info_section = f"""
-【基本情報テーブル】
-以下の項目のみをテーブルで出力してください: {', '.join(field_names)}
-取得できない項目は[要確認]。診療時間の区切り文字・改行方法など書き方・形式は他院と必ず統一すること。
+【基本情報テーブル（厳守）】
+- 出力する項目（順番も固定）: {', '.join(field_names)}
+- 取得できない項目は[要確認]と記載し、項目自体は省略しない（全{len(field_names)}行を必ず出力）
+- テーブルは2列（項目名 | 内容）固定。列を増減しない
+- テーブルの直前に必ず小見出しパーツ（または小見出し相当のHTML）を置く
+- テーブル内に院名・クリニック名を含める行・セルを設けない
+- 書き方・形式は他院と完全統一（診療時間の区切り文字・改行方法・単位の表記など）
 """
 
     if is_top3:
@@ -144,6 +155,13 @@ def generate_clinic_block(
         top3_section = f"【4位以下ルール（{rank}位）】\n- クリニック紹介文は2〜3段落\n- リンク・CTAボタンなし\n"
 
     components_str = " → ".join(COMPONENT_LABELS.get(c, c) for c in active_components)
+
+    reference_section = (
+        "【フォーマット参照（1院目のHTML）】\n"
+        "以下は同じ記事内の別の院で生成済みのHTMLです。\n"
+        "テーブルの列数・列名・小見出しの位置・コンポーネントの順序・書き方を完全に統一してください。\n"
+        f"{reference_html[:3000]}\n"
+    ) if reference_html else ""
 
     prompt = f"""あなたはSEO記事のおすすめクリニック紹介ブロック専門ライターです。
 以下の条件に従って、1院分のHTMLブロックを生成してください。
@@ -173,12 +191,13 @@ def generate_clinic_block(
 {price_section}
 {basic_info_section}
 {f"【サイト別HTMLパーツ】{chr(10)}{site_parts}" if site_parts else ""}
-
+{reference_section}
 【共通ルール】
 - メインKW・サブKWで検索するユーザーに刺さる切り口で紹介文を書く
 - 選び方コンテンツの項目に自然に触れた内容にする（評価軸を露骨に列挙しない）
 - クリニック名は本文中でも○○院まで必ず記載
-- 基本情報テーブルの書き方・形式は他院と統一する前提で出力する
+- テーブル（料金・基本情報）の直前には必ず小見出しを置く
+- テーブル内に院名・クリニック名を含む行・セルを設けない
 
 HTML本文のみを出力してください。説明文・コードフェンスは不要。
 """

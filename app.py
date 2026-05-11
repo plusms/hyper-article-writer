@@ -1372,6 +1372,7 @@ with _safe_tab(tab_rank):
                     _cb_site_parts = site_config_manager.format_site_parts(_cb_site_cfg.get("components", []))
 
                 _cb_results = []
+                _cb_reference_html = ""  # 1院目のHTMLをフォーマット参照として後続院に渡す
                 _cb_clinics_to_gen = _cb_clinics[:_cb_clinic_count] if _cb_clinic_count > 0 else _cb_clinics
                 with st.status("クリニックブロック生成中...", expanded=True) as _cb_status:
                     for _cbc in _cb_clinics_to_gen:
@@ -1414,7 +1415,10 @@ with _safe_tab(tab_rank):
                                 criteria_text=_cb_criteria,
                                 claude_api_key=claude_key,
                                 site_parts=_cb_site_parts,
+                                reference_html=_cb_reference_html,
                             )
+                            if not _cb_reference_html:
+                                _cb_reference_html = _html
                             _cb_results.append({"rank": _r, "name": _cbc["name"], "html": _html})
                         except Exception as _e:
                             st.warning(f"{_r}位 ({_cbc['name']}) でエラー: {_e}")
