@@ -1,3 +1,4 @@
+import io
 import json
 import os
 from typing import Any, Dict, List
@@ -5,6 +6,8 @@ from typing import Any, Dict, List
 from bs4 import BeautifulSoup
 
 SITES_CONFIG_DIR = "config/sites"
+_DRIVE_FOLDER_NAME = "_site_configs"
+_DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 # ── 固定23スロット ──────────────────────────────────────────────
 FIXED_COMPONENT_SCHEMA: List[str] = [
@@ -93,13 +96,95 @@ def get_default_site_config() -> Dict[str, Any]:
     }
 
 
-def list_sites() -> List[str]:
+# ── Drive ヘルパー ─────────────────────────────────────────────
+
+def _get_drive_service(creds_data: dict):
+    from googleapiclient.discovery import build
+    from google.oauth2.service_account import Credentials
+    creds = Credentials.from_service_account_info(creds_data, scopes=_DRIVE_SCOPES)
+    return build("drive", "v3", credentials=creds)
+
+
+def _find_or_create_drive_folder(service, folder_name: str, parent_id: str) -> str:
+    query = (
+        f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' "
+        f"and '{parent_id}' in parents and trashed=false"
+    )
+    results = service.files().list(
+        q=query, fields="files(id)",
+        supportsAllDrives=True, includeItemsFromAllDrives=True,
+    ).execute()
+    files = results.get("files", [])
+    if files:
+        return files[0]["id"]
+    metadata = {
+        "name": folder_name,
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": [parent_id],
+    }
+    folder = service.files().create(
+        body=metadata, fields="id", supportsAllDrives=True,
+    ).execute()
+    return folder["id"]
+
+
+def _find_drive_file(service, filename: str, folder_id: str) -> str | None:
+    query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
+    results = service.files().list(
+        q=query, fields="files(id)",
+        supportsAllDrives=True, includeItemsFromAllDrives=True,
+    ).execute()
+    files = results.get("files", [])
+    return files[0]["id"] if files else None
+
+
+# ── 公開API ────────────────────────────────────────────────────
+
+def list_sites(creds_data: dict | None = None, drive_parent_folder_id: str = "") -> List[str]:
+    if creds_data and drive_parent_folder_id:
+        try:
+            service = _get_drive_service(creds_data)
+            folder_id = _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
+            query = f"'{folder_id}' in parents and name contains '.json' and trashed=false"
+            results = service.files().list(
+                q=query, fields="files(name)",
+                supportsAllDrives=True, includeItemsFromAllDrives=True,
+            ).execute()
+            return sorted([f["name"][:-5] for f in results.get("files", [])])
+        except Exception:
+            pass
     if not os.path.exists(SITES_CONFIG_DIR):
         return []
     return sorted([f[:-5] for f in os.listdir(SITES_CONFIG_DIR) if f.endswith(".json")])
 
 
-def load_site_config(site_name: str) -> Dict[str, Any]:
+def load_site_config(site_name: str, creds_data: dict | None = None, drive_parent_folder_id: str = "") -> Dict[str, Any]:
+    if creds_data and drive_parent_folder_id:
+        try:
+            from googleapiclient.http import MediaIoBaseDownload
+            service = _get_drive_service(creds_data)
+            folder_id = _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
+            file_id = _find_drive_file(service, f"{site_name}.json", folder_id)
+            if file_id:
+                fh = io.BytesIO()
+                request = service.files().get_media(fileId=file_id)
+                downloader = MediaIoBaseDownload(fh, request)
+                done = False
+                while not done:
+                    _, done = downloader.next_chunk()
+                fh.seek(0)
+                config = json.loads(fh.read().decode("utf-8"))
+                default = get_default_site_config()
+                for key, val in default.items():
+                    if key not in config:
+                        config[key] = val
+                    elif isinstance(val, dict):
+                        for sub_key, sub_val in val.items():
+                            if sub_key not in config[key]:
+                                config[key][sub_key] = sub_val
+                return config
+        except Exception as e:
+            print(f"Error loading site config from Drive for {site_name}: {e}")
     path = os.path.join(SITES_CONFIG_DIR, f"{site_name}.json")
     if not os.path.exists(path):
         return get_default_site_config()
@@ -120,7 +205,30 @@ def load_site_config(site_name: str) -> Dict[str, Any]:
         return get_default_site_config()
 
 
-def save_site_config(site_name: str, config: Dict[str, Any]) -> bool:
+def save_site_config(site_name: str, config: Dict[str, Any], creds_data: dict | None = None, drive_parent_folder_id: str = "") -> bool:
+    if creds_data and drive_parent_folder_id:
+        try:
+            from googleapiclient.http import MediaIoBaseUpload
+            service = _get_drive_service(creds_data)
+            folder_id = _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
+            json_bytes = json.dumps(config, ensure_ascii=False, indent=2).encode("utf-8")
+            media = MediaIoBaseUpload(io.BytesIO(json_bytes), mimetype="application/json")
+            existing_id = _find_drive_file(service, f"{site_name}.json", folder_id)
+            if existing_id:
+                service.files().update(
+                    fileId=existing_id,
+                    media_body=media,
+                    supportsAllDrives=True,
+                ).execute()
+            else:
+                metadata = {"name": f"{site_name}.json", "parents": [folder_id]}
+                service.files().create(
+                    body=metadata, media_body=media,
+                    fields="id", supportsAllDrives=True,
+                ).execute()
+            return True
+        except Exception as e:
+            print(f"Error saving site config to Drive for {site_name}: {e}")
     try:
         os.makedirs(SITES_CONFIG_DIR, exist_ok=True)
         path = os.path.join(SITES_CONFIG_DIR, f"{site_name}.json")
@@ -132,7 +240,16 @@ def save_site_config(site_name: str, config: Dict[str, Any]) -> bool:
         return False
 
 
-def delete_site_config(site_name: str) -> bool:
+def delete_site_config(site_name: str, creds_data: dict | None = None, drive_parent_folder_id: str = "") -> bool:
+    if creds_data and drive_parent_folder_id:
+        try:
+            service = _get_drive_service(creds_data)
+            folder_id = _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
+            file_id = _find_drive_file(service, f"{site_name}.json", folder_id)
+            if file_id:
+                service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+        except Exception as e:
+            print(f"Error deleting site config from Drive for {site_name}: {e}")
     path = os.path.join(SITES_CONFIG_DIR, f"{site_name}.json")
     if os.path.exists(path):
         os.remove(path)
