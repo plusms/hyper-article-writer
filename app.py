@@ -1266,11 +1266,12 @@ with _safe_tab(tab_rank):
 
     st.divider()
 
-    _cb_kw_col1, _cb_kw_col2, _cb_kw_col3, _cb_kw_col4 = st.columns([3, 3, 1, 1])
+    _cb_kw_col1, _cb_kw_col2 = st.columns(2)
     _cb_main_kw = _cb_kw_col1.text_input("メインKW", key="cb_main_kw")
     _cb_sub_kw  = _cb_kw_col2.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
-    _cb_db_type = _cb_kw_col3.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
-    _cb_clinic_count = int(_cb_kw_col4.number_input(
+    _cb_opt_col1, _cb_opt_col2 = st.columns([3, 1])
+    _cb_db_type = _cb_opt_col1.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
+    _cb_clinic_count = int(_cb_opt_col2.number_input(
         "院数（任意）", min_value=0, value=0, step=1, key="cb_clinic_count",
         help="生成するブロック数を指定。0で全件生成。記事の掲載院数と揃えてください。",
     ))
@@ -1314,7 +1315,6 @@ with _safe_tab(tab_rank):
                     key=f"cb_url_{_r}",
                     placeholder="https://example.com",
                 )
-                st.session_state[f"cb_url_{_r}"] = _cbc_url
 
                 if _is_top3:
                     _cbc_link = st.text_input(
