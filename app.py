@@ -813,10 +813,24 @@ with _safe_tab(tab_custom):
         )
 
     # ── 画像生成セクション（前回生成した記事に対して実行）────────────
-    if _t2_last and _t2_last.get("site_config", {}).get("image_templates"):
+    if _t2_last:
         st.divider()
         st.subheader("🖼️ 画像生成")
         st.caption(f"対象記事: {_t2_last['main_kw']}")
+
+        _has_site_templates = bool(_t2_last.get("site_config", {}).get("image_templates"))
+        if not _has_site_templates:
+            st.info("サイト設定に画像テンプレートが未登録のため、組み込みレイアウトを使用します。")
+            _builtin_options = {k: v["name"] for k, v in image_generator.BUILTIN_TEMPLATES.items()}
+            _selected_builtin = st.selectbox(
+                "使用するレイアウト",
+                options=list(_builtin_options.keys()),
+                format_func=lambda k: _builtin_options[k],
+                key="t2_builtin_layout",
+            )
+            _img_site_config = {"image_templates": [{"layout_type": _selected_builtin}]}
+        else:
+            _img_site_config = _t2_last["site_config"]
 
         st.caption(f"画像生成モデル（デフォルト）: `{image_generator._IMAGE_MODEL}`")
         _img_model_override = st.text_input(
@@ -855,7 +869,7 @@ with _safe_tab(tab_custom):
                             st.write("💡 画像プロンプト生成中（Claude）...")
                             prompts = image_generator.generate_image_prompts(
                                 _t2_last["structure_text"],
-                                _t2_last["site_config"],
+                                _img_site_config,
                                 claude_key,
                                 _img_slug.strip(),
                             )
