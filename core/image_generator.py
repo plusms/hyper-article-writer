@@ -102,37 +102,66 @@ BUILTIN_TEMPLATES: dict[str, dict] = {
 
 
 # ── プロンプト生成（シングルテンプレート）────────────────────────
+def _resolve_template_prompt(tmpl: dict) -> str:
+    """テンプレート辞書からベースプロンプト文字列を解決する。"""
+    layout_type = tmpl.get("layout_type", "")
+    if layout_type and layout_type in BUILTIN_TEMPLATES:
+        return BUILTIN_TEMPLATES[layout_type]["base_prompt"]
+    return tmpl.get("base_prompt", "").strip()
+
+
 def generate_image_prompts(
     structure_text: str,
     site_config: dict,
     claude_api_key: str,
     slug: str,
 ) -> list[dict]:
-    """Claude でH2/H3向けの画像プロンプトJSONを生成する（シングルテンプレート）。"""
+    """Claude でH2/H3向けの画像プロンプトJSONを生成する。複数テンプレートに対応。"""
     templates = site_config.get("image_templates", [])
     if not templates:
         return []
-    tmpl = templates[0]
-    layout_type = tmpl.get("layout_type", "")
-    if layout_type and layout_type in BUILTIN_TEMPLATES:
-        base_prompt = BUILTIN_TEMPLATES[layout_type]["base_prompt"]
-    else:
-        base_prompt = tmpl.get("base_prompt", "").strip()
-    if not base_prompt:
+
+    valid_templates = [
+        {"id": i + 1, "name": t.get("name") or t.get("layout_type") or f"テンプレート{i+1}", "prompt": _resolve_template_prompt(t)}
+        for i, t in enumerate(templates)
+        if _resolve_template_prompt(t)
+    ]
+    if not valid_templates:
         return []
 
-    prompt = f"""あなたは画像プロンプト生成の専門家です。
-以下の記事構成を読み、記事に挿入すべき画像を3〜5箇所選定し、下記テンプレートをベースにプロンプトをJSON形式で出力してください。
-
-## 画像テンプレート（ベースプロンプト）
+    if len(valid_templates) == 1:
+        templates_section = f"""## 画像テンプレート（ベースプロンプト）
 ```
-{base_prompt}
+{valid_templates[0]["prompt"]}
 ```
 
 ## 使用ルール
 - テンプレートの {{{{変数名}}}} を記事の各H2/H3の内容に合わせて差し替える
 - 構造・カラーコード・レイアウトは変更しない。テキスト内容のみ差し替える
 - filenameは「{slug}-英単語.webp」形式（重複なし・英小文字・ハイフン区切り可）
+- 出力JSONの各要素に "template_id": 1 を含める"""
+    else:
+        tmpl_blocks = "\n\n".join(
+            f"### テンプレート{t['id']}（{t['name']}）\n```\n{t['prompt']}\n```"
+            for t in valid_templates
+        )
+        tmpl_ids = ", ".join(str(t["id"]) for t in valid_templates)
+        templates_section = f"""## 画像テンプレート（複数）
+以下のテンプレートから、各H2/H3の内容・レイアウト適性に最も合うものを選んで使用してください。
+
+{tmpl_blocks}
+
+## 使用ルール
+- 各画像ごとに最適なテンプレートを選ぶ（すべて同じテンプレートである必要はない）
+- テンプレートの {{{{変数名}}}} を記事の各H2/H3の内容に合わせて差し替える
+- 構造・カラーコード・レイアウトは変更しない。テキスト内容のみ差し替える
+- filenameは「{slug}-英単語.webp」形式（重複なし・英小文字・ハイフン区切り可）
+- 出力JSONの各要素に "template_id": （使用したテンプレート番号: {tmpl_ids}のいずれか）を含める"""
+
+    prompt = f"""あなたは画像プロンプト生成の専門家です。
+以下の記事構成を読み、記事に挿入すべき画像を3〜5箇所選定し、下記テンプレートをベースにプロンプトをJSON形式で出力してください。
+
+{templates_section}
 
 ## 記事構成
 {structure_text}
@@ -143,6 +172,7 @@ def generate_image_prompts(
     "position": "挿入位置の見出しテキスト",
     "filename": "{slug}-word.webp",
     "alt": "画像の内容説明（日本語20〜40字）",
+    "template_id": 1,
     "prompt": "（変数差し替え済みのプロンプト全文）"
   }}
 ]
