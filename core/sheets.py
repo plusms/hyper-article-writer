@@ -22,12 +22,35 @@ COL_IN = {
 }
 
 COL_STATUS    = 10  # K（0始まり）
-COL_OUT_START = 11  # L〜O（タイトル・メタ・HTML・要確認）
+COL_OUT_START = 11  # L〜P（タイトル・メタ・HTML・要確認・掲載院）
 
-
-_HEADER = ["サイト名", "ジャンル *", "記事タイプ", "メインKW *", "サブKW",
-           "掲載案件", "競合URL", "追加指示", "最訴求プラン", "関連KW",
-           "ステータス", "タイトル", "メタ", "HTML", "要確認", "掲載院一覧"]
+_HEADERS: dict[str, list[str]] = {
+    "ノウハウ": [
+        "サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
+        "（掲載なし）", "競合URL", "追加指示", "（掲載なし）", "関連KW",
+        "ステータス", "タイトル", "メタ", "HTML", "要確認", "（掲載なし）",
+    ],
+    "商標": [
+        "サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
+        "対象クリニック", "競合URL（構成参照）", "追加指示", "最訴求プラン", "関連KW",
+        "ステータス", "タイトル", "メタ", "HTML", "要確認", "対象クリニック（出力）",
+    ],
+    "地域": [
+        "サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
+        "掲載案件", "競合URL", "追加指示", "最訴求プラン（1院目）", "関連KW",
+        "ステータス", "タイトル", "メタ", "HTML", "要確認", "掲載院一覧",
+    ],
+    "比較": [
+        "サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
+        "掲載案件", "競合URL", "追加指示", "最訴求プラン（1院目）", "関連KW",
+        "ステータス", "タイトル", "メタ", "HTML", "要確認", "掲載院一覧",
+    ],
+}
+_HEADER_DEFAULT = [
+    "サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
+    "掲載案件", "競合URL", "追加指示", "最訴求プラン", "関連KW",
+    "ステータス", "タイトル", "メタ", "HTML", "要確認", "掲載院一覧",
+]
 
 ARTICLE_TABS = ["ノウハウ", "地域", "比較", "商標"]
 
@@ -42,12 +65,13 @@ def get_sheet(sheet_url: str, creds_data: dict, tab_name: str = "") -> gspread.W
         ss = gc.open_by_key(sheet_url)
     if not tab_name:
         return ss.sheet1
+    header = _HEADERS.get(tab_name, _HEADER_DEFAULT)
     try:
-        return ss.worksheet(tab_name)
+        ws = ss.worksheet(tab_name)
     except gspread.WorksheetNotFound:
-        ws = ss.add_worksheet(title=tab_name, rows=1000, cols=len(_HEADER))
-        ws.update("A1:O1", [_HEADER])
-        return ws
+        ws = ss.add_worksheet(title=tab_name, rows=1000, cols=len(header))
+    ws.update("A1:P1", [header])
+    return ws
 
 
 def read_input_rows(ws: gspread.Worksheet, default_article_type: str = "") -> list:
