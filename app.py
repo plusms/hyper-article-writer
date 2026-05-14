@@ -806,7 +806,18 @@ with _safe_tab(tab_custom):
     )
 
     st.divider()
-    if st.button("🚀 実行", type="primary", use_container_width=True, key="run_test"):
+    if article_type != "ノウハウ":
+        gen_mode = st.radio(
+            "生成モード",
+            ["一括生成", "見出し確認あり"],
+            horizontal=True,
+            key="t_gen_mode",
+            help="「見出し確認あり」を選ぶと、見出し確認・修正後に本文を生成できます。",
+        )
+    else:
+        gen_mode = "一括生成"
+    _run_label = "🔍 見出しを生成" if gen_mode == "見出し確認あり" else "🚀 実行"
+    if st.button(_run_label, type="primary", use_container_width=True, key="run_test"):
         valid_clinics = [c for c in st.session_state.get("test_clinics", []) if c["name"] and c["domain"]]
         errs = []
         if not claude_key:  errs.append("Claude API Key 未設定")
@@ -865,6 +876,7 @@ with _safe_tab(tab_custom):
                 "appeal_points":   _appeal_points,
             }
             _t2_write_needed = False
+            st.session_state.pop("t2_draft", None)  # モード切替時に古いdraftをクリア
             with st.status("生成中...", expanded=True) as s:
                 try:
                     st.write("🔍 競合分析中...")
@@ -918,38 +930,50 @@ with _safe_tab(tab_custom):
                     clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache, db_type=custom_db_type, gemini_api_key=gemini_key, research_provider=research_provider)
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
-                    _provider_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
-                    st.write(f"✍️ 本文生成中（{_provider_label}）...")
-                    output = generate_body(inputs, structure, clinics, claude_key, comp,
-                                          site_parts=_single_site_parts, gemini_api_key=gemini_key, article_provider=article_provider)
-                    st.session_state["t2_last"] = {
-                        "html":           output["html"],
-                        "title":          structure["title"],
-                        "meta":           structure["meta"],
-                        "todo_list":      output["todo_list"],
-                        "structure_text": structure["structure_text"],
-                        "site_config":    _single_site_config,
-                        "site_name":      site_name or (selected_site_for_parts if selected_site_for_parts != "（なし）" else ""),
-                        "main_kw":        main_kw,
-                        "debug":          output.get("debug"),
-                        "clinics":        all_clinics,
-                        "_inputs": {
-                            "article_type":   article_type,
-                            "site_name":      site_name,
-                            "genre":          genre,
+                    if gen_mode == "見出し確認あり":
+                        st.session_state["t2_draft"] = {
+                            "structure":   structure,
+                            "comp":        comp,
+                            "clinics":     clinics,
+                            "all_clinics": all_clinics,
+                            "inputs":      inputs,
+                            "site_parts":  _single_site_parts,
+                            "site_config": _single_site_config,
+                        }
+                        s.update(label="✅ 見出し生成完了 — 下で確認してください", state="complete")
+                    else:
+                        _provider_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
+                        st.write(f"✍️ 本文生成中（{_provider_label}）...")
+                        output = generate_body(inputs, structure, clinics, claude_key, comp,
+                                              site_parts=_single_site_parts, gemini_api_key=gemini_key, article_provider=article_provider)
+                        st.session_state["t2_last"] = {
+                            "html":           output["html"],
+                            "title":          structure["title"],
+                            "meta":           structure["meta"],
+                            "todo_list":      output["todo_list"],
+                            "structure_text": structure["structure_text"],
+                            "site_config":    _single_site_config,
+                            "site_name":      site_name or (selected_site_for_parts if selected_site_for_parts != "（なし）" else ""),
                             "main_kw":        main_kw,
-                            "sub_kw":         sub_kw,
-                            "related_kw":     related_kw,
-                            "recommended":    inputs["recommended"],
-                            "custom_block":   combined_block,
-                            "clinics":        valid_clinics,
-                            "competitor_urls": competitor_urls,
-                            "tm_strengths":   st.session_state.get("t_trademark_strengths", []) if article_type == "商標" else [],
-                        },
-                    }
-                    s.update(label="✅ 完了", state="complete")
-                    _save_output_cache(main_kw, st.session_state["t2_last"])
-                    _t2_write_needed = True
+                            "debug":          output.get("debug"),
+                            "clinics":        all_clinics,
+                            "_inputs": {
+                                "article_type":   article_type,
+                                "site_name":      site_name,
+                                "genre":          genre,
+                                "main_kw":        main_kw,
+                                "sub_kw":         sub_kw,
+                                "related_kw":     related_kw,
+                                "recommended":    inputs["recommended"],
+                                "custom_block":   combined_block,
+                                "clinics":        valid_clinics,
+                                "competitor_urls": competitor_urls,
+                                "tm_strengths":   st.session_state.get("t_trademark_strengths", []) if article_type == "商標" else [],
+                            },
+                        }
+                        s.update(label="✅ 完了", state="complete")
+                        _save_output_cache(main_kw, st.session_state["t2_last"])
+                        _t2_write_needed = True
 
                 except Exception as e:
                     s.update(label="❌ エラー", state="error")
@@ -993,6 +1017,113 @@ with _safe_tab(tab_custom):
                             else:
                                 st.success(f"✅ [{output_tab_sel}] 行{_target_row}に書き込みました")
                                 st.session_state.pop(f"t2_sheet_hist_{article_type}", None)
+
+    # ── 見出し確認フェーズ ──────────────────────────────────────
+    _t2_draft = st.session_state.get("t2_draft")
+    if _t2_draft:
+        st.divider()
+        st.subheader("📐 見出し確認・修正")
+        st.caption("内容を確認して、修正指示があれば入力してください。問題なければそのまま本文を生成できます。")
+
+        with st.expander("タイトル案・見出し一覧", expanded=True):
+            st.code(_t2_draft["structure"]["structure_text"], language=None)
+
+        _rev_note = st.text_area(
+            "修正指示（任意）",
+            key="t2_revision_input",
+            placeholder="例：費用のH2は後ろに移動して\n例：クリニック紹介を5件にして\n例：「副作用リスク」のH2を追加して",
+            height=100,
+        )
+
+        _rbtn1, _rbtn2 = st.columns(2)
+        if _rbtn1.button("✏️ 修正を反映", key="t2_revise_btn", disabled=not (_rev_note or "").strip()):
+            with st.spinner("構成を修正中..."):
+                try:
+                    _rv_inputs = {**_t2_draft["inputs"], "_revision_note": _rev_note.strip()}
+                    _new_struct = generate_structure(
+                        _rv_inputs, _t2_draft["comp"], _t2_draft["clinics"],
+                        claude_key, gemini_api_key=gemini_key, article_provider=article_provider,
+                    )
+                    st.session_state["t2_draft"] = {**_t2_draft, "structure": _new_struct}
+                    st.session_state["t2_revision_input"] = ""
+                    st.rerun()
+                except Exception as _re:
+                    st.error(f"修正エラー: {_re}")
+
+        if _rbtn2.button("✍️ この見出しで本文を生成", key="t2_gen_body_btn", type="primary"):
+            _prov_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
+            with st.status(f"本文生成中（{_prov_label}）...", expanded=True) as _bs:
+                try:
+                    _di = _t2_draft["inputs"]
+                    _ds = _t2_draft["structure"]
+                    output = generate_body(
+                        _di, _ds, _t2_draft["clinics"],
+                        claude_key, _t2_draft["comp"],
+                        site_parts=_t2_draft["site_parts"],
+                        gemini_api_key=gemini_key,
+                        article_provider=article_provider,
+                    )
+                    st.session_state["t2_last"] = {
+                        "html":           output["html"],
+                        "title":          _ds["title"],
+                        "meta":           _ds["meta"],
+                        "todo_list":      output["todo_list"],
+                        "structure_text": _ds["structure_text"],
+                        "site_config":    _t2_draft["site_config"],
+                        "site_name":      _di.get("site_name", ""),
+                        "main_kw":        _di.get("main_kw", ""),
+                        "debug":          output.get("debug"),
+                        "clinics":        _t2_draft["all_clinics"],
+                        "_inputs": {
+                            "article_type":    _di.get("article_type", ""),
+                            "site_name":       _di.get("site_name", ""),
+                            "genre":           _di.get("genre", ""),
+                            "main_kw":         _di.get("main_kw", ""),
+                            "sub_kw":          ", ".join(_di["sub_kw"]) if isinstance(_di.get("sub_kw"), list) else _di.get("sub_kw", ""),
+                            "related_kw":      _di.get("related_kw", ""),
+                            "recommended":     _di.get("recommended", ""),
+                            "custom_block":    _di.get("custom_block", ""),
+                            "clinics":         _t2_draft["all_clinics"],
+                            "competitor_urls": _di.get("competitor_urls", []),
+                            "tm_strengths":    st.session_state.get("t_trademark_strengths", []) if _di.get("article_type") == "商標" else [],
+                        },
+                    }
+                    _bs.update(label="✅ 完了", state="complete")
+                    _save_output_cache(_di.get("main_kw", ""), st.session_state["t2_last"])
+                    st.session_state.pop("t2_draft", None)
+                    st.session_state.pop(f"t2_sheet_hist_{_di.get('article_type', '')}", None)
+                except Exception as _be:
+                    _bs.update(label="❌ エラー", state="error")
+                    st.error(str(_be))
+            # スプシ書き込み（本文生成成功時のみ）
+            if st.session_state.get("t2_last") and output_tab_sel != "（書き込まない）" and article_sheet_url:
+                _creds_draft = _get_gcp_creds(sheets_creds_file)
+                if _creds_draft:
+                    with st.spinner(f"📊 [{output_tab_sel}] タブに書き込み中..."):
+                        try:
+                            _ws_d = get_sheet(article_sheet_url, _creds_draft, tab_name=output_tab_sel)
+                            _av_d = _ws_d.get_all_values()
+                            _di_kw = st.session_state["t2_last"].get("main_kw", "")
+                            _tr_d = None
+                            for _ri_d, _rd_d in enumerate(_av_d[1:], start=2):
+                                _pd_d = _rd_d + [""] * (16 - len(_rd_d))
+                                if _pd_d[3] == _di_kw and not _pd_d[11]:
+                                    _tr_d = _ri_d
+                                    break
+                            if _tr_d is None:
+                                for _ri_d, _rd_d in enumerate(_av_d[1:], start=2):
+                                    _pd_d = _rd_d + [""] * (16 - len(_rd_d))
+                                    if not _pd_d[11]:
+                                        _tr_d = _ri_d
+                                        break
+                            if _tr_d is None:
+                                _tr_d = len(_av_d) + 1
+                            _t2lfw = st.session_state["t2_last"]
+                            write_full_row(_ws_d, _tr_d, _t2lfw.get("_inputs", {}), _t2lfw)
+                            st.success(f"✅ [{output_tab_sel}] 行{_tr_d}に書き込みました")
+                            st.session_state.pop(f"t2_sheet_hist_{article_type}", None)
+                        except Exception as _we_d:
+                            st.error(f"スプシ書き込みエラー: {_we_d}")
 
     # ── スプシ行から読み込む ─────────────────────────────────────
     with st.expander("📊 スプシ行から読み込む", expanded=False):

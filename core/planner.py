@@ -141,6 +141,11 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
         "クリニックが0件の場合、クリニック紹介H2自体を設けない。"
     ) if inputs["clinics"] else "\nクリニック指定なし：クリニック紹介H2は設けない。"
 
+    revision_note = (
+        f"\n\n【構成の修正指示（最優先で反映すること）】\n{inputs['_revision_note']}\n"
+        if inputs.get("_revision_note") else ""
+    )
+
     selected = inputs.get("selected_topics")
     from core.config import TOPICS, TOPIC_LABELS
     all_topics = TOPICS.get(article_type, [])
@@ -253,6 +258,7 @@ H2候補の選定基準：
 - 「どんな人に向いているか」「向いていない人の条件」を明示する
 - 向いていない人へは代替案（他の治療法・他クリニック）を示してネガティブで終わらない
 
+{revision_note}
 以下の形式で出力してください：
 
 タイトル案①: （メインKW含有・32文字以内）
