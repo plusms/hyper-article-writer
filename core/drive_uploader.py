@@ -63,18 +63,30 @@ def upload_image(
     return file.get("webViewLink", "")
 
 
+def _find_or_create_folder_path(service, path: list, root_id: str) -> str:
+    """パスリストを順番に辿り、存在しないフォルダは作成して末端のIDを返す。"""
+    current = root_id
+    for name in path:
+        current = _find_or_create_folder(service, name, current)
+    return current
+
+
 def upload_json(
     data: dict,
     filename: str,
-    folder_name: str,
+    folder_name,
     credentials_dict: dict,
     parent_folder_id: str,
 ) -> str:
     """JSONデータをDriveにアップロードして webViewLink を返す。
-    parent_folder_id / folder_name / filename の階層で保存する。
+    folder_name は str（1階層）または list（複数階層）で指定可能。
+    例: "edit_logs" または ["修正ログ", "本文", "地域"]
     """
     service = _get_service(credentials_dict)
-    folder_id = _find_or_create_folder(service, folder_name, parent_folder_id)
+    if isinstance(folder_name, list):
+        folder_id = _find_or_create_folder_path(service, folder_name, parent_folder_id)
+    else:
+        folder_id = _find_or_create_folder(service, folder_name, parent_folder_id)
     content = _json_lib.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
     media = MediaIoBaseUpload(io.BytesIO(content), mimetype="application/json")
     metadata = {"name": filename, "parents": [folder_id]}

@@ -73,7 +73,7 @@ with st.sidebar:
     st.header("設定")
     st.radio(
         "セクション",
-        ["📝 コンテンツ作成", "🗄️ データ・設定"],
+        ["📝 コンテンツ作成", "🗄️ データ・設定", "❓ ヘルプ"],
         key="main_nav",
         label_visibility="collapsed",
         horizontal=True,
@@ -165,15 +165,18 @@ with st.sidebar:
 # サイト設定の永続化に使うクレデンシャル（Drive保存用）
 _site_cfg_creds = _get_gcp_creds(sheets_creds_file)
 
-if st.session_state.get("main_nav", "📝 コンテンツ作成") == "📝 コンテンツ作成":
-    tab_batch, tab_custom, tab_rank, tab_qual, tab_help = st.tabs([
-        "📋 一括作成", "📝 カスタム作成", "🏥 ランキングブロック", "✅ 品質チェック", "❓ ヘルプ",
+_main_nav = st.session_state.get("main_nav", "📝 コンテンツ作成")
+if _main_nav == "📝 コンテンツ作成":
+    tab_batch, tab_custom, tab_rank, tab_qual = st.tabs([
+        "📋 一括作成", "📝 カスタム作成", "🏥 ランキングブロック", "✅ 品質チェック",
     ])
-    tab_cases = None
-    tab_settings = None
-else:
+    tab_cases = tab_settings = tab_help = None
+elif _main_nav == "🗄️ データ・設定":
     tab_cases, tab_settings = st.tabs(["🗄️ 商品データベース", "⚙️ サイト設定"])
     tab_batch = tab_custom = tab_rank = tab_qual = tab_help = None
+else:  # ❓ ヘルプ
+    tab_help = True  # タブなしで直接描画
+    tab_batch = tab_custom = tab_rank = tab_qual = tab_cases = tab_settings = None
 
 
 # ════════════════════════════════════════════════════════
@@ -1046,6 +1049,29 @@ with _safe_tab(tab_custom):
                     )
                     st.session_state["t2_draft"] = {**_t2_draft, "structure": _new_struct}
                     st.session_state["t2_revision_input"] = ""
+                    # Drive に構成修正ログを保存（失敗してもメインフローは止めない）
+                    _struct_log_creds = _get_gcp_creds(sheets_creds_file)
+                    if _struct_log_creds:
+                        try:
+                            _sl_ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                            _sl_kw = _t2_draft["inputs"].get("main_kw", "")[:20].replace(" ", "_")
+                            _sl_atype = _t2_draft["inputs"].get("article_type", "不明")
+                            drive_uploader.upload_json(
+                                {
+                                    "date": datetime.date.today().isoformat(),
+                                    "article_type": _sl_atype,
+                                    "main_kw": _t2_draft["inputs"].get("main_kw", ""),
+                                    "instruction": _rev_note.strip(),
+                                    "before_structure": _t2_draft["structure"]["structure_text"],
+                                    "after_structure": _new_struct["structure_text"],
+                                },
+                                f"struct_{_sl_ts}_{_sl_kw}.json",
+                                ["修正ログ", "構成", _sl_atype],
+                                _struct_log_creds,
+                                _edit_logs_folder_id,
+                            )
+                        except Exception:
+                            pass
                     st.rerun()
                 except Exception as _re:
                     st.error(f"修正エラー: {_re}")
@@ -1237,9 +1263,11 @@ with _safe_tab(tab_custom):
                                     try:
                                         _log_ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                                         _log_kw = _t2_last["main_kw"][:20].replace(" ", "_")
+                                        _log_atype = _t2_last.get("_inputs", {}).get("article_type", "不明")
                                         drive_uploader.upload_json(
                                             {
                                                 "date": datetime.date.today().isoformat(),
+                                                "article_type": _log_atype,
                                                 "main_kw": _t2_last["main_kw"],
                                                 "h2_title": _block["title"],
                                                 "instruction": _current_instr,
@@ -1247,7 +1275,7 @@ with _safe_tab(tab_custom):
                                                 "after_html": _new_html,
                                             },
                                             f"edit_{_log_ts}_{_log_kw}.json",
-                                            "edit_logs",
+                                            ["修正ログ", "本文", _log_atype],
                                             _edit_creds,
                                             _edit_logs_folder_id,
                                         )
@@ -2275,7 +2303,7 @@ Q: 記事タイプを間違えて生成してしまいました。
 A: カスタム作成の場合、タブ上部の「登録情報履歴」から入力条件を復元して再生成できます。スプシに書き出した場合は、スプシの該当行を修正して一括作成で再処理するか、カスタム作成で上書きしてください。
 """
 
-with _safe_tab(tab_help):
+if tab_help:
     st.title("❓ ヘルプ")
     st.caption("使い方の疑問・入力内容の確認など、なんでも聞いてください。")
 
