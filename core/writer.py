@@ -368,8 +368,13 @@ def _build_body_prompt(
         type_context = f"ジャンル: {inputs['genre']}（地域名はメインKWから自動判断）"
     elif article_type == "比較":
         type_context = f"ジャンル: {inputs['genre']}"
-    else:
-        type_context = f"ジャンル: {inputs['genre']}（クリニック名・商標名はメインKWから自動判断）"
+    else:  # 商標
+        _trademark_clinic = clinic_names[0] if clinic_names else "（メインKWから判断）"
+        type_context = (
+            f"ジャンル: {inputs['genre']}\n"
+            f"【商標記事・1院専用】掲載クリニック：{_trademark_clinic}\n"
+            "この記事は上記1院専用。他院との比較・他院名の言及・複数院前提の表現は一切しない。"
+        )
 
     recommended_note = (
         f"【最訴求プラン】{inputs['recommended']}\n"
@@ -385,10 +390,17 @@ def _build_body_prompt(
     appeal_note = ""
     _appeals = [a for a in inputs.get("appeal_points", []) if a and a.strip()]
     if _appeals:
-        appeal_note = "【訴求インプット（優先度順）】\n"
-        for i, ap in enumerate(_appeals, 1):
-            appeal_note += f"第{i}訴求: {ap}\n"
-        appeal_note += "※第1訴求を最も強調した表現で本文に反映する。専用H2は不要、各H3の文脈に自然に組み込む。\n"
+        if article_type == "商標":
+            appeal_note = "【比較優位性・強み（厳守）】\n"
+            appeal_note += "以下の強みを記事全体に自然に散りばめる。専用セクションは不要。読者が「なぜここがいいのか」を自然に理解できるよう組み込む。\n"
+            for i, ap in enumerate(_appeals, 1):
+                appeal_note += f"強み{i}: {ap}\n"
+            appeal_note += "※強みの表現を露骨に列挙しない。各H3の文脈に自然に溶け込ませる。根拠がある場合はその根拠も本文に反映する。\n"
+        else:
+            appeal_note = "【訴求インプット（優先度順）】\n"
+            for i, ap in enumerate(_appeals, 1):
+                appeal_note += f"第{i}訴求: {ap}\n"
+            appeal_note += "※第1訴求を最も強調した表現で本文に反映する。専用H2は不要、各H3の文脈に自然に組み込む。\n"
 
     user_awareness_note = ""
     if inputs.get("user_awareness", "").strip():
@@ -409,12 +421,15 @@ def _build_body_prompt(
     else:
         _count_instruction = "掲載院数：競合の掲載院数に合わせた適切な数（多すぎず少なすぎず）\n"
 
-    if article_type == "商標" and len(clinic_names) == 1:
+    if article_type == "商標":
+        # 商標記事は院数にかかわらず常に1院専用ルールを適用（app.py側で1院に絞られているが念のため）
+        _trademark_name = clinic_names[0] if clinic_names else "（メインKWから判断）"
         clinic_restriction = (
-            f"【掲載クリニック（1院専用）】\n"
-            f"掲載クリニック：{clinic_names[0]}\n"
+            f"【掲載クリニック（1院専用・厳守）】\n"
+            f"掲載クリニック：{_trademark_name}\n"
             "記事全体を通じてこの1院に絞った情報のみ記載する。\n"
-            "他院との比較・他院名の言及・複数院前提の表現（「各クリニック」「おすすめの院」等）は一切使わない。\n"
+            "他院との比較・他院名の言及・複数院前提の表現（「各クリニック」「おすすめの院」「他のクリニック」等）は一切使わない。\n"
+            "クリニック紹介のH2・H3は対象院のみ。「おすすめクリニック紹介」のような複数院を示唆する見出しも使わない。\n"
         )
     elif clinic_names:
         clinic_restriction = (
@@ -515,7 +530,8 @@ def _build_body_prompt(
 {_html_bold}
 - 比較表: <table class="comparison-table"><thead><tr><th>...</th></tr></thead><tbody>...</tbody></table>
 - [要確認]箇所: テキストをそのまま出力する（例: <p>[要確認：GoogleマップID]</p>）。補完しない
-- HTMLの外側にコードブロック記号（```）をつけない。HTMLをそのまま出力する{clinic_placeholder_note}
+- HTMLの外側にコードブロック記号（```）をつけない。HTMLをそのまま出力する
+- 各H2セクションの先頭（H2見出しタグの直前）に必ず `<!-- H2_BLOCK_START:{H2の見出しテキスト} -->` を1行挿入する（H3には挿入しない）{clinic_placeholder_note}
 {todo_note}
 【出力前の自己チェック（必ず実行・チェック結果は出力しない）】
 以下を確認し、違反があれば修正してからHTMLのみを出力してください。

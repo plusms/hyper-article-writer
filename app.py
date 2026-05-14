@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import hashlib
 import pathlib
 import datetime
 import time
@@ -59,6 +61,7 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
 _claude_key_default  = _secret("CLAUDE_API_KEY")
 _gemini_key_default  = _secret("GEMINI_API_KEY")
 _drive_folder_id          = _secret("DRIVE_PARENT_FOLDER_ID", "1CHqNruWiOVdeJPs7Nyd3Nfjt3sLxMc2c")
+_edit_logs_folder_id      = "0AFZI9kNsa56QUk9PVA"
 _site_cfg_parent_folder   = _secret("SITE_CONFIG_FOLDER_ID") or _drive_folder_id
 _article_sheet_url_default    = _secret("ARTICLE_SHEET_URL")
 _db_sheet_url_default         = _secret("CLINIC_DB_SHEET_URL")
@@ -217,6 +220,120 @@ def _load_output_cache() -> list[dict]:
         except Exception:
             pass
     return results
+
+
+def _split_html_by_h2(html: str) -> list[dict]:
+    """HTMLをH2単位に分割。
+    優先①: <!-- H2_BLOCK_START:{title} --> コメントマーカー（サイトパーツ使用時）
+    優先②: 標準 <h2> タグ（パーツなし時）
+    どちらもなければ1ブロックとして返す。
+    """
+    def _make_block(title, html_str):
+        return {"title": title, "html": html_str, "original_html": html_str, "confirmed": False, "instruction": "", "modified": False}
+
+    # ── 優先①: コメントマーカーで分割 ──────────────────────────
+    marker_pattern = r'<!--\s*H2_BLOCK_START:([^-]*?)-->'
+    if re.search(marker_pattern, html):
+        parts = re.split(f'({marker_pattern})', html)
+        result = []
+        pre_h2 = parts[0].strip()
+        i = 1
+        while i < len(parts):
+            if re.match(marker_pattern, parts[i]):
+                title = re.match(marker_pattern, parts[i]).group(1).strip() or f"セクション {len(result) + 1}"
+                body = parts[i + 1].strip() if i + 1 < len(parts) else ""
+                result.append(_make_block(title, parts[i] + "\n" + body))
+                i += 2
+            else:
+                i += 1
+        if pre_h2 and result:
+            result[0]["html"] = pre_h2 + "\n" + result[0]["html"]
+            result[0]["original_html"] = result[0]["html"]
+        elif pre_h2:
+            result.insert(0, _make_block("（冒頭）", pre_h2))
+        if result:
+            return result
+
+    # ── 優先②: 標準 <h2> タグで分割 ────────────────────────────
+    parts = re.split(r'(?=<h2[\s>])', html, flags=re.IGNORECASE)
+    result = []
+    pre_h2 = ""
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        if not re.match(r'<h2[\s>]', part, re.IGNORECASE):
+            pre_h2 = part
+            continue
+        m = re.search(r'<h2[^>]*>(.*?)</h2>', part, re.IGNORECASE | re.DOTALL)
+        raw_title = m.group(1) if m else ""
+        title = re.sub(r'<[^>]+>', '', raw_title).strip() or f"セクション {len(result) + 1}"
+        result.append(_make_block(title, part))
+    if pre_h2 and result:
+        result[0]["html"] = pre_h2 + "\n" + result[0]["html"]
+        result[0]["original_html"] = result[0]["html"]
+    elif pre_h2:
+        result.insert(0, _make_block("（冒頭）", pre_h2))
+    if result:
+        return result
+
+    # ── フォールバック: 全体を1ブロック ─────────────────────────
+    return [_make_block("全体（H2分割不可）", html)]
+
+
+def _regenerate_h2_block(
+    h2_index: int,
+    blocks: list[dict],
+    instruction: str,
+    inputs: dict,
+    structure_text: str,
+    claude_key: str,
+) -> str:
+    """指定インデックスのH2を修正指示に従って再生成する。前後H2をコンテキストとして渡す。"""
+    import anthropic as _ant
+    current = blocks[h2_index]
+    prev_html = blocks[h2_index - 1]["html"][:1500] if h2_index > 0 else ""
+    next_html = blocks[h2_index + 1]["html"][:1000] if h2_index < len(blocks) - 1 else ""
+    sub_kw_str = ", ".join(inputs.get("sub_kw", [])) if isinstance(inputs.get("sub_kw"), list) else inputs.get("sub_kw", "")
+    prompt = f"""あなたはSEO記事の編集者です。
+以下の条件に従い、指定H2セクションを修正・再生成してください。
+
+【記事の条件】
+メインKW: {inputs.get('main_kw', '')}
+サブKW: {sub_kw_str}
+記事種別: {inputs.get('article_type', '')}
+ジャンル: {inputs.get('genre', '')}
+
+【記事全体の構成】
+{structure_text[:2000]}
+
+【前のH2の内容（文脈維持用・変更不要）】
+{prev_html if prev_html else '（なし）'}
+
+【再生成対象のH2】
+見出し: {current['title']}
+現在のHTML:
+{current['html']}
+
+【次のH2の内容（文脈維持用・変更不要）】
+{next_html if next_html else '（なし）'}
+
+【修正指示】
+{instruction}
+
+【出力ルール】
+- このH2セクションのHTMLのみを出力する（前後のH2は出力しない）
+- 修正指示を確実に反映する
+- 前後のH2との文体・トーン・形式を合わせる
+- HTML本文のみ出力。説明文・コードフェンス不要
+"""
+    client = _ant.Anthropic(api_key=claude_key)
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text.strip()
 
 
 def build_inputs_from_row(row: dict, defaults: dict | None = None) -> dict:
@@ -467,51 +584,125 @@ with _safe_tab(tab_custom):
     selected_topics = _render_topic_checkboxes(article_type, key_prefix="t")
 
     st.divider()
-    _ca_col1, _ca_col2 = st.columns([3, 1])
-    _ca_col1.subheader("掲載案件")
-    _ca_col2.markdown("<div style='padding-top:0.5rem'></div>", unsafe_allow_html=True)
-    clinic_count = int(_ca_col2.number_input(
-        "院数（任意）",
-        min_value=0, value=0, step=1,
-        key="t_clinic_count",
-        help="空白(0)にすると競合の掲載院数に自動で合わせます。指定すると必ずその院数で記事を生成します。",
-    ))
-    st.caption("※ここに入力した院は必ず記事に掲載されます。空欄のままでも自動探索で補完されます。")
+
+    # ── 掲載案件・競合URL（記事タイプごとに分岐）────────────────
     if "test_clinics" not in st.session_state:
         st.session_state.test_clinics = [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
     for _c in st.session_state.test_clinics:
         _c.setdefault("recommended", "")
         _c.setdefault("appeal", "")
 
-    to_remove = []
-    for i, c in enumerate(st.session_state.test_clinics):
-        is_first = (i == 0)
-        st.caption("案件 1（最上位）" if is_first else f"案件 {i + 1}")
-        tc0, tc1, tc2 = st.columns([3, 3, 1])
-        n = tc0.text_input("案件名 *", value=c["name"],   key=f"tcn_{i}", placeholder="TCB東京中央美容外科")
-        d = tc1.text_input("ドメイン *", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...")
-        if tc2.button("✕", key=f"trm_{i}") and len(st.session_state.test_clinics) > 1:
-            to_remove.append(i)
-        rec_label = "最訴求プラン *" if is_first else "最訴求プラン（任意）"
-        r = st.text_input(rec_label, value=c["recommended"], key=f"tcr_{i}", placeholder="例：セマグルチド0.5mgプラン / 人中短縮術")
-        a = st.text_area("強み・比較優位性（任意）", value=c["appeal"], height=70, key=f"tca_{i}", placeholder="例：他社より処方量が1段階上から始められる。カウンセリングで確認済み")
-        st.session_state.test_clinics[i] = {"name": n, "domain": d, "recommended": r, "appeal": a}
-    for idx in reversed(to_remove):
-        st.session_state.test_clinics.pop(idx)
-    if st.button("＋ 案件を追加", key="t_add"):
-        st.session_state.test_clinics.append({"name": "", "domain": "", "recommended": "", "appeal": ""})
-        st.rerun()
-
-    st.subheader("競合URL")
-    competitor_urls = []
-    for i in range(5):
-        u = st.text_input(
-            f"競合URL {i+1}" if i == 0 else "",
-            key=f"t_comp_{i}",
-            label_visibility="visible" if i == 0 else "collapsed",
+    if article_type == "商標":
+        # ── 商標記事：1院固定 ─────────────────────────────────
+        clinic_count = 1
+        st.session_state.test_clinics = st.session_state.test_clinics[:1]
+        st.subheader("対象クリニック（1院固定）")
+        _tm_c = st.session_state.test_clinics[0]
+        _tm_c0, _tm_c1 = st.columns(2)
+        _tm_n = _tm_c0.text_input("案件名 *", value=_tm_c["name"], key="tm_clinic_name", placeholder="東京美肌堂")
+        _tm_d = _tm_c1.text_input("ドメイン *", value=_tm_c["domain"], key="tm_clinic_domain", placeholder="tokyo-bihado.com")
+        _tm_r = st.text_input("最訴求プラン *", value=_tm_c["recommended"], key="tm_clinic_rec", placeholder="例：美容内服パックコース 月額3,980円〜")
+        _tm_ref = st.text_input(
+            "参考URL（任意）",
+            key="t_trademark_ref_url",
+            placeholder="例：https://tokyo-bihado.com/plan/ ← 料金ページなど重点スクレイプしたいURL",
         )
-        if u.strip():
-            competitor_urls.append(u.strip())
+        st.session_state.test_clinics[0] = {"name": _tm_n, "domain": _tm_d, "recommended": _tm_r, "appeal": ""}
+
+        st.markdown("**比較優位性（強み）**")
+        st.caption("ここに書いた強みと根拠が記事の訴求軸になります。AIが自然な文脈に組み込みます。")
+        if "t_trademark_strengths" not in st.session_state:
+            st.session_state["t_trademark_strengths"] = [{"point": "", "basis": ""} for _ in range(3)]
+        _str_labels = ["強み①", "強み②", "強み③"]
+        _str_placeholders = [
+            ("通院不要でオンライン処方のみ", "公式サイトに「完全オンライン診療」と明記"),
+            ("処方量が他院より高用量から対応", "0.5mg〜スタートで他院より1段階上"),
+            ("返金保証あり", "30日以内なら全額返金と明記"),
+        ]
+        for _si in range(3):
+            _s = st.session_state["t_trademark_strengths"][_si]
+            _sc1, _sc2 = st.columns([2, 3])
+            _sp = _sc1.text_input(_str_labels[_si], value=_s["point"], key=f"tm_str_pt_{_si}", placeholder=_str_placeholders[_si][0])
+            _sb = _sc2.text_input("根拠・補足", value=_s["basis"], key=f"tm_str_bs_{_si}", placeholder=_str_placeholders[_si][1])
+            st.session_state["t_trademark_strengths"][_si] = {"point": _sp, "basis": _sb}
+
+        with st.expander("📋 案件情報を補完する（[要確認]を減らしたい場合）", expanded=False):
+            st.caption("DBやスクレイプで取れない情報（料金・取扱い薬・院数など）をここに貼ると記事の精度が上がります。")
+            st.text_area(
+                "補完情報（自由記述）",
+                key="t_trademark_supplement",
+                height=160,
+                placeholder="例：\n取り扱い薬：セマグルチド 0.25mg〜2.4mg\n料金：月額9,800円〜\n院数：全国50院\n返金保証：30日以内全額返金",
+            )
+
+        st.subheader("競合URL")
+        st.caption("上位記事の構成参照用。院の追加には使用しません。")
+        competitor_urls = []
+        for i in range(5):
+            u = st.text_input(
+                f"競合URL {i+1}" if i == 0 else "",
+                key=f"t_comp_{i}",
+                label_visibility="visible" if i == 0 else "collapsed",
+            )
+            if u.strip():
+                competitor_urls.append(u.strip())
+
+    elif article_type in ("地域", "比較"):
+        # ── 地域・比較記事：複数院 ───────────────────────────────
+        _ca_col1, _ca_col2 = st.columns([3, 1])
+        _ca_col1.subheader("掲載案件")
+        _ca_col2.markdown("<div style='padding-top:0.5rem'></div>", unsafe_allow_html=True)
+        clinic_count = int(_ca_col2.number_input(
+            "院数（任意）", min_value=0, value=0, step=1, key="t_clinic_count",
+            help="空白(0)にすると競合の掲載院数に自動で合わせます。",
+        ))
+        st.caption("※ここに入力した院は必ず記事に掲載されます。空欄のままでも自動探索で補完されます。")
+        to_remove = []
+        for i, c in enumerate(st.session_state.test_clinics):
+            is_first = (i == 0)
+            st.caption("案件 1（最上位）" if is_first else f"案件 {i + 1}")
+            tc0, tc1, tc2 = st.columns([3, 3, 1])
+            n = tc0.text_input("案件名 *", value=c["name"],   key=f"tcn_{i}", placeholder="TCB東京中央美容外科")
+            d = tc1.text_input("ドメイン *", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...")
+            if tc2.button("✕", key=f"trm_{i}") and len(st.session_state.test_clinics) > 1:
+                to_remove.append(i)
+            rec_label = "最訴求プラン *" if is_first else "最訴求プラン（任意）"
+            r = st.text_input(rec_label, value=c["recommended"], key=f"tcr_{i}", placeholder="例：セマグルチド0.5mgプラン")
+            a = st.text_area("強み・比較優位性（任意）", value=c["appeal"], height=60, key=f"tca_{i}", placeholder="例：他社より処方量が1段階上から始められる")
+            st.session_state.test_clinics[i] = {"name": n, "domain": d, "recommended": r, "appeal": a}
+        for idx in reversed(to_remove):
+            st.session_state.test_clinics.pop(idx)
+        if st.button("＋ 案件を追加", key="t_add"):
+            st.session_state.test_clinics.append({"name": "", "domain": "", "recommended": "", "appeal": ""})
+            st.rerun()
+
+        st.subheader("競合URL")
+        competitor_urls = []
+        for i in range(5):
+            u = st.text_input(
+                f"競合URL {i+1}" if i == 0 else "",
+                key=f"t_comp_{i}",
+                label_visibility="visible" if i == 0 else "collapsed",
+            )
+            if u.strip():
+                competitor_urls.append(u.strip())
+
+    else:
+        # ── ノウハウ記事：掲載案件なし ──────────────────────────
+        clinic_count = 0
+        st.session_state.test_clinics = []
+        st.info("ノウハウ記事は掲載案件なし（教育コンテンツのみ生成）")
+
+        st.subheader("競合URL")
+        competitor_urls = []
+        for i in range(5):
+            u = st.text_input(
+                f"競合URL {i+1}" if i == 0 else "",
+                key=f"t_comp_{i}",
+                label_visibility="visible" if i == 0 else "collapsed",
+            )
+            if u.strip():
+                competitor_urls.append(u.strip())
 
     st.divider()
     with st.expander("👤 ユーザー認識インプット（任意）"):
@@ -530,11 +721,13 @@ with _safe_tab(tab_custom):
 
     st.divider()
     if st.button("🚀 実行", type="primary", use_container_width=True, key="run_test"):
-        valid_clinics = [c for c in st.session_state.test_clinics if c["name"] and c["domain"]]
+        valid_clinics = [c for c in st.session_state.get("test_clinics", []) if c["name"] and c["domain"]]
         errs = []
         if not claude_key:  errs.append("Claude API Key 未設定")
         if not main_kw:     errs.append("メインKW を入力してください")
         if not genre:       errs.append("ジャンル を入力してください")
+        if article_type == "商標" and not valid_clinics:
+            errs.append("商標記事：案件名とドメインを入力してください")
         for e in errs:
             st.error(e)
 
@@ -552,6 +745,22 @@ with _safe_tab(tab_custom):
             combined_block  = "\n".join(filter(None, [default_block_val] + _cb_texts))
             combined_intent = "\n".join(_cb_intents)
             _first_valid = next((c for c in st.session_state.test_clinics if c["name"] and c["domain"]), None)
+            # 商標記事：強み①〜③をappeal_pointsに変換
+            _appeal_points = []
+            if article_type == "商標":
+                for _ssi, _ss in enumerate(st.session_state.get("t_trademark_strengths", [])):
+                    if _ss.get("point", "").strip():
+                        _pt = _ss["point"].strip()
+                        _bs = _ss.get("basis", "").strip()
+                        _appeal_points.append(f"強み{_ssi+1}: {_pt}" + (f"（根拠: {_bs}）" if _bs else ""))
+                # 補完情報をcustom_blockに追加
+                _tm_supp = st.session_state.get("t_trademark_supplement", "").strip()
+                if _tm_supp:
+                    combined_block = "\n\n".join(filter(None, [combined_block, f"【案件補完情報（記事生成に使用・そのまま引用しない）】\n{_tm_supp}"]))
+                # 参考URLをcompetitor_urlsに追加（最優先スクレイプ）
+                _tm_ref_url = st.session_state.get("t_trademark_ref_url", "").strip()
+                if _tm_ref_url:
+                    competitor_urls = [_tm_ref_url] + [u for u in competitor_urls if u != _tm_ref_url]
             inputs = {
                 "article_type":    article_type,
                 "site_name":       site_name,
@@ -567,43 +776,50 @@ with _safe_tab(tab_custom):
                 "selected_topics": selected_topics,
                 "user_awareness":  st.session_state.get("t_user_awareness", "").strip(),
                 "clinic_count":    clinic_count,
+                "appeal_points":   _appeal_points,
             }
             _t2_write_needed = False
             with st.status("生成中...", expanded=True) as s:
                 try:
                     st.write("🔍 競合分析中...")
                     comp = analyze_competitors(competitor_urls, claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
-                    st.write("🤖 クリニック自動探索中...")
-                    if competitor_urls:
-                        discovered = discover_clinics_from_competitors(
-                            comp["raw_pages"], valid_clinics, claude_key, gemini_api_key=gemini_key, research_provider=research_provider
-                        )
+                    if article_type == "商標":
+                        # 商標記事は自動探索を行わず、ユーザー指定の1院のみ使用
+                        all_clinics = valid_clinics[:1]
+                        st.write(f"　→ 商標記事のため自動探索スキップ。対象院: {all_clinics[0]['name'] if all_clinics else '（未指定）'}")
+                        inputs["clinic_count"] = 1
                     else:
-                        discovered = auto_discover_clinics(
-                            main_kw, genre, claude_key, valid_clinics, gemini_api_key=gemini_key, research_provider=research_provider
-                        )
-                    # 院数制限：valid_clinics（必須）は常に保持、discoveredをトリム
-                    if clinic_count > 0:
-                        n_discover = max(0, clinic_count - len(valid_clinics))
-                        discovered = discovered[:n_discover]
-                    all_clinics = valid_clinics + discovered
-                    if discovered:
-                        st.write(f"　→ {len(discovered)} 件を自動追加: {', '.join(c['name'] for c in discovered)}")
-                    # 院数不足の場合：auto_discoverで補完 → それでも足りなければ指定数を実際の数に下げる
-                    if clinic_count > 0 and len(all_clinics) < clinic_count:
-                        _shortfall = clinic_count - len(all_clinics)
-                        st.write(f"　→ {_shortfall} 件不足のため追加探索中...")
-                        _extra = auto_discover_clinics(
-                            main_kw, genre, claude_key, all_clinics,
-                            gemini_api_key=gemini_key, research_provider=research_provider
-                        )
-                        all_clinics = all_clinics + _extra[:_shortfall]
-                        if _extra:
-                            st.write(f"　→ 補完: {', '.join(c['name'] for c in _extra[:_shortfall])}")
-                    # それでも足りない場合は実際の院数に合わせる（空白院を生成させない）
-                    if clinic_count > 0 and len(all_clinics) < clinic_count:
-                        st.write(f"　→ 院数を {len(all_clinics)} 院に調整（探索結果が{clinic_count}院に届かなかったため）")
-                        inputs["clinic_count"] = len(all_clinics)
+                        st.write("🤖 クリニック自動探索中...")
+                        if competitor_urls:
+                            discovered = discover_clinics_from_competitors(
+                                comp["raw_pages"], valid_clinics, claude_key, gemini_api_key=gemini_key, research_provider=research_provider
+                            )
+                        else:
+                            discovered = auto_discover_clinics(
+                                main_kw, genre, claude_key, valid_clinics, gemini_api_key=gemini_key, research_provider=research_provider
+                            )
+                        # 院数制限：valid_clinics（必須）は常に保持、discoveredをトリム
+                        if clinic_count > 0:
+                            n_discover = max(0, clinic_count - len(valid_clinics))
+                            discovered = discovered[:n_discover]
+                        all_clinics = valid_clinics + discovered
+                        if discovered:
+                            st.write(f"　→ {len(discovered)} 件を自動追加: {', '.join(c['name'] for c in discovered)}")
+                        # 院数不足の場合：auto_discoverで補完 → それでも足りなければ指定数を実際の数に下げる
+                        if clinic_count > 0 and len(all_clinics) < clinic_count:
+                            _shortfall = clinic_count - len(all_clinics)
+                            st.write(f"　→ {_shortfall} 件不足のため追加探索中...")
+                            _extra = auto_discover_clinics(
+                                main_kw, genre, claude_key, all_clinics,
+                                gemini_api_key=gemini_key, research_provider=research_provider
+                            )
+                            all_clinics = all_clinics + _extra[:_shortfall]
+                            if _extra:
+                                st.write(f"　→ 補完: {', '.join(c['name'] for c in _extra[:_shortfall])}")
+                        # それでも足りない場合は実際の院数に合わせる（空白院を生成させない）
+                        if clinic_count > 0 and len(all_clinics) < clinic_count:
+                            st.write(f"　→ 院数を {len(all_clinics)} 院に調整（探索結果が{clinic_count}院に届かなかったため）")
+                            inputs["clinic_count"] = len(all_clinics)
                     inputs["clinics"] = all_clinics
                     st.write("🏥 クリニック情報収集中...")
                     _t2_db_creds = _get_gcp_creds(sheets_creds_file)
@@ -790,13 +1006,147 @@ with _safe_tab(tab_custom):
                 st.warning(f"⚠️ {_t2_last['debug']}")
         if _t2_last["todo_list"]:
             st.warning("**[要確認]リスト**\n" + _t2_last["todo_list"])
-        st.code(_t2_last["html"], language="html")
-        st.download_button(
-            "📥 HTMLをダウンロード", _t2_last["html"],
-            file_name=f"{_t2_last['main_kw'].replace(' ','_')}.html",
-            mime="text/html",
-            key="t2_dl",
-        )
+        # ── H2ブロック編集UI ─────────────────────────────────────
+        _html_hash = hashlib.md5(_t2_last["html"].encode()).hexdigest()
+        if st.session_state.get("t2_h2_blocks_hash") != _html_hash:
+            st.session_state["t2_h2_blocks"] = _split_html_by_h2(_t2_last["html"])
+            st.session_state["t2_h2_blocks_hash"] = _html_hash
+        _h2_blocks = st.session_state["t2_h2_blocks"]
+
+        _h2_split_method = "マーカー" if any("H2_BLOCK_START" in b["html"] for b in _h2_blocks) else ("<h2>タグ" if len(_h2_blocks) > 1 else "分割不可")
+        st.subheader(f"H2ブロック編集（{len(_h2_blocks)}ブロック / 分割方式: {_h2_split_method}）")
+        _h2_regen_inputs = {**_t2_last.get("_inputs", {}), "main_kw": _t2_last["main_kw"]}
+
+        for _bi, _block in enumerate(_h2_blocks):
+            _is_confirmed = _block["confirmed"]
+            _is_modified = _block.get("modified", False)
+            _status_icon = "✅" if _is_confirmed else ("✏️" if _is_modified else "⬜")
+            with st.expander(f"{_status_icon} {_block['title']}", expanded=not _is_confirmed):
+                st.code(_block["html"], language="html")
+
+                _dl_col, _ = st.columns([2, 5])
+                with _dl_col:
+                    st.download_button(
+                        "📥 このH2をDL",
+                        _block["html"].encode("utf-8"),
+                        file_name=f"h2_{_bi+1}_{_block['title'][:20].replace(' ','_')}.html",
+                        mime="text/html",
+                        key=f"t2_h2_dl_{_bi}",
+                    )
+
+                st.text_area(
+                    "修正指示",
+                    value=_block.get("instruction", ""),
+                    key=f"t2_h2_instr_{_bi}",
+                    placeholder="例：この段落の具体例をもっと増やしてほしい",
+                    height=80,
+                )
+
+                _rcol1, _rcol2 = st.columns(2)
+                if _rcol1.button("🔄 このH2を再生成", key=f"t2_h2_regen_{_bi}"):
+                    _current_instr = st.session_state.get(f"t2_h2_instr_{_bi}", "").strip()
+                    if not _current_instr:
+                        st.warning("修正指示を入力してください")
+                    else:
+                        with st.spinner("再生成中..."):
+                            try:
+                                _new_html = _regenerate_h2_block(
+                                    _bi, _h2_blocks, _current_instr,
+                                    _h2_regen_inputs, _t2_last["structure_text"], claude_key,
+                                )
+                                # Drive に修正ログを保存（失敗してもメインフローは止めない）
+                                _edit_creds = _get_gcp_creds(sheets_creds_file)
+                                if _edit_creds:
+                                    try:
+                                        _log_ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                                        _log_kw = _t2_last["main_kw"][:20].replace(" ", "_")
+                                        drive_uploader.upload_json(
+                                            {
+                                                "date": datetime.date.today().isoformat(),
+                                                "main_kw": _t2_last["main_kw"],
+                                                "h2_title": _block["title"],
+                                                "instruction": _current_instr,
+                                                "before_html": _block["original_html"],
+                                                "after_html": _new_html,
+                                            },
+                                            f"edit_{_log_ts}_{_log_kw}.json",
+                                            "edit_logs",
+                                            _edit_creds,
+                                            _edit_logs_folder_id,
+                                        )
+                                    except Exception:
+                                        pass
+                                _h2_blocks[_bi]["html"] = _new_html
+                                _h2_blocks[_bi]["modified"] = True
+                                _h2_blocks[_bi]["confirmed"] = False
+                                _h2_blocks[_bi]["instruction"] = _current_instr
+                                st.session_state["t2_h2_blocks"] = _h2_blocks
+                                st.rerun()
+                            except Exception as _re:
+                                st.error(f"再生成エラー: {_re}")
+
+                _confirm_label = "✅ 確定済み（クリックで解除）" if _is_confirmed else "☑️ この内容で確定"
+                if _rcol2.button(_confirm_label, key=f"t2_h2_confirm_{_bi}"):
+                    _h2_blocks[_bi]["confirmed"] = not _is_confirmed
+                    st.session_state["t2_h2_blocks"] = _h2_blocks
+                    st.rerun()
+
+        # ── 全体ダウンロード + スプシ書き出し ───────────────────────
+        st.divider()
+        _full_html = "\n\n".join(b["html"] for b in _h2_blocks)
+        _confirmed_count = sum(1 for b in _h2_blocks if b["confirmed"])
+
+        _btm_col1, _btm_col2 = st.columns(2)
+        with _btm_col1:
+            st.download_button(
+                "📥 記事全体をダウンロード（全H2まとめ）",
+                _full_html.encode("utf-8"),
+                file_name=f"{_t2_last['main_kw'].replace(' ','_')}_full.html",
+                mime="text/html",
+                key="t2_dl_full",
+            )
+        with _btm_col2:
+            if output_tab_sel != "（書き込まない）" and article_sheet_url:
+                if st.button(
+                    f"📊 スプシに書き出す（{_confirmed_count}/{len(_h2_blocks)} 確定）",
+                    key="t2_h2_sheet_write",
+                ):
+                    _h2_write_creds = _get_gcp_creds(sheets_creds_file)
+                    if not _h2_write_creds:
+                        st.error("Google Sheets 認証情報が未設定です")
+                    else:
+                        with st.spinner(f"[{output_tab_sel}] タブに書き込み中..."):
+                            try:
+                                ws_h2 = get_sheet(article_sheet_url, _h2_write_creds, tab_name=output_tab_sel)
+                                _h2_all_vals = ws_h2.get_all_values()
+                                _h2_target_row = None
+                                for _ri, _rd in enumerate(_h2_all_vals[1:], start=2):
+                                    _pd = _rd + [""] * (16 - len(_rd))
+                                    if _pd[3] == _t2_last["main_kw"] and not _pd[11]:
+                                        _h2_target_row = _ri
+                                        break
+                                if _h2_target_row is None:
+                                    for _ri, _rd in enumerate(_h2_all_vals[1:], start=2):
+                                        _pd = _rd + [""] * (16 - len(_rd))
+                                        if not _pd[11]:
+                                            _h2_target_row = _ri
+                                            break
+                                if _h2_target_row is None:
+                                    _h2_target_row = len(_h2_all_vals) + 1
+                                write_output_row(ws_h2, _h2_target_row, {
+                                    "title":     _t2_last.get("title", ""),
+                                    "meta":      _t2_last.get("meta", ""),
+                                    "html":      _full_html,
+                                    "todo_list": _t2_last.get("todo_list", ""),
+                                    "clinics":   _t2_last.get("clinics", []),
+                                })
+                                st.success(f"✅ [{output_tab_sel}] 行{_h2_target_row}に書き込みました")
+                            except Exception as _we3:
+                                import traceback as _tb3
+                                st.error(f"スプシ書き込みエラー: {_we3}")
+                                st.code(_tb3.format_exc())
+            else:
+                st.caption("スプシ書き込み先が設定されていません（サイドバーで設定）")
 
     # 掲載院一覧（クリニックブロックタブ用）
     if _t2_last and _t2_last.get("clinics"):
@@ -871,6 +1221,11 @@ with _safe_tab(tab_custom):
                             _img_results = []
                             for i, p in enumerate(prompts):
                                 st.write(f"🎨 画像生成中 ({i+1}/{len(prompts)}): {p['filename']}...")
+                                if p.get("_unresolved_vars"):
+                                    st.warning(
+                                        f"⚠️ 変数置換漏れ: {', '.join(p['_unresolved_vars'])} が未置換のままです。"
+                                        "テンプレートの変数名を見直すか、再生成してください。"
+                                    )
                                 img_bytes = image_generator.generate_image_bytes(
                                     p["prompt"],
                                     gemini_api_key=gemini_key,

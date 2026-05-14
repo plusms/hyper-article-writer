@@ -76,9 +76,13 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
                 "固定H2：冒頭（最訴求プラン・営業時間・諸費用）、まとめ"
             )
         else:
+            # 商標記事は必ず1院専用。clinicsが複数渡されても先頭1院のみ使用
+            _trademark_name = _clinics[0]["name"] if _clinics else "（メインKWから判断）"
             type_note = (
-                "クリニック名（商標名）はメインKWから自動判断してください。\n"
+                f"掲載クリニック：{_trademark_name}（このクリニック専用の記事）\n"
                 f"ジャンル: {inputs['genre']}\n"
+                "1院専用記事。他院との比較・複数院紹介は行わない。\n"
+                "「おすすめクリニック紹介」「クリニックの選び方」等の複数院前提の構成要素は設けない。\n"
                 "固定H2：冒頭（最訴求プラン・営業時間・諸費用）、まとめ"
             )
 
@@ -87,10 +91,17 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
     appeal_note = ""
     _appeals = [a for a in inputs.get("appeal_points", []) if a and a.strip()]
     if _appeals:
-        appeal_note = "\n【訴求インプット（優先度順）】\n"
-        for i, ap in enumerate(_appeals, 1):
-            appeal_note += f"第{i}訴求: {ap}\n"
-        appeal_note += "※第1訴求を最も目立つ位置・強調度で記事に反映する。専用H2は不要、記事全体の訴求軸として使う。\n"
+        _article_type_pl = inputs.get("article_type", "")
+        if _article_type_pl == "商標":
+            appeal_note = "\n【比較優位性・強み（構成の軸として使う）】\n"
+            for i, ap in enumerate(_appeals, 1):
+                appeal_note += f"強み{i}: {ap}\n"
+            appeal_note += "※これらの強みが自然に伝わるH2/H3構成にする。強みを直接見出しにしない。\n"
+        else:
+            appeal_note = "\n【訴求インプット（優先度順）】\n"
+            for i, ap in enumerate(_appeals, 1):
+                appeal_note += f"第{i}訴求: {ap}\n"
+            appeal_note += "※第1訴求を最も目立つ位置・強調度で記事に反映する。専用H2は不要、記事全体の訴求軸として使う。\n"
 
     user_awareness_note = ""
     if inputs.get("user_awareness", "").strip():

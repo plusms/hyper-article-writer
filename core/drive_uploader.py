@@ -1,4 +1,5 @@
 import io
+import json as _json_lib
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials
@@ -53,6 +54,30 @@ def upload_image(
     slug_folder_id = _find_or_create_folder(service, slug, site_folder_id)
     media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/png")
     metadata = {"name": filename, "parents": [slug_folder_id]}
+    file = service.files().create(
+        body=metadata,
+        media_body=media,
+        fields="id, webViewLink",
+        supportsAllDrives=True,
+    ).execute()
+    return file.get("webViewLink", "")
+
+
+def upload_json(
+    data: dict,
+    filename: str,
+    folder_name: str,
+    credentials_dict: dict,
+    parent_folder_id: str,
+) -> str:
+    """JSONデータをDriveにアップロードして webViewLink を返す。
+    parent_folder_id / folder_name / filename の階層で保存する。
+    """
+    service = _get_service(credentials_dict)
+    folder_id = _find_or_create_folder(service, folder_name, parent_folder_id)
+    content = _json_lib.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    media = MediaIoBaseUpload(io.BytesIO(content), mimetype="application/json")
+    metadata = {"name": filename, "parents": [folder_id]}
     file = service.files().create(
         body=metadata,
         media_body=media,

@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 import requests
 import anthropic
 from typing import Optional
@@ -166,6 +167,13 @@ def generate_image_prompts(
 ## 記事構成
 {structure_text}
 
+## 変数置換ルール（最重要・厳守）
+- テンプレート中の {{{{変数名}}}} はすべて実際の内容に置き換えること
+- 出力する "prompt" フィールドに {{{{ }}}} 形式の変数を1つも残してはならない
+- 変数名（例：card_label_sub, main_title, item_header_1 など）は置換後のプロンプトに含めない
+- 変数の意味が不明な場合は、記事の内容・見出し・テーマから最も自然な語句を推測して埋める
+- 「変数名のまま出力」は絶対禁止。必ずテキスト内容で置き換えること
+
 ## 出力形式（JSON配列のみ・説明文・コードフェンス不要）
 [
   {{
@@ -173,7 +181,7 @@ def generate_image_prompts(
     "filename": "{slug}-word.webp",
     "alt": "画像の内容説明（日本語20〜40字）",
     "template_id": 1,
-    "prompt": "（変数差し替え済みのプロンプト全文）"
+    "prompt": "（変数差し替え済みのプロンプト全文。{{{{}}}}形式の文字列が一切含まれないこと）"
   }}
 ]
 """
@@ -188,7 +196,37 @@ def generate_image_prompts(
         text = text.split("```json")[1].split("```")[0].strip()
     elif "```" in text:
         text = text.split("```")[1].split("```")[0].strip()
-    return json.loads(text)
+    items = json.loads(text)
+
+    # 置換漏れ検知 → 残っていたら2nd passで自動補完
+    needs_retry = [(i, item) for i, item in enumerate(items) if re.search(r'\{\{[^}]+\}\}', item.get("prompt", ""))]
+    if needs_retry:
+        for i, item in needs_retry:
+            unresolved = re.findall(r'\{\{[^}]+\}\}', item["prompt"])
+            retry_prompt = f"""以下のプロンプト文中に {{{{変数名}}}} 形式の未置換変数が残っています。
+記事構成の内容をもとに、すべての変数を実際のテキストに置き換えてください。
+
+## 対象プロンプト
+{item["prompt"]}
+
+## 未置換変数
+{', '.join(set(unresolved))}
+
+## 記事構成（参考）
+{structure_text[:2000]}
+
+## 出力ルール
+- 変数をすべて置き換えたプロンプト全文のみ出力する
+- {{{{}}}} 形式の文字列を1つも残さない
+- 説明文・コードフェンス不要"""
+            retry_msg = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=4096,
+                messages=[{"role": "user", "content": retry_prompt}],
+            )
+            items[i]["prompt"] = retry_msg.content[0].text.strip()
+
+    return items
 
 
 # ── 見本画像 → テンプレート＋トンマナ自動生成（Claude Vision）──
