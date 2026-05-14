@@ -20,6 +20,7 @@ from core.writer import generate_body, quality_check
 from core.sheets import (
     read_input_rows, write_output_row, write_full_row, write_status, get_sheet,
     get_settings_sheet, read_defaults, ARTICLE_TABS,
+    get_worksheet_readonly, read_recent_input_rows,
 )
 from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
 
@@ -529,52 +530,61 @@ with _safe_tab(tab_custom):
 
     st.divider()
 
-    # ── 登録情報履歴（現在の記事タイプに絞って最新5件）────────────────
-    _type_hist = [d for d in _load_output_cache()
-                  if d.get("_inputs", {}).get("article_type") == article_type][:5]
-    if _type_hist:
-        with st.expander(f"📋 {article_type}の登録情報履歴（最新{len(_type_hist)}件）", expanded=False):
-            for _th in _type_hist:
-                _th_inp = _th.get("_inputs", {})
-                _th_kw = _th.get("main_kw", _th_inp.get("main_kw", "(不明)"))
-                _th_cf = _th.get("_cache_file", "")
-                _th_date = f"{_th_cf[0:4]}-{_th_cf[4:6]}-{_th_cf[6:8]}" if len(_th_cf) >= 8 else ""
-                with st.expander(f"**{_th_kw}**  {_th_date}", expanded=False):
-                    _th_clinics = _th_inp.get("clinics", [])
-                    if _th_clinics:
-                        st.caption("掲載案件")
-                        for _thc in _th_clinics:
-                            if _thc.get("name"):
-                                st.write(f"・{_thc['name']} / {_thc.get('domain', '')}")
-                    if article_type == "商標":
-                        _th_str = _th_inp.get("tm_strengths", [])
-                        if any(s.get("point") for s in _th_str):
-                            st.caption("強み")
-                            for _ts in _th_str:
-                                if _ts.get("point"):
-                                    _ts_txt = f"・{_ts['point']}"
-                                    if _ts.get("basis"):
-                                        _ts_txt += f"（{_ts['basis']}）"
-                                    st.write(_ts_txt)
-                    _th_comps = _th_inp.get("competitor_urls", [])
-                    if _th_comps:
-                        st.caption(f"競合URL: {len(_th_comps)}件")
-                    if st.button("📥 この入力条件を復元", key=f"th_restore_{_th_cf}"):
-                        _r_atype = _th_inp.get("article_type", "地域")
-                        if _r_atype in ["地域", "比較", "商標", "ノウハウ"]:
-                            st.session_state["test_type"] = _r_atype
-                        st.session_state["t_site"]       = _th_inp.get("site_name", "")
-                        st.session_state["t_genre"]      = _th_inp.get("genre", "")
-                        st.session_state["t_main_kw"]    = _th_inp.get("main_kw", "")
-                        st.session_state["t_sub_kw"]     = _th_inp.get("sub_kw", "")
-                        st.session_state["t_related_kw"] = _th_inp.get("related_kw", "")
-                        _r_cl = _th_inp.get("clinics", [])
-                        st.session_state["test_clinics"] = _r_cl or [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
-                        for _rci in range(5):
-                            st.session_state[f"t_comp_{_rci}"] = _th_comps[_rci] if _rci < len(_th_comps) else ""
-                        if _r_atype == "商標" and _th_inp.get("tm_strengths"):
-                            st.session_state["t_trademark_strengths"] = _th_inp["tm_strengths"]
-                        st.rerun()
+    # ── 登録情報履歴（スプシ最新5件・デプロイをまたいで永続）────────────────
+    _hist_cache_key = f"t2_sheet_hist_{article_type}"
+    if article_sheet_url:
+        _hist_col1, _hist_col2 = st.columns([9, 1])
+        _hist_col1.empty()
+        if _hist_col2.button("🔄", key="t2_hist_refresh", help="スプシから再読み込み"):
+            st.session_state.pop(_hist_cache_key, None)
+
+        if _hist_cache_key not in st.session_state:
+            _hist_creds = _get_gcp_creds(sheets_creds_file)
+            if _hist_creds:
+                try:
+                    _hist_ws = get_worksheet_readonly(article_sheet_url, _hist_creds, article_type)
+                    st.session_state[_hist_cache_key] = read_recent_input_rows(_hist_ws) if _hist_ws else []
+                except Exception:
+                    st.session_state[_hist_cache_key] = []
+
+        _sheet_hist = st.session_state.get(_hist_cache_key, [])
+        if _sheet_hist:
+            with st.expander(f"📋 {article_type}の登録情報履歴（最新{len(_sheet_hist)}件）", expanded=False):
+                for _th in _sheet_hist:
+                    _th_clinics = []
+                    for _item in [x.strip() for x in _th.get("clinics_raw", "").split(",") if x.strip()]:
+                        _p = _item.split("::")
+                        _th_clinics.append({
+                            "name":        _p[0].strip(),
+                            "domain":      _p[1].strip() if len(_p) > 1 else "",
+                            "recommended": _p[2].strip() if len(_p) > 2 else "",
+                            "appeal":      _p[3].strip() if len(_p) > 3 else "",
+                        })
+                    _th_comps = [u.strip() for u in _th.get("competitor_urls_raw", "").split(",") if u.strip()]
+                    _th_row = _th.get("row_index", "")
+                    with st.expander(f"**{_th.get('main_kw', '(不明)')}**  （行{_th_row}）", expanded=False):
+                        if _th_clinics:
+                            st.caption("掲載案件")
+                            for _thc in _th_clinics:
+                                if _thc.get("name"):
+                                    st.write(f"・{_thc['name']} / {_thc.get('domain', '')}")
+                        if _th_comps:
+                            st.caption(f"競合URL: {len(_th_comps)}件")
+                        if st.button("📥 この入力条件を復元", key=f"th_restore_r{_th_row}"):
+                            _r_atype = _th.get("article_type") or article_type
+                            if _r_atype in ["地域", "比較", "商標", "ノウハウ"]:
+                                st.session_state["test_type"] = _r_atype
+                            st.session_state["t_site"]       = _th.get("site_name", "")
+                            st.session_state["t_genre"]      = _th.get("genre", "")
+                            st.session_state["t_main_kw"]    = _th.get("main_kw", "")
+                            st.session_state["t_sub_kw"]     = _th.get("sub_kw", "")
+                            st.session_state["t_related_kw"] = _th.get("related_kw", "")
+                            st.session_state["t_rec"]        = _th.get("recommended", "")
+                            st.session_state["t_custom"]     = _th.get("custom_block", "")
+                            st.session_state["test_clinics"] = _th_clinics or [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
+                            for _rci in range(5):
+                                st.session_state[f"t_comp_{_rci}"] = _th_comps[_rci] if _rci < len(_th_comps) else ""
+                            st.rerun()
 
     col_left, col_right = st.columns(2)
 
@@ -982,6 +992,7 @@ with _safe_tab(tab_custom):
                                 st.code(_tb.format_exc())
                             else:
                                 st.success(f"✅ [{output_tab_sel}] 行{_target_row}に書き込みました")
+                                st.session_state.pop(f"t2_sheet_hist_{article_type}", None)
 
     # ── スプシ行から読み込む ─────────────────────────────────────
     with st.expander("📊 スプシ行から読み込む", expanded=False):

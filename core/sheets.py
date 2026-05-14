@@ -199,3 +199,43 @@ def read_defaults(ws: gspread.Worksheet) -> dict:
     """設定タブから {記事タイプ: デフォルト追加指示} を返す。"""
     rows = ws.get_all_values()
     return {r[0]: r[1] for r in rows[1:] if len(r) >= 2 and r[0]}
+
+
+def get_worksheet_readonly(sheet_url: str, creds_data: dict, tab_name: str):
+    """ヘッダー書き込みなしでタブを取得。存在しない場合はNoneを返す。"""
+    creds = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
+    gc = gspread.authorize(creds)
+    sheet_url = sheet_url.strip()
+    if sheet_url.startswith("http"):
+        ss = gc.open_by_url(sheet_url)
+    else:
+        ss = gc.open_by_key(sheet_url)
+    try:
+        return ss.worksheet(tab_name)
+    except gspread.WorksheetNotFound:
+        return None
+
+
+def read_recent_input_rows(ws: gspread.Worksheet, n: int = 5) -> list[dict]:
+    """main_kwが入っている行を新しい順にN件返す。列インデックス読み取りのためヘッダー変更の影響を受けない。"""
+    all_values = ws.get_all_values()
+    rows = []
+    for i, row in enumerate(all_values[1:], start=2):
+        padded = row + [""] * (11 - len(row))
+        if not padded[COL_IN["main_kw"]]:
+            continue
+        rows.append({
+            "row_index":           i,
+            "site_name":           padded[COL_IN["site_name"]],
+            "genre":               padded[COL_IN["genre"]],
+            "article_type":        padded[COL_IN["article_type"]],
+            "main_kw":             padded[COL_IN["main_kw"]],
+            "sub_kw":              padded[COL_IN["sub_kw"]],
+            "clinics_raw":         padded[COL_IN["clinics_raw"]],
+            "competitor_urls_raw": padded[COL_IN["competitor_urls_raw"]],
+            "custom_block":        padded[COL_IN["custom_block"]],
+            "recommended":         padded[COL_IN["recommended"]],
+            "related_kw":          padded[COL_IN["related_kw"]],
+            "status":              padded[COL_IN["status"]],
+        })
+    return list(reversed(rows))[:n]
