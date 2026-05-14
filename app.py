@@ -818,25 +818,12 @@ with _safe_tab(tab_custom):
             key="t2_clinic_list_dl",
         )
 
-    # ── 画像生成セクション（前回生成した記事に対して実行）────────────
-    if _t2_last:
+    # ── 画像生成セクション（サイト設定に画像テンプレートが登録されている場合のみ表示）──
+    if _t2_last and _t2_last.get("site_config", {}).get("image_templates"):
         st.divider()
         st.subheader("🖼️ 画像生成")
         st.caption(f"対象記事: {_t2_last['main_kw']}")
-
-        _has_site_templates = bool(_t2_last.get("site_config", {}).get("image_templates"))
-        if not _has_site_templates:
-            st.info("サイト設定に画像テンプレートが未登録のため、組み込みレイアウトを使用します。")
-            _builtin_options = {k: v["name"] for k, v in image_generator.BUILTIN_TEMPLATES.items()}
-            _selected_builtin = st.selectbox(
-                "使用するレイアウト",
-                options=list(_builtin_options.keys()),
-                format_func=lambda k: _builtin_options[k],
-                key="t2_builtin_layout",
-            )
-            _img_site_config = {"image_templates": [{"layout_type": _selected_builtin}]}
-        else:
-            _img_site_config = _t2_last["site_config"]
+        _img_site_config = _t2_last["site_config"]
 
         st.caption(f"画像生成モデル（デフォルト）: `{image_generator._IMAGE_MODEL}`")
         _img_model_override = st.text_input(
@@ -1012,44 +999,46 @@ with _safe_tab(tab_settings):
                 st.caption("テンプレート未登録")
 
             st.markdown("**テンプレートを追加**")
-            _is_custom = bool(_existing_tmpls) and any("base_prompt" in t for t in _existing_tmpls)
             _img_mode = st.radio(
                 "追加方法",
-                ["layout", "upload", "text"],
-                index=1 if _is_custom else 0,
-                format_func=lambda x: {"layout": "組み込みレイアウトから選ぶ", "upload": "見本画像からカスタム生成", "text": "プロンプトを直接入力（md貼り付け）"}[x],
+                ["md", "upload"],
+                format_func=lambda x: {"md": "mdファイルをアップ", "upload": "見本画像からカスタム生成（手動）"}[x],
                 horizontal=True,
                 key=f"img_mode_{_current_site4}",
             )
 
-            if _img_mode == "layout":
-                _layout_keys = list(image_generator.BUILTIN_TEMPLATES.keys())
-                _selected_layouts = st.multiselect(
-                    "レイアウト（複数選択可）",
-                    _layout_keys,
-                    default=[_layout_keys[0]],
-                    format_func=lambda k: image_generator.BUILTIN_TEMPLATES[k]["name"],
-                    key=f"img_layout_{_current_site4}",
+            if _img_mode == "md":
+                st.caption("プロンプトを記述した .md ファイルをアップすると、ファイル名をテンプレート名として自動登録します。複数ファイル同時アップ可。")
+                _md_uploads = st.file_uploader(
+                    "mdファイルをアップ（複数選択可）",
+                    type=["md", "txt"],
+                    accept_multiple_files=True,
+                    key=f"t4_md_upload_{_current_site4}",
                 )
-                for _sl in _selected_layouts:
-                    with st.expander(f"プレビュー: {image_generator.BUILTIN_TEMPLATES[_sl]['name']}"):
-                        st.code(image_generator.BUILTIN_TEMPLATES[_sl]["base_prompt"][:400] + "...", language="")
-                _add_mode = st.radio("保存方式", ["追加（既存を保持）", "上書き（既存を置き換え）"], horizontal=True, key=f"layout_add_mode_{_current_site4}")
-                if st.button("💾 選択したレイアウトを保存", key=f"btn_save_layout_{_current_site4}") and _selected_layouts:
-                    _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
-                    _new_tmpls = [{"layout_type": k, "name": image_generator.BUILTIN_TEMPLATES[k]["name"]} for k in _selected_layouts]
-                    if _add_mode.startswith("追加"):
-                        _cfg_now["image_templates"] = _cfg_now.get("image_templates", []) + _new_tmpls
-                    else:
-                        _cfg_now["image_templates"] = _new_tmpls
-                    if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
-                        st.success(f"保存しました（{len(_new_tmpls)}件）。")
-                        st.rerun()
-                    else:
-                        st.error("保存に失敗しました。")
+                if _md_uploads:
+                    _md_add_mode = st.radio("保存方式", ["追加（既存を保持）", "上書き（既存を置き換え）"], horizontal=True, key=f"md_add_mode_{_current_site4}")
+                    if st.button(f"💾 {len(_md_uploads)}件を登録", key=f"btn_save_md_{_current_site4}", type="primary"):
+                        _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
+                        _new_md_tmpls = []
+                        for _mf in _md_uploads:
+                            _mf.seek(0)
+                            _md_body = _mf.read().decode("utf-8", errors="replace").strip()
+                            _md_name = pathlib.Path(_mf.name).stem
+                            if _md_body:
+                                _new_md_tmpls.append({"base_prompt": _md_body, "name": _md_name})
+                        if _new_md_tmpls:
+                            if _md_add_mode.startswith("追加"):
+                                _cfg_now["image_templates"] = _cfg_now.get("image_templates", []) + _new_md_tmpls
+                            else:
+                                _cfg_now["image_templates"] = _new_md_tmpls
+                            if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
+                                st.success(f"✅ {len(_new_md_tmpls)}件を保存しました。")
+                                st.rerun()
+                            else:
+                                st.error("保存に失敗しました。")
 
-            else:
-                st.caption("見本画像を複数アップすると、1枚ずつ解析してカスタムテンプレートを生成・追加保存します。")
+            elif _img_mode == "upload":
+                st.caption("見本画像をアップすると、Claude Visionで構造を解析してプロンプトテンプレートを自動生成します。複数枚同時アップ可。")
                 _t4_img_uploads = st.file_uploader(
                     "画像をアップ（jpg / png / webp・複数選択可）",
                     type=["jpg", "jpeg", "png", "webp"],
@@ -1075,7 +1064,7 @@ with _safe_tab(tab_settings):
                                         _t4_generated = image_generator.generate_template_from_image(
                                             _t4_img_bytes, _t4_mime, _cfg_now, claude_key
                                         )
-                                        _generated_tmpls.append({"base_prompt": _t4_generated, "name": _uf.name})
+                                        _generated_tmpls.append({"base_prompt": _t4_generated, "name": pathlib.Path(_uf.name).stem})
                                         st.write(f"✅ {_uf.name} 完了")
                                     except Exception as _t4_e:
                                         st.error(f"{_uf.name} 生成エラー: {_t4_e}")
@@ -1089,36 +1078,6 @@ with _safe_tab(tab_settings):
                                     st.rerun()
                                 else:
                                     st.error("保存に失敗しました。")
-
-            if _img_mode == "text":
-                st.caption("プロンプトのmdファイル内容またはテキストをそのまま貼り付けて登録します。")
-                _text_tmpl_name = st.text_input(
-                    "テンプレート名",
-                    placeholder="例: 横並び3項目（カスタム）",
-                    key=f"text_tmpl_name_{_current_site4}",
-                )
-                _text_tmpl_body = st.text_area(
-                    "プロンプト本文（mdまたはテキストをそのまま貼り付け）",
-                    height=300,
-                    key=f"text_tmpl_body_{_current_site4}",
-                    placeholder="フラットデザインのクリーンなレイアウト...\n{{main_title}} {{card_text_1}} ...",
-                )
-                _text_add_mode = st.radio("保存方式", ["追加（既存を保持）", "上書き（既存を置き換え）"], horizontal=True, key=f"text_add_mode_{_current_site4}")
-                if st.button("💾 このプロンプトを保存", key=f"btn_save_text_{_current_site4}", type="primary"):
-                    if not _text_tmpl_body.strip():
-                        st.error("プロンプト本文を入力してください。")
-                    else:
-                        _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
-                        _new_text_tmpl = {"base_prompt": _text_tmpl_body.strip(), "name": _text_tmpl_name.strip() or "カスタムテンプレート"}
-                        if _text_add_mode.startswith("追加"):
-                            _cfg_now["image_templates"] = _cfg_now.get("image_templates", []) + [_new_text_tmpl]
-                        else:
-                            _cfg_now["image_templates"] = [_new_text_tmpl]
-                        if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
-                            st.success("✅ テンプレートを保存しました。")
-                            st.rerun()
-                        else:
-                            st.error("保存に失敗しました。")
 
             st.markdown("---")
 
