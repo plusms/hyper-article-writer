@@ -342,8 +342,13 @@ def build_inputs_from_row(row: dict, defaults: dict | None = None) -> dict:
     for item in clinics_raw.split(","):
         item = item.strip()
         if "::" in item:
-            name, domain = item.split("::", 1)
-            clinics.append({"name": name.strip(), "domain": domain.strip()})
+            parts = item.split("::")
+            clinics.append({
+                "name":        parts[0].strip(),
+                "domain":      parts[1].strip() if len(parts) > 1 else "",
+                "recommended": parts[2].strip() if len(parts) > 2 else "",
+                "appeal":      parts[3].strip() if len(parts) > 3 else "",
+            })
 
     article_type = row.get("article_type", "地域")
     default_block = (defaults or {}).get(article_type, "")

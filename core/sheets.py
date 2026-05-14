@@ -94,16 +94,42 @@ def write_output_row(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
     )
 
 
+def _serialize_clinic(c: dict) -> str:
+    """クリニック1件を name::domain::recommended::appeal 形式にシリアライズ。末尾の空フィールドは省略。"""
+    parts = [
+        c.get("name", ""),
+        c.get("domain", ""),
+        c.get("recommended", ""),
+        c.get("appeal", ""),
+    ]
+    while parts and not parts[-1]:
+        parts.pop()
+    return "::".join(parts)
+
+
 def write_full_row(ws: gspread.Worksheet, row_index: int, input_data: dict, output_data: dict) -> None:
     """入力情報（A-K）と出力情報（L-P）を一括書き込み。カスタム作成で使用。"""
     clinics = output_data.get("clinics") or input_data.get("clinics", [])
-    clinic_str = ", ".join(
-        f"{c['name']}::{c.get('domain', '')}" for c in clinics if c.get("name")
-    )
+    clinic_str = ", ".join(_serialize_clinic(c) for c in clinics if c.get("name"))
     sub_kw_val = input_data.get("sub_kw", "")
     if isinstance(sub_kw_val, list):
         sub_kw_val = ", ".join(sub_kw_val)
     comp_str = ", ".join(input_data.get("competitor_urls", []))
+
+    # 商標の強み①〜③をH列（追加指示）末尾に追記
+    custom_block = input_data.get("custom_block", "")
+    tm_strengths = input_data.get("tm_strengths", [])
+    if tm_strengths and any(s.get("point") for s in tm_strengths):
+        _lines = []
+        for _i, _s in enumerate(tm_strengths, 1):
+            if _s.get("point"):
+                _ln = f"強み{_i}: {_s['point']}"
+                if _s.get("basis"):
+                    _ln += f"（根拠: {_s['basis']}）"
+                _lines.append(_ln)
+        if _lines:
+            custom_block = "\n\n".join(filter(None, [custom_block, "【比較優位性】\n" + "\n".join(_lines)]))
+
     ws.update(
         f"A{row_index}:P{row_index}",
         [[
@@ -114,7 +140,7 @@ def write_full_row(ws: gspread.Worksheet, row_index: int, input_data: dict, outp
             sub_kw_val,
             clinic_str,
             comp_str,
-            input_data.get("custom_block", ""),
+            custom_block,
             input_data.get("recommended", ""),
             input_data.get("related_kw", ""),
             "手動作成",
