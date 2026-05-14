@@ -531,7 +531,7 @@ def _build_body_prompt(
 - 比較表: <table class="comparison-table"><thead><tr><th>...</th></tr></thead><tbody>...</tbody></table>
 - [要確認]箇所: テキストをそのまま出力する（例: <p>[要確認：GoogleマップID]</p>）。補完しない
 - HTMLの外側にコードブロック記号（```）をつけない。HTMLをそのまま出力する
-- 各H2セクションの先頭（H2見出しタグの直前）に必ず `<!-- H2_BLOCK_START:{H2の見出しテキスト} -->` を1行挿入する（H3には挿入しない）{clinic_placeholder_note}
+- 各H2セクションの先頭（H2見出しタグの直前）に必ず `<!-- H2_BLOCK_START:{{H2の見出しテキスト}} -->` を1行挿入する（H3には挿入しない）{clinic_placeholder_note}
 {todo_note}
 【出力前の自己チェック（必ず実行・チェック結果は出力しない）】
 以下を確認し、違反があれば修正してからHTMLのみを出力してください。
