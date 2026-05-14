@@ -593,6 +593,54 @@ with _safe_tab(tab_custom):
                                 st.session_state[f"t_comp_{_rci}"] = _th_comps[_rci] if _rci < len(_th_comps) else ""
                             st.rerun()
 
+    # ── 行番号指定して復元 ────────────────────────────────────────
+    if article_sheet_url:
+        with st.expander("🔢 スプシの特定行から復元", expanded=False):
+            _sr_col1, _sr_col2 = st.columns([2, 1])
+            _sr_tab = _sr_col1.selectbox("タブ", ARTICLE_TABS, key="t2_sr_tab")
+            _sr_row = _sr_col2.number_input("行番号", min_value=2, value=2, step=1, key="t2_sr_row")
+            if st.button("📥 この行を復元", key="t2_sr_btn"):
+                _sr_creds = _get_gcp_creds(sheets_creds_file)
+                if not _sr_creds:
+                    st.error("Google Sheets 認証情報が未設定です")
+                else:
+                    try:
+                        _sr_ws = get_worksheet_readonly(article_sheet_url, _sr_creds, _sr_tab)
+                        if not _sr_ws:
+                            st.warning(f"タブ「{_sr_tab}」が見つかりません")
+                        else:
+                            _sr_all = read_input_rows(_sr_ws, default_article_type=_sr_tab)
+                            _sr_data = next((r for r in _sr_all if r["row_index"] == int(_sr_row)), None)
+                            if not _sr_data:
+                                st.warning(f"行 {int(_sr_row)} にデータが見つかりません（main_kwが空の行は除外されます）")
+                            else:
+                                _sr_atype = _sr_data.get("article_type") or _sr_tab
+                                if _sr_atype in ["地域", "比較", "商標", "ノウハウ"]:
+                                    st.session_state["_pending_article_type"] = _sr_atype
+                                st.session_state["t_site"]       = _sr_data.get("site_name", "")
+                                st.session_state["t_genre"]      = _sr_data.get("genre", "")
+                                st.session_state["t_main_kw"]    = _sr_data.get("main_kw", "")
+                                st.session_state["t_sub_kw"]     = _sr_data.get("sub_kw", "")
+                                st.session_state["t_related_kw"] = _sr_data.get("related_kw", "")
+                                st.session_state["t_rec"]        = _sr_data.get("recommended", "")
+                                st.session_state["t_custom"]     = _sr_data.get("custom_block", "")
+                                _sr_clinics = []
+                                for _src in [x.strip() for x in _sr_data.get("clinics_raw", "").split(",") if x.strip()]:
+                                    _sp = _src.split("::")
+                                    _sr_clinics.append({
+                                        "name":        _sp[0].strip(),
+                                        "domain":      _sp[1].strip() if len(_sp) > 1 else "",
+                                        "recommended": _sp[2].strip() if len(_sp) > 2 else "",
+                                        "appeal":      _sp[3].strip() if len(_sp) > 3 else "",
+                                    })
+                                st.session_state["test_clinics"] = _sr_clinics or [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
+                                _sr_comps = [u.strip() for u in _sr_data.get("competitor_urls_raw", "").split(",") if u.strip()]
+                                for _sci in range(5):
+                                    st.session_state[f"t_comp_{_sci}"] = _sr_comps[_sci] if _sci < len(_sr_comps) else ""
+                                st.rerun()
+                    except Exception as _sre:
+                        st.error(f"読み込みエラー: {_sre}")
+
     col_left, col_right = st.columns(2)
 
     with col_left:
@@ -1155,51 +1203,6 @@ with _safe_tab(tab_custom):
                         except Exception as _we_d:
                             st.error(f"スプシ書き込みエラー: {_we_d}")
 
-    # ── スプシ行から読み込む ─────────────────────────────────────
-    with st.expander("📊 スプシ行から読み込む", expanded=False):
-        if not article_sheet_url:
-            st.caption("サイドバーで「記事スプレッドシートURL」を設定すると使えます。")
-        else:
-            _sl_col1, _sl_col2 = st.columns([2, 1])
-            _sl_tab = _sl_col1.selectbox("タブ", ARTICLE_TABS, key="t2_load_tab")
-            _sl_row = _sl_col2.number_input("行番号", min_value=2, value=2, step=1, key="t2_load_row")
-            if st.button("📥 この行を読み込む", key="t2_load_row_btn"):
-                _sl_creds = _get_gcp_creds(sheets_creds_file)
-                if not _sl_creds:
-                    st.error("Google Sheets 認証情報が未設定です")
-                else:
-                    try:
-                        _sl_ws = get_sheet(article_sheet_url, _sl_creds, tab_name=_sl_tab)
-                        _sl_rows = read_input_rows(_sl_ws, default_article_type=_sl_tab)
-                        _sl_data = next((r for r in _sl_rows if r["row_index"] == int(_sl_row)), None)
-                        if not _sl_data:
-                            st.warning(f"行 {_sl_row} にデータが見つかりませんでした")
-                        else:
-                            _atype2 = _sl_data.get("article_type", "地域")
-                            if _atype2 in ["地域", "比較", "商標", "ノウハウ"]:
-                                st.session_state["test_type"] = _atype2
-                            st.session_state["t_site"]       = _sl_data.get("site_name", "")
-                            st.session_state["t_genre"]      = _sl_data.get("genre", "")
-                            st.session_state["t_main_kw"]    = _sl_data.get("main_kw", "")
-                            st.session_state["t_sub_kw"]     = _sl_data.get("sub_kw", "")
-                            st.session_state["t_related_kw"] = _sl_data.get("related_kw", "")
-                            st.session_state["t_rec"]        = _sl_data.get("recommended", "")
-                            st.session_state["t_custom"]     = _sl_data.get("custom_block", "")
-                            _sl_clinics_raw = _sl_data.get("clinics_raw", "")
-                            _sl_clinics = []
-                            for _slc in _sl_clinics_raw.split(","):
-                                _slc = _slc.strip()
-                                if "::" in _slc:
-                                    _cn, _cd = _slc.split("::", 1)
-                                    _sl_clinics.append({"name": _cn.strip(), "domain": _cd.strip()})
-                            st.session_state["test_clinics"] = _sl_clinics or [{"name": "", "domain": ""}]
-                            _sl_comps = [u.strip() for u in _sl_data.get("competitor_urls_raw", "").split(",") if u.strip()]
-                            for _ci3 in range(5):
-                                st.session_state[f"t_comp_{_ci3}"] = _sl_comps[_ci3] if _ci3 < len(_sl_comps) else ""
-                            st.success(f"行 {_sl_row} を読み込みました")
-                            st.rerun()
-                    except Exception as _sle:
-                        st.error(f"読み込みエラー: {_sle}")
 
     # ── 生成結果表示（session_stateから常時表示）────────────────
     _t2_last = st.session_state.get("t2_last")
