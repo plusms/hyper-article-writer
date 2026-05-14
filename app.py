@@ -105,7 +105,7 @@ with st.sidebar:
         key="image_provider",
     )
     research_provider = st.radio(
-        "リサーチAI（競合分析・クリニック収集）",
+        "リサーチAI（競合分析・案件収集）",
         ["claude", "gemini"],
         format_func=lambda x: "Claude (Haiku)" if x == "claude" else "Gemini Flash",
         horizontal=True,
@@ -140,11 +140,11 @@ with st.sidebar:
         )
 
     if _db_sheet_url_default:
-        st.caption("クリニックDB スプシ: Secrets から読込済み")
+        st.caption("案件DB スプシ: Secrets から読込済み")
         db_sheet_url = _db_sheet_url_default
     else:
         db_sheet_url = st.text_input(
-            "クリニックDB スプレッドシートURL",
+            "案件DB スプレッドシートURL",
             placeholder="https://docs.google.com/spreadsheets/d/...",
             key="db_sheet_url_input",
         )
@@ -651,7 +651,7 @@ with _safe_tab(tab_custom):
         # ── 商標記事：1院固定 ─────────────────────────────────
         clinic_count = 1
         st.session_state.test_clinics = st.session_state.test_clinics[:1]
-        st.subheader("対象クリニック（1院固定）")
+        st.subheader("対象案件（1件固定）")
         _tm_c = st.session_state.test_clinics[0]
         _tm_c0, _tm_c1, _tm_c2 = st.columns([3, 3, 1])
         _tm_n = _tm_c0.text_input("案件名 *", value=_tm_c["name"], key="tm_clinic_name", placeholder="東京美肌堂")
@@ -701,7 +701,7 @@ with _safe_tab(tab_custom):
             st.session_state["t_trademark_strengths"][_si] = {"point": _sp, "basis": _sb}
 
         with st.expander("📋 補完情報・参考URL（任意）", expanded=False):
-            st.caption("DBやスクレイプで取れない情報（料金・取扱い薬・院数など）と重点スクレイプしたいURLを入力すると[要確認]が減ります。")
+            st.caption("DBやスクレイプで取れない情報（料金・取扱い薬・件数など）と重点スクレイプしたいURLを入力すると[要確認]が減ります。")
             st.text_area(
                 "補完情報（自由記述）",
                 key="t_trademark_supplement",
@@ -715,7 +715,7 @@ with _safe_tab(tab_custom):
             )
 
         st.subheader("競合URL")
-        st.caption("上位記事の構成参照用。院の追加には使用しません。")
+        st.caption("上位記事の構成参照用。案件の追加には使用しません。")
         competitor_urls = []
         for i in range(5):
             u = st.text_input(
@@ -732,10 +732,10 @@ with _safe_tab(tab_custom):
         _ca_col1.subheader("掲載案件")
         _ca_col2.markdown("<div style='padding-top:0.5rem'></div>", unsafe_allow_html=True)
         clinic_count = int(_ca_col2.number_input(
-            "院数（任意）", min_value=0, value=0, step=1, key="t_clinic_count",
-            help="空白(0)にすると競合の掲載院数に自動で合わせます。",
+            "件数（任意）", min_value=0, value=0, step=1, key="t_clinic_count",
+            help="空白(0)にすると競合の掲載件数に自動で合わせます。",
         ))
-        st.caption("※ここに入力した院は必ず記事に掲載されます。空欄のままでも自動探索で補完されます。")
+        st.caption("※ここに入力した案件は必ず記事に掲載されます。空欄のままでも自動探索で補完されます。")
         to_remove = []
         for i, c in enumerate(st.session_state.test_clinics):
             is_first = (i == 0)
@@ -865,10 +865,10 @@ with _safe_tab(tab_custom):
                     if article_type == "商標":
                         # 商標記事は自動探索を行わず、ユーザー指定の1院のみ使用
                         all_clinics = valid_clinics[:1]
-                        st.write(f"　→ 商標記事のため自動探索スキップ。対象院: {all_clinics[0]['name'] if all_clinics else '（未指定）'}")
+                        st.write(f"　→ 商標記事のため自動探索スキップ。対象案件: {all_clinics[0]['name'] if all_clinics else '（未指定）'}")
                         inputs["clinic_count"] = 1
                     else:
-                        st.write("🤖 クリニック自動探索中...")
+                        st.write("🤖 案件自動探索中...")
                         if competitor_urls:
                             discovered = discover_clinics_from_competitors(
                                 comp["raw_pages"], valid_clinics, claude_key, gemini_api_key=gemini_key, research_provider=research_provider
@@ -897,10 +897,10 @@ with _safe_tab(tab_custom):
                                 st.write(f"　→ 補完: {', '.join(c['name'] for c in _extra[:_shortfall])}")
                         # それでも足りない場合は実際の院数に合わせる（空白院を生成させない）
                         if clinic_count > 0 and len(all_clinics) < clinic_count:
-                            st.write(f"　→ 院数を {len(all_clinics)} 院に調整（探索結果が{clinic_count}院に届かなかったため）")
+                            st.write(f"　→ 件数を {len(all_clinics)} 件に調整（探索結果が{clinic_count}件に届かなかったため）")
                             inputs["clinic_count"] = len(all_clinics)
                     inputs["clinics"] = all_clinics
-                    st.write("🏥 クリニック情報収集中...")
+                    st.write("🔍 案件情報収集中...")
                     _t2_db_creds = _get_gcp_creds(sheets_creds_file)
                     _t2_active_db_url = db_sheet_url if custom_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
                     _t2_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in all_clinics], genre=genre, creds_data=_t2_db_creds, sheet_url=_t2_active_db_url)
@@ -1225,10 +1225,10 @@ with _safe_tab(tab_custom):
             else:
                 st.caption("スプシ書き込み先が設定されていません（サイドバーで設定）")
 
-    # 掲載院一覧（クリニックブロックタブ用）
+    # 掲載案件一覧（案件ブロックタブ用）
     if _t2_last and _t2_last.get("clinics"):
         st.divider()
-        st.subheader("掲載院一覧（クリニックブロック用コピペ）")
+        st.subheader("掲載案件一覧（案件ブロック用コピペ）")
         _clinic_lines = []
         for _i, _c in enumerate(_t2_last["clinics"]):
             _url = _c.get("domain", "[要確認]")
@@ -1583,10 +1583,10 @@ with _safe_tab(tab_settings):
                 else:
                     st.error("保存に失敗しました。")
 
-            # ── クリニックブロックテンプレート管理 ─────────────────────
+            # ── 案件ブロックテンプレート管理 ─────────────────────
             st.markdown("---")
-            st.markdown("### 🏥 3. クリニックブロックテンプレート")
-            st.caption("おすすめクリニック紹介ブロックの構成・形式をテンプレートとして登録します。")
+            st.markdown("### 📋 3. 案件ブロックテンプレート")
+            st.caption("おすすめ案件紹介ブロックの構成・形式をテンプレートとして登録します。")
 
             _existing_cb_tmpls = _config4.get("clinic_block_templates", [])
 
@@ -1631,10 +1631,10 @@ with _safe_tab(tab_settings):
                             ):
                                 _cbt_bi_fields.append(_bfk)
 
-                        st.caption("上位3院のリンク設置箇所")
+                        st.caption("上位3件のリンク設置箇所")
                         _cbt_existing_links = _cbt.get("top3_link_placements", [])
                         _cbt_links = []
-                        for _lk, _ll in [("heading", "見出しクリニック名"), ("spec_image", "スペック画像"), ("cta_button", "CTAボタン")]:
+                        for _lk, _ll in [("heading", "見出し案件名"), ("spec_image", "スペック画像"), ("cta_button", "CTAボタン")]:
                             if st.checkbox(_ll, value=_lk in _cbt_existing_links, key=f"cbt_link_{_current_site4}_{_cbi}_{_lk}"):
                                 _cbt_links.append(_lk)
 
@@ -1663,8 +1663,8 @@ with _safe_tab(tab_settings):
                                 "price_table_templates": _cbt_pts,
                             })
 
-                st.markdown("**＋ 新規クリニックブロックテンプレート**")
-                _new_cbt_name = st.text_input("テンプレート名", key=f"new_cbt_name_{_current_site4}", placeholder="地域記事クリニックブロック")
+                st.markdown("**＋ 新規案件ブロックテンプレート**")
+                _new_cbt_name = st.text_input("テンプレート名", key=f"new_cbt_name_{_current_site4}", placeholder="地域記事案件ブロック（例）")
                 _new_cbt_heading = st.selectbox(
                     "見出しタイプ",
                     options=list(clinic_block_writer.HEADING_TYPE_OPTIONS.keys()),
@@ -1693,13 +1693,13 @@ with _safe_tab(tab_settings):
                         "price_table_templates": [],
                     })
 
-                _cb_submitted = st.form_submit_button("💾 クリニックブロックテンプレートを保存", type="primary")
+                _cb_submitted = st.form_submit_button("💾 案件ブロックテンプレートを保存", type="primary")
 
             if _cb_submitted:
                 _cb_save_config = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
                 _cb_save_config["clinic_block_templates"] = _updated_cb_tmpls
                 if site_config_manager.save_site_config(_current_site4, _cb_save_config, _site_cfg_creds, _site_cfg_parent_folder):
-                    st.success("クリニックブロックテンプレートを保存しました。")
+                    st.success("案件ブロックテンプレートを保存しました。")
                     st.rerun()
                 else:
                     st.error("保存に失敗しました。")
@@ -1710,7 +1710,7 @@ with _safe_tab(tab_settings):
 # ════════════════════════════════════════════════════════
 with _safe_tab(tab_rank):
     st.title("🏥 ランキングブロック")
-    st.caption("おすすめ紹介ブロックのHTMLを案件ごとに生成します。「カスタム記事作成」タブの「掲載院一覧」をコピペして使ってください。")
+    st.caption("おすすめ紹介ブロックのHTMLを案件ごとに生成します。「カスタム記事作成」タブの「掲載案件一覧」をコピペして使ってください。")
 
     _cb_sites = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
     _cb_site_opts = ["（なし）"] + _cb_sites
@@ -1734,7 +1734,7 @@ with _safe_tab(tab_rank):
         )
         _cb_sel_tmpl = _cb_templates[_cb_tmpl_idx]
     else:
-        st.info("サイトにクリニックブロックテンプレートが登録されていません。先にサイト設定タブで登録してください。")
+        st.info("サイトに案件ブロックテンプレートが登録されていません。先にサイト設定タブで登録してください。")
 
     st.divider()
 
@@ -1744,8 +1744,8 @@ with _safe_tab(tab_rank):
     _cb_opt_col1, _cb_opt_col2 = st.columns([3, 1])
     _cb_db_type = _cb_opt_col1.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
     _cb_clinic_count = int(_cb_opt_col2.number_input(
-        "院数（任意）", min_value=0, value=0, step=1, key="cb_clinic_count",
-        help="生成するブロック数を指定。0で全件生成。記事の掲載院数と揃えてください。",
+        "件数（任意）", min_value=0, value=0, step=1, key="cb_clinic_count",
+        help="生成するブロック数を指定。0で全件生成。記事の掲載件数と揃えてください。",
     ))
     _cb_criteria = st.text_area(
         "記事内の「選び方」セクション（文章をそのまま貼り付け）",
@@ -1755,7 +1755,7 @@ with _safe_tab(tab_rank):
 
     st.divider()
     st.subheader("掲載案件一覧")
-    st.caption("カスタム作成タブで記事生成後、スプシのP列（掲載院一覧）の内容をコピーして貼り付けてください。")
+    st.caption("カスタム作成タブで記事生成後、スプシのP列（掲載案件一覧）の内容をコピーして貼り付けてください。")
     _cb_clinic_paste = st.text_area(
         "",
         height=150, key="cb_clinic_paste",
@@ -1775,7 +1775,7 @@ with _safe_tab(tab_rank):
     if _cb_clinics:
         st.caption(f"読み込み完了: {len(_cb_clinics)} 案件")
         st.divider()
-        st.subheader("各院の入力情報")
+        st.subheader("各案件の入力情報")
 
         for _cbc in _cb_clinics:
             _r = _cbc["rank"]
@@ -1822,7 +1822,7 @@ with _safe_tab(tab_rank):
                 )
 
         st.divider()
-        _cb_gen_all = st.button("🚀 全院のブロックを生成", type="primary", use_container_width=True, key="cb_gen_all")
+        _cb_gen_all = st.button("🚀 全案件のブロックを生成", type="primary", use_container_width=True, key="cb_gen_all")
 
         if _cb_gen_all:
             errs_cb = []
@@ -1844,7 +1844,7 @@ with _safe_tab(tab_rank):
                 _cb_results = []
                 _cb_reference_html = ""  # 1院目のHTMLをフォーマット参照として後続院に渡す
                 _cb_clinics_to_gen = _cb_clinics[:_cb_clinic_count] if _cb_clinic_count > 0 else _cb_clinics
-                with st.status("クリニックブロック生成中...", expanded=True) as _cb_status:
+                with st.status("案件ブロック生成中...", expanded=True) as _cb_status:
                     for _cbc in _cb_clinics_to_gen:
                         _r = _cbc["rank"]
                         _clinic_url = st.session_state.get(f"cb_url_{_r}", _cbc.get("url", ""))
@@ -1893,7 +1893,7 @@ with _safe_tab(tab_rank):
                         except Exception as _e:
                             st.warning(f"{_r}位 ({_cbc['name']}) でエラー: {_e}")
 
-                    _cb_status.update(label=f"✅ {len(_cb_results)} 院分のブロックを生成しました", state="complete")
+                    _cb_status.update(label=f"✅ {len(_cb_results)} 件のブロックを生成しました", state="complete")
 
                 st.session_state["cb_results"] = _cb_results
 
@@ -1915,7 +1915,7 @@ with _safe_tab(tab_rank):
 
         _all_html = "\n\n".join(f"<!-- {r['rank']}位: {r['name']} -->\n{r['html']}" for r in _cb_results)
         st.download_button(
-            "📥 全院まとめてダウンロード",
+            "📥 全件まとめてダウンロード",
             _all_html,
             file_name="clinic_blocks_all.html",
             mime="text/html",
@@ -1935,7 +1935,7 @@ with _safe_tab(tab_cases):
 
     _db_creds = _get_gcp_creds(sheets_creds_file)
     if not _active_db_url:
-        _url_label = "クリニックDB" if _db_type_sel == DB_TYPE_CLINIC else "ライフスタイルDB"
+        _url_label = "案件DB" if _db_type_sel == DB_TYPE_CLINIC else "ライフスタイルDB"
         st.warning(f"サイドバーで「{_url_label} スプレッドシートURL」を入力してください。未設定の場合はローカルJSONに保存されます（Streamlit Cloud再起動で消えます）。")
     elif not _db_creds:
         st.warning("Google Sheets 認証が未設定です。ローカルJSONにフォールバックします。")
