@@ -983,46 +983,6 @@ with _safe_tab(tab_custom):
                             else:
                                 st.success(f"✅ [{output_tab_sel}] 行{_target_row}に書き込みました")
 
-    # ── 過去の生成結果（履歴・入力復元）────────────────────────────
-    _cache_hist = _load_output_cache()
-    if _cache_hist:
-        with st.expander(f"📂 履歴から復元（最新 {len(_cache_hist)} 件）", expanded=False):
-            _cache_labels = [
-                f"{d.get('main_kw', '(不明)')}  —  {d['_cache_file'][:15]}"
-                for d in _cache_hist
-            ]
-            _cache_sel_idx = st.selectbox(
-                "記事を選択", range(len(_cache_labels)),
-                format_func=lambda i: _cache_labels[i],
-                key="cache_hist_sel",
-            )
-            _hcol1, _hcol2 = st.columns(2)
-            if _hcol1.button("📄 生成結果を表示", key="cache_hist_load"):
-                _loaded = {k: v for k, v in _cache_hist[_cache_sel_idx].items() if k != "_cache_file"}
-                st.session_state["t2_last"] = _loaded
-                st.rerun()
-            if _hcol2.button("✏️ 入力条件を復元", key="cache_hist_inputs"):
-                _inp = _cache_hist[_cache_sel_idx].get("_inputs", {})
-                if _inp:
-                    _atype = _inp.get("article_type", "地域")
-                    if _atype in ["地域", "比較", "商標", "ノウハウ"]:
-                        st.session_state["test_type"] = _atype
-                    st.session_state["t_site"]       = _inp.get("site_name", "")
-                    st.session_state["t_genre"]      = _inp.get("genre", "")
-                    st.session_state["t_main_kw"]    = _inp.get("main_kw", "")
-                    st.session_state["t_sub_kw"]     = _inp.get("sub_kw", "")
-                    st.session_state["t_related_kw"] = _inp.get("related_kw", "")
-                    st.session_state["t_rec"]        = _inp.get("recommended", "")
-                    st.session_state["t_custom"]     = _inp.get("custom_block", "")
-                    _hist_clinics = _inp.get("clinics", [])
-                    st.session_state["test_clinics"] = _hist_clinics or [{"name": "", "domain": ""}]
-                    _hist_comps = _inp.get("competitor_urls", [])
-                    for _ci2 in range(5):
-                        st.session_state[f"t_comp_{_ci2}"] = _hist_comps[_ci2] if _ci2 < len(_hist_comps) else ""
-                    st.rerun()
-                else:
-                    st.warning("この履歴には入力条件が保存されていません（古いキャッシュ）")
-
     # ── スプシ行から読み込む ─────────────────────────────────────
     with st.expander("📊 スプシ行から読み込む", expanded=False):
         if not article_sheet_url:
