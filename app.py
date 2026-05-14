@@ -232,20 +232,17 @@ def _split_html_by_h2(html: str) -> list[dict]:
         return {"title": title, "html": html_str, "original_html": html_str, "confirmed": False, "instruction": "", "modified": False}
 
     # ── 優先①: コメントマーカーで分割 ──────────────────────────
+    # lookahead splitでマーカーを消費せずブロック先頭で分割（capturing groupによる本文消失を防ぐ）
     marker_pattern = r'<!--\s*H2_BLOCK_START:([^-]*?)-->'
     if re.search(marker_pattern, html):
-        parts = re.split(f'({marker_pattern})', html)
+        parts = re.split(r'(?=<!--\s*H2_BLOCK_START:)', html)
         result = []
         pre_h2 = parts[0].strip()
-        i = 1
-        while i < len(parts):
-            if re.match(marker_pattern, parts[i]):
-                title = re.match(marker_pattern, parts[i]).group(1).strip() or f"セクション {len(result) + 1}"
-                body = parts[i + 1].strip() if i + 1 < len(parts) else ""
-                result.append(_make_block(title, parts[i] + "\n" + body))
-                i += 2
-            else:
-                i += 1
+        for part in parts[1:]:
+            m = re.match(marker_pattern, part)
+            if m:
+                title = m.group(1).strip() or f"セクション {len(result) + 1}"
+                result.append(_make_block(title, part.strip()))
         if pre_h2 and result:
             result[0]["html"] = pre_h2 + "\n" + result[0]["html"]
             result[0]["original_html"] = result[0]["html"]
