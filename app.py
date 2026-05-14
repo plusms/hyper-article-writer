@@ -1015,9 +1015,9 @@ with _safe_tab(tab_settings):
             _is_custom = bool(_existing_tmpls) and any("base_prompt" in t for t in _existing_tmpls)
             _img_mode = st.radio(
                 "追加方法",
-                ["layout", "upload"],
+                ["layout", "upload", "text"],
                 index=1 if _is_custom else 0,
-                format_func=lambda x: "組み込みレイアウトから選ぶ" if x == "layout" else "見本画像からカスタム生成",
+                format_func=lambda x: {"layout": "組み込みレイアウトから選ぶ", "upload": "見本画像からカスタム生成", "text": "プロンプトを直接入力（md貼り付け）"}[x],
                 horizontal=True,
                 key=f"img_mode_{_current_site4}",
             )
@@ -1089,6 +1089,36 @@ with _safe_tab(tab_settings):
                                     st.rerun()
                                 else:
                                     st.error("保存に失敗しました。")
+
+            if _img_mode == "text":
+                st.caption("プロンプトのmdファイル内容またはテキストをそのまま貼り付けて登録します。")
+                _text_tmpl_name = st.text_input(
+                    "テンプレート名",
+                    placeholder="例: 横並び3項目（カスタム）",
+                    key=f"text_tmpl_name_{_current_site4}",
+                )
+                _text_tmpl_body = st.text_area(
+                    "プロンプト本文（mdまたはテキストをそのまま貼り付け）",
+                    height=300,
+                    key=f"text_tmpl_body_{_current_site4}",
+                    placeholder="フラットデザインのクリーンなレイアウト...\n{{main_title}} {{card_text_1}} ...",
+                )
+                _text_add_mode = st.radio("保存方式", ["追加（既存を保持）", "上書き（既存を置き換え）"], horizontal=True, key=f"text_add_mode_{_current_site4}")
+                if st.button("💾 このプロンプトを保存", key=f"btn_save_text_{_current_site4}", type="primary"):
+                    if not _text_tmpl_body.strip():
+                        st.error("プロンプト本文を入力してください。")
+                    else:
+                        _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
+                        _new_text_tmpl = {"base_prompt": _text_tmpl_body.strip(), "name": _text_tmpl_name.strip() or "カスタムテンプレート"}
+                        if _text_add_mode.startswith("追加"):
+                            _cfg_now["image_templates"] = _cfg_now.get("image_templates", []) + [_new_text_tmpl]
+                        else:
+                            _cfg_now["image_templates"] = [_new_text_tmpl]
+                        if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
+                            st.success("✅ テンプレートを保存しました。")
+                            st.rerun()
+                        else:
+                            st.error("保存に失敗しました。")
 
             st.markdown("---")
 
