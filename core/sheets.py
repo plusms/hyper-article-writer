@@ -94,6 +94,39 @@ def write_output_row(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
     )
 
 
+def write_full_row(ws: gspread.Worksheet, row_index: int, input_data: dict, output_data: dict) -> None:
+    """入力情報（A-K）と出力情報（L-P）を一括書き込み。カスタム作成で使用。"""
+    clinics = output_data.get("clinics") or input_data.get("clinics", [])
+    clinic_str = ", ".join(
+        f"{c['name']}::{c.get('domain', '')}" for c in clinics if c.get("name")
+    )
+    sub_kw_val = input_data.get("sub_kw", "")
+    if isinstance(sub_kw_val, list):
+        sub_kw_val = ", ".join(sub_kw_val)
+    comp_str = ", ".join(input_data.get("competitor_urls", []))
+    ws.update(
+        f"A{row_index}:P{row_index}",
+        [[
+            input_data.get("site_name", ""),
+            input_data.get("genre", ""),
+            input_data.get("article_type", ""),
+            input_data.get("main_kw", ""),
+            sub_kw_val,
+            clinic_str,
+            comp_str,
+            input_data.get("custom_block", ""),
+            input_data.get("recommended", ""),
+            input_data.get("related_kw", ""),
+            "手動作成",
+            output_data.get("title", ""),
+            output_data.get("meta", ""),
+            output_data.get("html", ""),
+            output_data.get("todo_list", ""),
+            clinic_str,
+        ]]
+    )
+
+
 def get_settings_sheet(sheet_url: str, creds_data: dict) -> gspread.Worksheet:
     """設定タブを取得。存在しない場合は作成する。"""
     creds = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
