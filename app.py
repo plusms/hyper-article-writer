@@ -579,9 +579,12 @@ with _safe_tab(tab_custom):
             st.session_state.custom_blocks.append({"text": "", "intent": ""})
             st.rerun()
 
-    st.divider()
-    st.subheader("含めるセクション")
-    selected_topics = _render_topic_checkboxes(article_type, key_prefix="t")
+    if article_type != "ノウハウ":
+        st.divider()
+        st.subheader("含めるセクション")
+        selected_topics = _render_topic_checkboxes(article_type, key_prefix="t")
+    else:
+        selected_topics = None
 
     st.divider()
 
@@ -598,15 +601,34 @@ with _safe_tab(tab_custom):
         st.session_state.test_clinics = st.session_state.test_clinics[:1]
         st.subheader("対象クリニック（1院固定）")
         _tm_c = st.session_state.test_clinics[0]
-        _tm_c0, _tm_c1 = st.columns(2)
+        _tm_c0, _tm_c1, _tm_c2 = st.columns([3, 3, 1])
         _tm_n = _tm_c0.text_input("案件名 *", value=_tm_c["name"], key="tm_clinic_name", placeholder="東京美肌堂")
         _tm_d = _tm_c1.text_input("ドメイン *", value=_tm_c["domain"], key="tm_clinic_domain", placeholder="tokyo-bihado.com")
+        _tm_c2.markdown("<div style='padding-top:1.6rem'></div>", unsafe_allow_html=True)
+        if _tm_c2.button("📂 DB読込", key="tm_load_db", use_container_width=True):
+            if _tm_n.strip():
+                _tm_db_creds = _get_gcp_creds(sheets_creds_file)
+                _tm_db_url = db_sheet_url if custom_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
+                _tm_db_result = clinic_db_manager.build_db_cache(
+                    [_tm_n.strip()], genre=genre,
+                    creds_data=_tm_db_creds, sheet_url=_tm_db_url,
+                )
+                st.session_state["t_trademark_db_loaded"] = _tm_db_result.get(_tm_n.strip(), "")
+            else:
+                st.warning("案件名を入力してください")
+
+        _tm_db_loaded = st.session_state.get("t_trademark_db_loaded")
+        if _tm_db_loaded is not None:
+            if _tm_db_loaded:
+                st.caption("📂 DB情報（記事生成に反映されます）")
+                st.text_area(
+                    "", value=_tm_db_loaded, height=120, disabled=True,
+                    key="tm_db_preview", label_visibility="collapsed",
+                )
+            else:
+                st.info(f"「{_tm_n}」はDBに未登録です（スクレイピングで取得）")
+
         _tm_r = st.text_input("最訴求プラン *", value=_tm_c["recommended"], key="tm_clinic_rec", placeholder="例：美容内服パックコース 月額3,980円〜")
-        _tm_ref = st.text_input(
-            "参考URL（任意）",
-            key="t_trademark_ref_url",
-            placeholder="例：https://tokyo-bihado.com/plan/ ← 料金ページなど重点スクレイプしたいURL",
-        )
         st.session_state.test_clinics[0] = {"name": _tm_n, "domain": _tm_d, "recommended": _tm_r, "appeal": ""}
 
         st.markdown("**比較優位性（強み）**")
@@ -626,13 +648,18 @@ with _safe_tab(tab_custom):
             _sb = _sc2.text_input("根拠・補足", value=_s["basis"], key=f"tm_str_bs_{_si}", placeholder=_str_placeholders[_si][1])
             st.session_state["t_trademark_strengths"][_si] = {"point": _sp, "basis": _sb}
 
-        with st.expander("📋 案件情報を補完する（[要確認]を減らしたい場合）", expanded=False):
-            st.caption("DBやスクレイプで取れない情報（料金・取扱い薬・院数など）をここに貼ると記事の精度が上がります。")
+        with st.expander("📋 補完情報・参考URL（任意）", expanded=False):
+            st.caption("DBやスクレイプで取れない情報（料金・取扱い薬・院数など）と重点スクレイプしたいURLを入力すると[要確認]が減ります。")
             st.text_area(
                 "補完情報（自由記述）",
                 key="t_trademark_supplement",
                 height=160,
                 placeholder="例：\n取り扱い薬：セマグルチド 0.25mg〜2.4mg\n料金：月額9,800円〜\n院数：全国50院\n返金保証：30日以内全額返金",
+            )
+            st.text_input(
+                "参考URL（任意）",
+                key="t_trademark_ref_url",
+                placeholder="https://tokyo-bihado.com/plan/ ← 料金ページなど重点スクレイプしたいURL",
             )
 
         st.subheader("競合URL")
