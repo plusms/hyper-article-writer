@@ -516,6 +516,10 @@ with _safe_tab(tab_custom):
 
     st.divider()
 
+    # 復元ボタン経由でタイプが変更された場合、radio描画前に適用する
+    if "_pending_article_type" in st.session_state:
+        st.session_state["test_type"] = st.session_state.pop("_pending_article_type")
+
     _t2_type_col, _t2_db_col = st.columns([3, 1])
     article_type = _t2_type_col.radio("記事タイプ", ["地域", "比較", "商標", "ノウハウ"], horizontal=True, key="test_type")
     custom_db_type = _t2_db_col.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="custom_db_type")
@@ -576,7 +580,7 @@ with _safe_tab(tab_custom):
                         if st.button("📥 この入力条件を復元", key=f"th_restore_r{_th_row}"):
                             _r_atype = _th.get("article_type") or article_type
                             if _r_atype in ["地域", "比較", "商標", "ノウハウ"]:
-                                st.session_state["test_type"] = _r_atype
+                                st.session_state["_pending_article_type"] = _r_atype
                             st.session_state["t_site"]       = _th.get("site_name", "")
                             st.session_state["t_genre"]      = _th.get("genre", "")
                             st.session_state["t_main_kw"]    = _th.get("main_kw", "")
