@@ -406,6 +406,20 @@ with _safe_tab(tab_batch):
     )
     dry_run = st.toggle("ドライラン（APIを使わず対象行の確認のみ）", key="batch_dry_run")
 
+    with st.expander("🔧 スプシメンテナンス", expanded=False):
+        st.caption("スプレッドシートの全タブのヘッダー行を最新の定義に更新します。")
+        if st.button("🏷️ 全タブのヘッダーを今すぐ更新", key="fix_headers", use_container_width=True):
+            _fix_creds = _get_gcp_creds(sheets_creds_file)
+            if not _fix_creds:
+                st.error("Google Sheets 認証情報が未設定です")
+            elif not article_sheet_url:
+                st.error("記事スプレッドシートURLが未設定です（サイドバーで設定）")
+            else:
+                with st.spinner("ヘッダー更新中..."):
+                    for _fix_tab in ARTICLE_TABS:
+                        get_sheet(article_sheet_url, _fix_creds, tab_name=_fix_tab)
+                st.success(f"✅ {', '.join(ARTICLE_TABS)} の全タブのヘッダーを更新しました")
+
     if st.button("🚀 実行開始", type="primary", use_container_width=True, key="run_batch"):
         creds_data = _get_gcp_creds(sheets_creds_file)
         errors = []
