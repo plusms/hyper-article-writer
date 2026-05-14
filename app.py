@@ -568,6 +568,7 @@ with _safe_tab(tab_custom):
                 "user_awareness":  st.session_state.get("t_user_awareness", "").strip(),
                 "clinic_count":    clinic_count,
             }
+            _t2_write_needed = False
             with st.status("生成中...", expanded=True) as s:
                 try:
                     st.write("🔍 競合分析中...")
@@ -645,13 +646,21 @@ with _safe_tab(tab_custom):
                     }
                     s.update(label="✅ 完了", state="complete")
                     _save_output_cache(main_kw, st.session_state["t2_last"])
+                    _t2_write_needed = True
 
-                    if output_tab_sel != "（書き込まない）" and article_sheet_url:
-                        creds_out = _get_gcp_creds(sheets_creds_file)
-                        if not creds_out:
-                            st.warning("⚠️ スプシ書き込みスキップ：GCP認証が設定されていません（SecretsまたはJSONファイルを確認）")
-                        else:
-                            st.write(f"📊 [{output_tab_sel}] タブに書き込み中...")
+                except Exception as e:
+                    s.update(label="❌ エラー", state="error")
+                    st.error(str(e))
+
+            # ── スプシ書き込み（st.statusの外で実行し、結果を確実に表示）──
+            if _t2_write_needed and st.session_state.get("t2_last"):
+                _t2_for_write = st.session_state["t2_last"]
+                if output_tab_sel != "（書き込まない）" and article_sheet_url:
+                    creds_out = _get_gcp_creds(sheets_creds_file)
+                    if not creds_out:
+                        st.warning("⚠️ スプシ書き込みスキップ：GCP認証が設定されていません（SecretsまたはJSONファイルを確認）")
+                    else:
+                        with st.spinner(f"📊 [{output_tab_sel}] タブに書き込み中..."):
                             try:
                                 ws_out = get_sheet(article_sheet_url, creds_out, tab_name=output_tab_sel)
                                 _all_vals = ws_out.get_all_values()
@@ -670,21 +679,18 @@ with _safe_tab(tab_custom):
                                 if _target_row is None:
                                     _target_row = len(_all_vals) + 1
                                 write_output_row(ws_out, _target_row, {
-                                    "title":     structure["title"],
-                                    "meta":      structure["meta"],
-                                    "html":      output["html"],
-                                    "todo_list": output["todo_list"],
-                                    "clinics":   all_clinics,
+                                    "title":     _t2_for_write.get("title", ""),
+                                    "meta":      _t2_for_write.get("meta", ""),
+                                    "html":      _t2_for_write.get("html", ""),
+                                    "todo_list": _t2_for_write.get("todo_list", ""),
+                                    "clinics":   _t2_for_write.get("clinics", []),
                                 })
-                                st.success(f"[{output_tab_sel}] 行{_target_row}に書き込みました")
                             except Exception as we:
                                 import traceback as _tb
-                                st.warning(f"スプシ書き込みエラー: {we}")
+                                st.error(f"スプシ書き込みエラー: {we}")
                                 st.code(_tb.format_exc())
-
-                except Exception as e:
-                    s.update(label="❌ エラー", state="error")
-                    st.error(str(e))
+                            else:
+                                st.success(f"✅ [{output_tab_sel}] 行{_target_row}に書き込みました")
 
     # ── 過去の生成結果（履歴・入力復元）────────────────────────────
     _cache_hist = _load_output_cache()
