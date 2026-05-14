@@ -166,14 +166,14 @@ with st.sidebar:
 _site_cfg_creds = _get_gcp_creds(sheets_creds_file)
 
 if st.session_state.get("main_nav", "📝 コンテンツ作成") == "📝 コンテンツ作成":
-    tab_batch, tab_custom, tab_rank, tab_qual = st.tabs([
-        "📋 一括作成", "📝 カスタム作成", "🏥 ランキングブロック", "✅ 品質チェック",
+    tab_batch, tab_custom, tab_rank, tab_qual, tab_help = st.tabs([
+        "📋 一括作成", "📝 カスタム作成", "🏥 ランキングブロック", "✅ 品質チェック", "❓ ヘルプ",
     ])
     tab_cases = None
     tab_settings = None
 else:
     tab_cases, tab_settings = st.tabs(["🗄️ 商品データベース", "⚙️ サイト設定"])
-    tab_batch = tab_custom = tab_rank = tab_qual = None
+    tab_batch = tab_custom = tab_rank = tab_qual = tab_help = None
 
 
 # ════════════════════════════════════════════════════════
@@ -2064,3 +2064,124 @@ with _safe_tab(tab_cases):
                                 clinic_db_manager.delete_clinic(_dn, genre=_g_name, creds_data=_db_creds, sheet_url=_active_db_url)
                                 st.success(f"「{_dn}」を「{_g_name}」から削除しました")
                                 st.rerun()
+
+
+# ════════════════════════════════════════════════════════
+#  ヘルプタブ
+# ════════════════════════════════════════════════════════
+_HELP_SYSTEM = """あなたは「CV Article Writer」というSEO記事生成ツールのサポートアシスタントです。
+ユーザーはこのツールを使って医療・美容・ライフスタイル等のジャンルでCV最適化された記事を生成しています。
+疑問に対してフレンドリーかつ簡潔に答えてください。
+
+## ツール概要
+Streamlit上で動作し、Google スプレッドシートと連携してSEO記事（HTML）を自動生成するツールです。
+
+## 画面構成
+- 「コンテンツ作成」セクション
+  - 一括作成：スプレッドシートの入力行を一括処理して記事を自動生成
+  - カスタム作成：1記事ずつ手動で設定して単発生成
+  - ランキングブロック：掲載案件のランキングHTMLブロックを単体生成
+  - 品質チェック：生成済みHTMLをAIで自動チェック
+- 「データ・設定」セクション
+  - 商品データベース：案件（クリニック・サービス等）の情報を事前登録
+  - サイト設定：サイト固有のHTMLパーツ（ヘッダー・フッター等）を登録
+
+## 記事タイプ
+- 地域記事：「〇〇（施術名） 地域名」などのローカルKW向け。複数案件を掲載
+- 比較記事：複数案件を比較・おすすめ紹介する記事
+- 商標記事：特定クリニック・ブランドの指名KW向け記事
+- ノウハウ記事：施術や症状などの情報提供KW向け。案件掲載なし
+
+## 主な入力フィールドの説明
+
+### 基本情報
+- サイト名：掲載するサイト名。サイト設定で登録済みの名前と一致するとHTMLパーツが自動適用される
+- ジャンル：記事のジャンル（例：クマ取り、AGA治療）。案件DBの検索にも使用される
+- メインKW：この記事で上位表示させたい主要キーワード（必須）
+- サブKW：一緒に含めたいキーワード。カンマ区切りで複数指定可能
+- 関連KW：構成の網羅性チェックに使うキーワード。改行区切り。サーチコンソールからそのままコピペ可
+
+### 掲載案件（地域・比較・商標記事で使用）
+- 案件名：掲載するクリニック・サービスの正式名称
+- ドメイン：そのクリニック・サービスのドメイン（例：tcb.net）。スクレイピングで情報収集に使用
+- おすすめ：最も推したい案件に「はい」等を入力。ランキング1位・最訴求として扱われる
+- アピールポイント：その案件の特徴メモ。記事生成の参考情報として使われる
+
+### スプレッドシートのF列フォーマット（一括作成用）
+`案件名::ドメイン::おすすめフラグ::アピールポイント` の形式で入力します。
+例：`TCB東京中央美容外科::tcb.net::最訴求::院数業界最多`
+複数案件はカンマ区切りで並べます。
+例：`TCB東京中央美容外科::tcb.net::最訴求::院数業界最多, 湘南美容外科::s-b-c.net:::`
+
+### 競合URL（G列）
+構成を参考にする競合サイトのURL。カンマ区切りで複数指定可能。未指定でもAIが自動探索します。
+
+### 追加指示（H列）
+記事生成時の特別な指示やこだわり。「設定タブ」で記事タイプ別にデフォルト追加指示も設定できます。
+
+### 最訴求プラン（I列）
+最もCVさせたいプラン・案件の詳細情報。商標・比較記事で特に有効。
+
+## 商品データベースについて
+案件のドメインや補足情報を事前登録しておくと、記事生成時のスクレイピングをスキップできます。
+ジャンル別にタブが分かれており、一度登録した情報は全記事タイプ・全サイトで共有されます。
+「DBタイプ」で「クリニック系」と「ライフスタイル系」を切り替えられます。
+
+## よくある質問
+Q: スプレッドシートに何も入力していないのに記事は作れますか？
+A: カスタム作成タブならスプシなしで単発生成できます。一括作成はスプシが必要です。
+
+Q: 競合URLを入れないとどうなりますか？
+A: AIが自動でウェブ検索して競合構成を参照します。精度を上げたい場合は手動で入力推奨です。
+
+Q: 個人情報や社外秘の情報を入力しても大丈夫ですか？
+A: 入力内容はClaude API（Anthropic社）に送信されます。Anthropicのプライバシーポリシーに従って処理されます。機密性の高い情報（個人名・契約金額等）は入力しないことを推奨します。掲載案件名・ドメイン・キーワードは通常の業務情報として問題ありません。
+
+Q: 生成した記事はどこに保存されますか？
+A: スプレッドシートの指定タブ（L〜P列）に書き出されます。カスタム作成では画面上でHTML編集・ダウンロードも可能です。
+
+Q: 記事タイプを間違えて生成してしまいました。
+A: カスタム作成の場合、タブ上部の「登録情報履歴」から入力条件を復元して再生成できます。スプシに書き出した場合は、スプシの該当行を修正して一括作成で再処理するか、カスタム作成で上書きしてください。
+"""
+
+with _safe_tab(tab_help):
+    st.title("❓ ヘルプ")
+    st.caption("使い方の疑問・入力内容の確認など、なんでも聞いてください。")
+
+    if not claude_key:
+        st.warning("Claude API Key が設定されていないとヘルプチャットは使用できません。サイドバーで設定してください。")
+    else:
+        import anthropic as _ant_help
+
+        if "help_messages" not in st.session_state:
+            st.session_state["help_messages"] = []
+
+        for _hm in st.session_state["help_messages"]:
+            with st.chat_message(_hm["role"]):
+                st.markdown(_hm["content"])
+
+        if _help_input := st.chat_input("使い方や入力内容について質問してください"):
+            st.session_state["help_messages"].append({"role": "user", "content": _help_input})
+            with st.chat_message("user"):
+                st.markdown(_help_input)
+
+            with st.chat_message("assistant"):
+                with st.spinner("考え中..."):
+                    _help_client = _ant_help.Anthropic(api_key=claude_key)
+                    _help_resp = _help_client.messages.create(
+                        model="claude-haiku-4-5-20251001",
+                        max_tokens=1024,
+                        system=_HELP_SYSTEM,
+                        messages=[
+                            {"role": m["role"], "content": m["content"]}
+                            for m in st.session_state["help_messages"]
+                        ],
+                    )
+                    _help_reply = _help_resp.content[0].text
+                st.markdown(_help_reply)
+            st.session_state["help_messages"].append({"role": "assistant", "content": _help_reply})
+
+        if st.session_state.get("help_messages"):
+            if st.button("🗑️ 会話をリセット", key="help_reset"):
+                st.session_state["help_messages"] = []
+                st.rerun()
