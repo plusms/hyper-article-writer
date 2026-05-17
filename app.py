@@ -23,6 +23,7 @@ from core.sheets import (
     get_worksheet_readonly, read_recent_input_rows,
     read_input_rows_knowhow, read_recent_input_rows_knowhow,
     write_status_knowhow, write_output_row_knowhow, write_full_row_knowhow,
+    read_input_rows_knowhow_bulk, write_status_knowhow_bulk, write_output_row_knowhow_bulk,
     COL_TITLE, COL_TITLE_KNOWHOW,
 )
 from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
@@ -396,7 +397,7 @@ def _render_topic_checkboxes(article_type: str, key_prefix: str) -> list[str]:
 # ════════════════════════════════════════════════════════
 with _safe_tab(tab_batch):
     st.title("📋 一括作成")
-    st.caption("K列（ステータス）が空欄の行を対象に一括生成します。設定タブのデフォルト追加指示＋H列の追記内容を合算します。")
+    st.caption("ステータスが空欄の行を対象に一括生成します。")
 
     if not article_sheet_url:
         st.warning("サイドバーで「記事スプレッドシートURL」を設定してください。")
@@ -408,6 +409,14 @@ with _safe_tab(tab_batch):
     batch_db_type = _batch_col2.selectbox(
         "DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="batch_db_type",
     )
+
+    # ノウハウ一括はサイト名・ジャンルを列に持たないのでUIで入力
+    _batch_is_bulk = batch_tab_sel == "ノウハウ一括"
+    if _batch_is_bulk:
+        _bulk_col1, _bulk_col2 = st.columns(2)
+        bulk_site_name = _bulk_col1.text_input("サイト名（全行共通）", key="bulk_site_name")
+        bulk_genre     = _bulk_col2.text_input("ジャンル（全行共通）", key="bulk_genre")
+
     dry_run = st.toggle("ドライラン（APIを使わず対象行の確認のみ）", key="batch_dry_run")
 
     # ── スプシタブ初期化 ────────────────────────────────────────────
@@ -442,8 +451,17 @@ with _safe_tab(tab_batch):
                 st.error(e)
         else:
             ws = get_sheet(article_sheet_url, creds_data, tab_name=batch_tab_sel)
-            _batch_is_kh = batch_tab_sel == "ノウハウ"
-            rows = read_input_rows_knowhow(ws) if _batch_is_kh else read_input_rows(ws, default_article_type=batch_tab_sel)
+            _batch_is_bulk = batch_tab_sel == "ノウハウ一括"
+            _batch_is_kh   = batch_tab_sel == "ノウハウ" or _batch_is_bulk
+
+            if _batch_is_bulk:
+                _b_site = st.session_state.get("bulk_site_name", "")
+                _b_genre = st.session_state.get("bulk_genre", "")
+                rows = read_input_rows_knowhow_bulk(ws, site_name=_b_site, genre=_b_genre)
+            elif batch_tab_sel == "ノウハウ":
+                rows = read_input_rows_knowhow(ws)
+            else:
+                rows = read_input_rows(ws, default_article_type=batch_tab_sel)
             pending = [r for r in rows if not r.get("status")]
 
             try:
@@ -466,7 +484,12 @@ with _safe_tab(tab_batch):
                     row_num = row["row_index"]
                     kw = row["main_kw"]
                     status_msg.info(f"処理中 ({i+1}/{len(pending)}): {kw}")
-                    _write_status = write_status_knowhow if _batch_is_kh else write_status
+                    if _batch_is_bulk:
+                        _write_status = write_status_knowhow_bulk
+                    elif batch_tab_sel == "ノウハウ":
+                        _write_status = write_status_knowhow
+                    else:
+                        _write_status = write_status
                     _write_status(ws, row_num, "処理中")
 
                     try:
@@ -479,9 +502,9 @@ with _safe_tab(tab_batch):
                             _sc = site_config_manager.load_site_config(_batch_site_name, _site_cfg_creds, _site_cfg_parent_folder)
                             _batch_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
 
-                        comp   = analyze_competitors(inputs["competitor_urls"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
+                        comp = analyze_competitors(inputs["competitor_urls"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
+                        # ノウハウ系は案件探索しない
                         if _batch_is_kh:
-                            # ノウハウは案件探索しない
                             inputs["clinics"] = []
                         elif inputs["competitor_urls"]:
                             discovered = discover_clinics_from_competitors(
@@ -500,26 +523,24 @@ with _safe_tab(tab_batch):
                         output    = generate_body(inputs, structure, clinics, claude_key, comp,
                                                   site_parts=_batch_site_parts, gemini_api_key=gemini_key, article_provider=article_provider)
 
-                        if _batch_is_kh:
-                            write_output_row_knowhow(ws, row_num, {
-                                "title":     structure["title"],
-                                "meta":      structure["meta"],
-                                "html":      output["html"],
-                                "todo_list": output["todo_list"],
-                            })
+                        _out = {
+                            "title":     structure["title"],
+                            "meta":      structure["meta"],
+                            "html":      output["html"],
+                            "todo_list": output["todo_list"],
+                        }
+                        if _batch_is_bulk:
+                            write_output_row_knowhow_bulk(ws, row_num, _out)
+                            write_status_knowhow_bulk(ws, row_num, "完了")
+                        elif batch_tab_sel == "ノウハウ":
+                            write_output_row_knowhow(ws, row_num, _out)
                             write_status_knowhow(ws, row_num, "完了")
                         else:
-                            write_output_row(ws, row_num, {
-                                "title":     structure["title"],
-                                "meta":      structure["meta"],
-                                "html":      output["html"],
-                                "todo_list": output["todo_list"],
-                                "clinics":   inputs["clinics"],
-                            })
+                            write_output_row(ws, row_num, {**_out, "clinics": inputs["clinics"]})
                             write_status(ws, row_num, "完了")
 
                     except Exception as e:
-                        (_write_status)(ws, row_num, f"エラー: {e}")
+                        _write_status(ws, row_num, f"エラー: {e}")
                         st.warning(f"行{row_num} ({kw}) でエラー: {e}")
 
                     progress.progress((i + 1) / len(pending))
