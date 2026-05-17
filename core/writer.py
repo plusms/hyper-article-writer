@@ -357,6 +357,7 @@ def _build_body_prompt(
     include_h1: bool,
     use_clinic_placeholder: bool = False,
     site_parts: str = "",
+    is_final_section: bool = True,
 ) -> str:
     article_type = inputs["article_type"]
     clinic_names = list(clinic_info.keys()) if clinic_info else []
@@ -471,9 +472,20 @@ def _build_body_prompt(
         "【今回生成するH2】に列挙したH2セクションのみを出力してください。H1・冒頭文は出力しない。"
     )
 
+    _refs_instruction = (
+        "\n\n【参考文献候補（ノウハウ記事専用・必須出力）】\n"
+        "記事テーマに関連する公的機関・学術機関・医療学会の参考資料を5本提示する。\n"
+        "出力形式：\n"
+        "---参考文献候補---\n"
+        "1. 記事名｜団体名｜URL\n"
+        "2. 〜\n"
+        "（略称でなく正式な団体名を使う。URLが不確かな場合は末尾に「※要URL確認」と付ける）\n"
+        "---参考文献候補終---\n"
+    ) if (article_type == "ノウハウ" and is_final_section) else ""
+
     todo_note = (
-        "最後に「---[要確認]リスト---」として取得できなかった項目を箇条書きでまとめる。"
-        if not include_h1 else ""
+        f"最後に「---[要確認]リスト---」として取得できなかった項目を箇条書きでまとめる。{_refs_instruction}"
+        if not include_h1 else _refs_instruction
     )
 
     clinic_placeholder_note = (
@@ -551,7 +563,8 @@ def _build_body_prompt(
 ⑦ サブKW（{', '.join(inputs['sub_kw'])}）それぞれが最低1つのH2に含まれているか。未含有のサブKWがあれば対応H2の文言を修正する
 ⑧ H2・H3に「（）」「｜」「、」「【】」が使われていないか
 ⑨ 1段落（<p>）に複数トピックが詰め込まれていないか。4文以上の段落があれば分割または箇条書きに変換する
-⑩ クリニック紹介文に業界一般論が混入していないか（「〇〇が重要です」「インターネット通販のリスク」等の一般解説は削除する）"""
+⑩ クリニック紹介文に業界一般論が混入していないか（「〇〇が重要です」「インターネット通販のリスク」等の一般解説は削除する）
+{"⑪ 【ノウハウ記事・最終セクション限定】まとめのH2が配置されているか。ない場合は必ず末尾に追加する。見出しに「まとめ」という名称は使わない" if (article_type == "ノウハウ" and is_final_section) else ""}"""
 
 
 def generate_body(
@@ -580,10 +593,26 @@ def generate_body(
     def _finish(raw: str, debug: str = "") -> dict:
         html_part = raw
         todo_part = ""
+        refs_part = ""
+
+        # 参考文献候補を抽出
+        if "---参考文献候補---" in raw:
+            _before_refs, _rest = raw.split("---参考文献候補---", 1)
+            raw = _before_refs
+            html_part = _before_refs
+            if "---参考文献候補終---" in _rest:
+                refs_part = _rest.split("---参考文献候補終---", 1)[0].strip()
+            else:
+                refs_part = _rest.strip()
+
         if "---[要確認]リスト---" in raw:
             parts = raw.split("---[要確認]リスト---", 1)
             html_part = parts[0].strip()
             todo_part = parts[1].strip()
+
+        if refs_part:
+            todo_part = (todo_part + "\n\n---参考文献候補---\n" + refs_part).strip()
+
         result = {"html": html_part, "todo_list": todo_part}
         if debug:
             result["debug"] = debug
@@ -599,6 +628,7 @@ def generate_body(
             include_h1=True,
             use_clinic_placeholder=use_clinic_placeholder,
             site_parts=site_parts,
+            is_final_section=True,
         )
         return _finish(_call([{"role": "user", "content": fallback_prompt}]),
                        debug="H2パース失敗: フォールバック使用")
@@ -614,6 +644,7 @@ def generate_body(
         include_h1=True,
         use_clinic_placeholder=use_clinic_placeholder,
         site_parts=site_parts,
+        is_final_section=not second_half,  # 2ターン目がない場合は最終セクション
     )
     messages = [{"role": "user", "content": prompt1}]
     part1 = _call(messages)
@@ -629,6 +660,7 @@ def generate_body(
         include_h1=False,
         use_clinic_placeholder=use_clinic_placeholder,
         site_parts=site_parts,
+        is_final_section=True,
     )
     messages.append({"role": "user", "content": prompt2})
     part2 = _call(messages)
