@@ -368,6 +368,11 @@ def _build_body_prompt(
         type_context = f"ジャンル: {inputs['genre']}（地域名はメインKWから自動判断）"
     elif article_type == "比較":
         type_context = f"ジャンル: {inputs['genre']}"
+    elif article_type == "ノウハウ":
+        type_context = (
+            f"ジャンル: {inputs['genre']}\n"
+            "情報提供・解説に特化した記事。クリニック紹介ブロック・具体的な料金表は設けない。"
+        )
     else:  # 商標
         _trademark_clinic = clinic_names[0] if clinic_names else "（メインKWから判断）"
         type_context = (

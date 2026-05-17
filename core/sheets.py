@@ -6,7 +6,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-# 入力列マッピング（0始まり）
+# 入力列マッピング（0始まり）— 地域・比較・商標共通
 COL_IN = {
     "site_name":           0,   # A
     "genre":               1,   # B
@@ -23,12 +23,29 @@ COL_IN = {
 
 COL_STATUS    = 10  # K（0始まり）
 COL_OUT_START = 11  # L〜P（タイトル・メタ・HTML・要確認・掲載院）
+COL_TITLE     = 11  # L（タイトル、"未処理"チェック用）
+
+# ノウハウ専用 列マッピング（13列: A〜M）
+COL_IN_KNOWHOW = {
+    "site_name":           0,   # A
+    "genre":               1,   # B
+    "article_type":        2,   # C
+    "main_kw":             3,   # D
+    "sub_kw":              4,   # E
+    "competitor_urls_raw": 5,   # F
+    "custom_block":        6,   # G 追加指示
+    "related_kw":          7,   # H
+    "status":              8,   # I
+}
+COL_STATUS_KNOWHOW    = 8   # I（0始まり）
+COL_OUT_START_KNOWHOW = 9   # J〜M（タイトル・メタ・HTML・要確認）
+COL_TITLE_KNOWHOW     = 9   # J（タイトル、"未処理"チェック用）
 
 _HEADERS: dict[str, list[str]] = {
     "ノウハウ": [
         "サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
-        "（掲載なし）", "競合URL", "追加指示", "（掲載なし）", "関連KW",
-        "ステータス", "タイトル", "メタ", "HTML", "要確認", "（掲載なし）",
+        "競合URL", "追加指示（ターゲット・記事のゴールなど）", "関連KW",
+        "ステータス", "タイトル", "メタ", "HTML", "要確認",
     ],
     "商標": [
         "サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
@@ -66,11 +83,13 @@ def get_sheet(sheet_url: str, creds_data: dict, tab_name: str = "") -> gspread.W
     if not tab_name:
         return ss.sheet1
     header = _HEADERS.get(tab_name, _HEADER_DEFAULT)
+    _last_col = chr(ord('A') + len(header) - 1)
     try:
         ws = ss.worksheet(tab_name)
     except gspread.WorksheetNotFound:
         ws = ss.add_worksheet(title=tab_name, rows=1000, cols=len(header))
-    ws.update("A1:P1", [header])
+    # 旧16列ヘッダーからの移行時に余剰列（N1:P1）を消す
+    ws.update("A1:P1", [header + [""] * (16 - len(header))])
     return ws
 
 
@@ -239,3 +258,96 @@ def read_recent_input_rows(ws: gspread.Worksheet, n: int = 5) -> list[dict]:
             "status":              padded[COL_IN["status"]],
         })
     return list(reversed(rows))[:n]
+
+
+# ── ノウハウ専用 read/write（13列構成: A〜M）──────────────────────────────
+
+def read_input_rows_knowhow(ws: gspread.Worksheet, default_article_type: str = "ノウハウ") -> list:
+    """ノウハウタブ（13列）の入力行を読み込む。"""
+    all_values = ws.get_all_values()
+    rows = []
+    for i, row in enumerate(all_values[1:], start=2):
+        padded = row + [""] * (9 - len(row))
+        rows.append({
+            "row_index":           i,
+            "site_name":           padded[COL_IN_KNOWHOW["site_name"]],
+            "genre":               padded[COL_IN_KNOWHOW["genre"]],
+            "article_type":        padded[COL_IN_KNOWHOW["article_type"]] or default_article_type,
+            "main_kw":             padded[COL_IN_KNOWHOW["main_kw"]],
+            "sub_kw":              padded[COL_IN_KNOWHOW["sub_kw"]],
+            "clinics_raw":         "",
+            "competitor_urls_raw": padded[COL_IN_KNOWHOW["competitor_urls_raw"]],
+            "custom_block":        padded[COL_IN_KNOWHOW["custom_block"]],
+            "recommended":         "",
+            "related_kw":          padded[COL_IN_KNOWHOW["related_kw"]],
+            "status":              padded[COL_IN_KNOWHOW["status"]],
+        })
+    return [r for r in rows if r["main_kw"]]
+
+
+def read_recent_input_rows_knowhow(ws: gspread.Worksheet, n: int = 5) -> list[dict]:
+    """ノウハウタブ（13列）の最新N件を返す。"""
+    all_values = ws.get_all_values()
+    rows = []
+    for i, row in enumerate(all_values[1:], start=2):
+        padded = row + [""] * (9 - len(row))
+        if not padded[COL_IN_KNOWHOW["main_kw"]]:
+            continue
+        rows.append({
+            "row_index":           i,
+            "site_name":           padded[COL_IN_KNOWHOW["site_name"]],
+            "genre":               padded[COL_IN_KNOWHOW["genre"]],
+            "article_type":        padded[COL_IN_KNOWHOW["article_type"]] or "ノウハウ",
+            "main_kw":             padded[COL_IN_KNOWHOW["main_kw"]],
+            "sub_kw":              padded[COL_IN_KNOWHOW["sub_kw"]],
+            "clinics_raw":         "",
+            "competitor_urls_raw": padded[COL_IN_KNOWHOW["competitor_urls_raw"]],
+            "custom_block":        padded[COL_IN_KNOWHOW["custom_block"]],
+            "recommended":         "",
+            "related_kw":          padded[COL_IN_KNOWHOW["related_kw"]],
+            "status":              padded[COL_IN_KNOWHOW["status"]],
+        })
+    return list(reversed(rows))[:n]
+
+
+def write_status_knowhow(ws: gspread.Worksheet, row_index: int, status: str) -> None:
+    ws.update_cell(row_index, COL_STATUS_KNOWHOW + 1, status)
+
+
+def write_output_row_knowhow(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
+    """ノウハウタブ出力列（J〜M: タイトル・メタ・HTML・要確認）に書き込む。"""
+    ws.update(
+        f"J{row_index}:M{row_index}",
+        [[
+            data.get("title", ""),
+            data.get("meta", ""),
+            data.get("html", ""),
+            data.get("todo_list", ""),
+        ]]
+    )
+
+
+def write_full_row_knowhow(ws: gspread.Worksheet, row_index: int, input_data: dict, output_data: dict) -> None:
+    """ノウハウタブ全列（A〜M）を一括書き込み。カスタム作成で使用。"""
+    sub_kw_val = input_data.get("sub_kw", "")
+    if isinstance(sub_kw_val, list):
+        sub_kw_val = ", ".join(sub_kw_val)
+    comp_str = ", ".join(input_data.get("competitor_urls", []))
+    ws.update(
+        f"A{row_index}:M{row_index}",
+        [[
+            input_data.get("site_name", ""),
+            input_data.get("genre", ""),
+            input_data.get("article_type", ""),
+            input_data.get("main_kw", ""),
+            sub_kw_val,
+            comp_str,
+            input_data.get("custom_block", ""),
+            input_data.get("related_kw", ""),
+            "手動作成",
+            output_data.get("title", ""),
+            output_data.get("meta", ""),
+            output_data.get("html", ""),
+            output_data.get("todo_list", ""),
+        ]]
+    )

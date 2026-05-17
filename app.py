@@ -21,6 +21,9 @@ from core.sheets import (
     read_input_rows, write_output_row, write_full_row, write_status, get_sheet,
     get_settings_sheet, read_defaults, ARTICLE_TABS,
     get_worksheet_readonly, read_recent_input_rows,
+    read_input_rows_knowhow, read_recent_input_rows_knowhow,
+    write_status_knowhow, write_output_row_knowhow, write_full_row_knowhow,
+    COL_TITLE, COL_TITLE_KNOWHOW,
 )
 from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
 
@@ -407,6 +410,23 @@ with _safe_tab(tab_batch):
     )
     dry_run = st.toggle("ドライラン（APIを使わず対象行の確認のみ）", key="batch_dry_run")
 
+    # ── スプシタブ初期化 ────────────────────────────────────────────
+    with st.expander("🔧 スプシのタブを初期化（ヘッダー作成・更新）", expanded=False):
+        st.caption("スプシにタブがない場合や、ヘッダーを最新の形式に更新したい場合に使います。データ行には影響しません。")
+        _init_tab_sel = st.selectbox("対象タブ", ARTICLE_TABS, key="batch_init_tab_sel")
+        if st.button("📋 ヘッダーを作成/更新", key="batch_init_tab_btn"):
+            _init_creds = _get_gcp_creds(sheets_creds_file)
+            if not _init_creds:
+                st.error("Google Sheets 認証情報が未設定です")
+            elif not article_sheet_url:
+                st.error("記事スプレッドシートURLが未設定です")
+            else:
+                try:
+                    get_sheet(article_sheet_url, _init_creds, tab_name=_init_tab_sel)
+                    st.success(f"✅ [{_init_tab_sel}] タブのヘッダーを更新しました")
+                except Exception as _ie:
+                    st.error(f"エラー: {_ie}")
+
     if st.button("🚀 実行開始", type="primary", use_container_width=True, key="run_batch"):
         creds_data = _get_gcp_creds(sheets_creds_file)
         errors = []
@@ -422,7 +442,8 @@ with _safe_tab(tab_batch):
                 st.error(e)
         else:
             ws = get_sheet(article_sheet_url, creds_data, tab_name=batch_tab_sel)
-            rows = read_input_rows(ws, default_article_type=batch_tab_sel)
+            _batch_is_kh = batch_tab_sel == "ノウハウ"
+            rows = read_input_rows_knowhow(ws) if _batch_is_kh else read_input_rows(ws, default_article_type=batch_tab_sel)
             pending = [r for r in rows if not r.get("status")]
 
             try:
@@ -445,7 +466,8 @@ with _safe_tab(tab_batch):
                     row_num = row["row_index"]
                     kw = row["main_kw"]
                     status_msg.info(f"処理中 ({i+1}/{len(pending)}): {kw}")
-                    write_status(ws, row_num, "処理中")
+                    _write_status = write_status_knowhow if _batch_is_kh else write_status
+                    _write_status(ws, row_num, "処理中")
 
                     try:
                         inputs = build_inputs_from_row(row, defaults)
@@ -458,15 +480,19 @@ with _safe_tab(tab_batch):
                             _batch_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
 
                         comp   = analyze_competitors(inputs["competitor_urls"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
-                        if inputs["competitor_urls"]:
+                        if _batch_is_kh:
+                            # ノウハウは案件探索しない
+                            inputs["clinics"] = []
+                        elif inputs["competitor_urls"]:
                             discovered = discover_clinics_from_competitors(
                                 comp["raw_pages"], inputs["clinics"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider
                             )
+                            inputs["clinics"] = inputs["clinics"] + discovered
                         else:
                             discovered = auto_discover_clinics(
                                 inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"], gemini_api_key=gemini_key, research_provider=research_provider
                             )
-                        inputs["clinics"] = inputs["clinics"] + discovered
+                            inputs["clinics"] = inputs["clinics"] + discovered
                         _batch_active_db_url = db_sheet_url if batch_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
                         _batch_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in inputs["clinics"]], genre=inputs.get("genre", ""), creds_data=creds_data, sheet_url=_batch_active_db_url)
                         clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache, db_type=batch_db_type, gemini_api_key=gemini_key, research_provider=research_provider)
@@ -474,17 +500,26 @@ with _safe_tab(tab_batch):
                         output    = generate_body(inputs, structure, clinics, claude_key, comp,
                                                   site_parts=_batch_site_parts, gemini_api_key=gemini_key, article_provider=article_provider)
 
-                        write_output_row(ws, row_num, {
-                            "title":     structure["title"],
-                            "meta":      structure["meta"],
-                            "html":      output["html"],
-                            "todo_list": output["todo_list"],
-                            "clinics":   inputs["clinics"],
-                        })
-                        write_status(ws, row_num, "完了")
+                        if _batch_is_kh:
+                            write_output_row_knowhow(ws, row_num, {
+                                "title":     structure["title"],
+                                "meta":      structure["meta"],
+                                "html":      output["html"],
+                                "todo_list": output["todo_list"],
+                            })
+                            write_status_knowhow(ws, row_num, "完了")
+                        else:
+                            write_output_row(ws, row_num, {
+                                "title":     structure["title"],
+                                "meta":      structure["meta"],
+                                "html":      output["html"],
+                                "todo_list": output["todo_list"],
+                                "clinics":   inputs["clinics"],
+                            })
+                            write_status(ws, row_num, "完了")
 
                     except Exception as e:
-                        write_status(ws, row_num, f"エラー: {e}")
+                        (_write_status)(ws, row_num, f"エラー: {e}")
                         st.warning(f"行{row_num} ({kw}) でエラー: {e}")
 
                     progress.progress((i + 1) / len(pending))
@@ -550,7 +585,11 @@ with _safe_tab(tab_custom):
             if _hist_creds:
                 try:
                     _hist_ws = get_worksheet_readonly(article_sheet_url, _hist_creds, article_type)
-                    st.session_state[_hist_cache_key] = read_recent_input_rows(_hist_ws) if _hist_ws else []
+                    if _hist_ws:
+                        _hist_reader = read_recent_input_rows_knowhow if article_type == "ノウハウ" else read_recent_input_rows
+                        st.session_state[_hist_cache_key] = _hist_reader(_hist_ws)
+                    else:
+                        st.session_state[_hist_cache_key] = []
                 except Exception:
                     st.session_state[_hist_cache_key] = []
 
@@ -586,9 +625,38 @@ with _safe_tab(tab_custom):
                             st.session_state["t_main_kw"]    = _th.get("main_kw", "")
                             st.session_state["t_sub_kw"]     = _th.get("sub_kw", "")
                             st.session_state["t_related_kw"] = _th.get("related_kw", "")
-                            st.session_state["t_rec"]        = _th.get("recommended", "")
-                            st.session_state["t_custom"]     = _th.get("custom_block", "")
-                            st.session_state["test_clinics"] = _th_clinics or [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
+                            # 強みをcustom_blockからパースして個別フィールドに戻す
+                            _cb_raw = _th.get("custom_block", "")
+                            _r_strengths = [{"point": "", "basis": ""} for _ in range(3)]
+                            _cb_clean = _cb_raw
+                            if "【比較優位性】" in _cb_raw:
+                                _cb_split = _cb_raw.split("【比較優位性】", 1)
+                                _cb_clean = _cb_split[0].rstrip()
+                                for _sln in _cb_split[1].strip().split("\n"):
+                                    _sm = re.match(r"強み(\d+): (.+?)(?:（根拠: (.+?)）)?$", _sln.strip())
+                                    if _sm:
+                                        _si = int(_sm.group(1)) - 1
+                                        if 0 <= _si < 3:
+                                            _r_strengths[_si] = {"point": _sm.group(2).strip(), "basis": _sm.group(3).strip() if _sm.group(3) else ""}
+                            st.session_state["t_custom"] = _cb_clean
+                            st.session_state["t_trademark_strengths"] = _r_strengths
+                            for _stri in range(3):
+                                st.session_state[f"tm_str_pt_{_stri}"] = _r_strengths[_stri]["point"]
+                                st.session_state[f"tm_str_bs_{_stri}"] = _r_strengths[_stri]["basis"]
+                            _r_set_clinics = _th_clinics or [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
+                            st.session_state["test_clinics"] = _r_set_clinics
+                            # 商標フォームの個別widgetキーを更新
+                            if _r_set_clinics:
+                                st.session_state["tm_clinic_name"]   = _r_set_clinics[0]["name"]
+                                st.session_state["tm_clinic_domain"] = _r_set_clinics[0]["domain"]
+                                # clinics_rawに最訴求プランがない行（一括生成）はI列をフォールバック
+                                st.session_state["tm_clinic_rec"]    = _r_set_clinics[0]["recommended"] or _th.get("recommended", "")
+                            # 地域/比較フォームの個別widgetキーを更新
+                            for _rci2, _rc2 in enumerate(_r_set_clinics):
+                                st.session_state[f"tcn_{_rci2}"] = _rc2["name"]
+                                st.session_state[f"tcd_{_rci2}"] = _rc2["domain"]
+                                st.session_state[f"tcr_{_rci2}"] = _rc2["recommended"]
+                                st.session_state[f"tca_{_rci2}"] = _rc2["appeal"]
                             for _rci in range(5):
                                 st.session_state[f"t_comp_{_rci}"] = _th_comps[_rci] if _rci < len(_th_comps) else ""
                             st.rerun()
@@ -609,7 +677,7 @@ with _safe_tab(tab_custom):
                         if not _sr_ws:
                             st.warning(f"タブ「{_sr_tab}」が見つかりません")
                         else:
-                            _sr_all = read_input_rows(_sr_ws, default_article_type=_sr_tab)
+                            _sr_all = read_input_rows_knowhow(_sr_ws) if _sr_tab == "ノウハウ" else read_input_rows(_sr_ws, default_article_type=_sr_tab)
                             _sr_data = next((r for r in _sr_all if r["row_index"] == int(_sr_row)), None)
                             if not _sr_data:
                                 st.warning(f"行 {int(_sr_row)} にデータが見つかりません（main_kwが空の行は除外されます）")
@@ -622,8 +690,24 @@ with _safe_tab(tab_custom):
                                 st.session_state["t_main_kw"]    = _sr_data.get("main_kw", "")
                                 st.session_state["t_sub_kw"]     = _sr_data.get("sub_kw", "")
                                 st.session_state["t_related_kw"] = _sr_data.get("related_kw", "")
-                                st.session_state["t_rec"]        = _sr_data.get("recommended", "")
-                                st.session_state["t_custom"]     = _sr_data.get("custom_block", "")
+                                # 強みをcustom_blockからパースして個別フィールドに戻す
+                                _sr_cb_raw = _sr_data.get("custom_block", "")
+                                _sr_strengths = [{"point": "", "basis": ""} for _ in range(3)]
+                                _sr_cb_clean = _sr_cb_raw
+                                if "【比較優位性】" in _sr_cb_raw:
+                                    _sr_cb_split = _sr_cb_raw.split("【比較優位性】", 1)
+                                    _sr_cb_clean = _sr_cb_split[0].rstrip()
+                                    for _sln in _sr_cb_split[1].strip().split("\n"):
+                                        _sm = re.match(r"強み(\d+): (.+?)(?:（根拠: (.+?)）)?$", _sln.strip())
+                                        if _sm:
+                                            _si = int(_sm.group(1)) - 1
+                                            if 0 <= _si < 3:
+                                                _sr_strengths[_si] = {"point": _sm.group(2).strip(), "basis": _sm.group(3).strip() if _sm.group(3) else ""}
+                                st.session_state["t_custom"] = _sr_cb_clean
+                                st.session_state["t_trademark_strengths"] = _sr_strengths
+                                for _stri in range(3):
+                                    st.session_state[f"tm_str_pt_{_stri}"] = _sr_strengths[_stri]["point"]
+                                    st.session_state[f"tm_str_bs_{_stri}"] = _sr_strengths[_stri]["basis"]
                                 _sr_clinics = []
                                 for _src in [x.strip() for x in _sr_data.get("clinics_raw", "").split(",") if x.strip()]:
                                     _sp = _src.split("::")
@@ -633,7 +717,20 @@ with _safe_tab(tab_custom):
                                         "recommended": _sp[2].strip() if len(_sp) > 2 else "",
                                         "appeal":      _sp[3].strip() if len(_sp) > 3 else "",
                                     })
-                                st.session_state["test_clinics"] = _sr_clinics or [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
+                                _sr_set_clinics = _sr_clinics or [{"name": "", "domain": "", "recommended": "", "appeal": ""}]
+                                st.session_state["test_clinics"] = _sr_set_clinics
+                                # 商標フォームの個別widgetキーを更新
+                                if _sr_set_clinics:
+                                    st.session_state["tm_clinic_name"]   = _sr_set_clinics[0]["name"]
+                                    st.session_state["tm_clinic_domain"] = _sr_set_clinics[0]["domain"]
+                                    # clinics_rawに最訴求プランがない行（一括生成）はI列をフォールバック
+                                    st.session_state["tm_clinic_rec"]    = _sr_set_clinics[0]["recommended"] or _sr_data.get("recommended", "")
+                                # 地域/比較フォームの個別widgetキーを更新
+                                for _sci2, _sc2 in enumerate(_sr_set_clinics):
+                                    st.session_state[f"tcn_{_sci2}"] = _sc2["name"]
+                                    st.session_state[f"tcd_{_sci2}"] = _sc2["domain"]
+                                    st.session_state[f"tcr_{_sci2}"] = _sc2["recommended"]
+                                    st.session_state[f"tca_{_sci2}"] = _sc2["appeal"]
                                 _sr_comps = [u.strip() for u in _sr_data.get("competitor_urls_raw", "").split(",") if u.strip()]
                                 for _sci in range(5):
                                     st.session_state[f"t_comp_{_sci}"] = _sr_comps[_sci] if _sci < len(_sr_comps) else ""
@@ -941,6 +1038,10 @@ with _safe_tab(tab_custom):
                         all_clinics = valid_clinics[:1]
                         st.write(f"　→ 商標記事のため自動探索スキップ。対象案件: {all_clinics[0]['name'] if all_clinics else '（未指定）'}")
                         inputs["clinic_count"] = 1
+                    elif article_type == "ノウハウ":
+                        # ノウハウ記事は掲載案件なし・自動探索しない
+                        all_clinics = []
+                        st.write("　→ ノウハウ記事のため案件探索スキップ")
                     else:
                         st.write("🤖 案件自動探索中...")
                         if competitor_urls:
@@ -1044,27 +1145,27 @@ with _safe_tab(tab_custom):
                     else:
                         with st.spinner(f"📊 [{output_tab_sel}] タブに書き込み中..."):
                             try:
+                                _kh_write = output_tab_sel == "ノウハウ"
+                                _n_pad = 13 if _kh_write else 16
+                                _title_col = COL_TITLE_KNOWHOW if _kh_write else COL_TITLE
                                 ws_out = get_sheet(article_sheet_url, creds_out, tab_name=output_tab_sel)
                                 _all_vals = ws_out.get_all_values()
                                 _target_row = None
                                 for _ri, _rd in enumerate(_all_vals[1:], start=2):
-                                    _pd = _rd + [""] * (16 - len(_rd))
-                                    if _pd[3] == main_kw and not _pd[11]:
+                                    _pd = _rd + [""] * (_n_pad - len(_rd))
+                                    if _pd[3] == main_kw and not _pd[_title_col]:
                                         _target_row = _ri
                                         break
                                 if _target_row is None:
                                     for _ri, _rd in enumerate(_all_vals[1:], start=2):
-                                        _pd = _rd + [""] * (16 - len(_rd))
-                                        if not _pd[11]:
+                                        _pd = _rd + [""] * (_n_pad - len(_rd))
+                                        if not _pd[_title_col]:
                                             _target_row = _ri
                                             break
                                 if _target_row is None:
                                     _target_row = len(_all_vals) + 1
-                                write_full_row(
-                                    ws_out, _target_row,
-                                    _t2_for_write.get("_inputs", {}),
-                                    _t2_for_write,
-                                )
+                                _fw = write_full_row_knowhow if _kh_write else write_full_row
+                                _fw(ws_out, _target_row, _t2_for_write.get("_inputs", {}), _t2_for_write)
                             except Exception as we:
                                 import traceback as _tb
                                 st.error(f"スプシ書き込みエラー: {we}")
@@ -1179,25 +1280,29 @@ with _safe_tab(tab_custom):
                 if _creds_draft:
                     with st.spinner(f"📊 [{output_tab_sel}] タブに書き込み中..."):
                         try:
+                            _kh_d = output_tab_sel == "ノウハウ"
+                            _np_d = 13 if _kh_d else 16
+                            _tc_d = COL_TITLE_KNOWHOW if _kh_d else COL_TITLE
                             _ws_d = get_sheet(article_sheet_url, _creds_draft, tab_name=output_tab_sel)
                             _av_d = _ws_d.get_all_values()
                             _di_kw = st.session_state["t2_last"].get("main_kw", "")
                             _tr_d = None
                             for _ri_d, _rd_d in enumerate(_av_d[1:], start=2):
-                                _pd_d = _rd_d + [""] * (16 - len(_rd_d))
-                                if _pd_d[3] == _di_kw and not _pd_d[11]:
+                                _pd_d = _rd_d + [""] * (_np_d - len(_rd_d))
+                                if _pd_d[3] == _di_kw and not _pd_d[_tc_d]:
                                     _tr_d = _ri_d
                                     break
                             if _tr_d is None:
                                 for _ri_d, _rd_d in enumerate(_av_d[1:], start=2):
-                                    _pd_d = _rd_d + [""] * (16 - len(_rd_d))
-                                    if not _pd_d[11]:
+                                    _pd_d = _rd_d + [""] * (_np_d - len(_rd_d))
+                                    if not _pd_d[_tc_d]:
                                         _tr_d = _ri_d
                                         break
                             if _tr_d is None:
                                 _tr_d = len(_av_d) + 1
                             _t2lfw = st.session_state["t2_last"]
-                            write_full_row(_ws_d, _tr_d, _t2lfw.get("_inputs", {}), _t2lfw)
+                            _fw_d = write_full_row_knowhow if _kh_d else write_full_row
+                            _fw_d(_ws_d, _tr_d, _t2lfw.get("_inputs", {}), _t2lfw)
                             st.success(f"✅ [{output_tab_sel}] 行{_tr_d}に書き込みました")
                             st.session_state.pop(f"t2_sheet_hist_{article_type}", None)
                         except Exception as _we_d:
@@ -1329,28 +1434,28 @@ with _safe_tab(tab_custom):
                     else:
                         with st.spinner(f"[{output_tab_sel}] タブに書き込み中..."):
                             try:
+                                _kh_h2 = output_tab_sel == "ノウハウ"
+                                _np_h2 = 13 if _kh_h2 else 16
+                                _tc_h2 = COL_TITLE_KNOWHOW if _kh_h2 else COL_TITLE
                                 ws_h2 = get_sheet(article_sheet_url, _h2_write_creds, tab_name=output_tab_sel)
                                 _h2_all_vals = ws_h2.get_all_values()
                                 _h2_target_row = None
                                 for _ri, _rd in enumerate(_h2_all_vals[1:], start=2):
-                                    _pd = _rd + [""] * (16 - len(_rd))
-                                    if _pd[3] == _t2_last["main_kw"] and not _pd[11]:
+                                    _pd = _rd + [""] * (_np_h2 - len(_rd))
+                                    if _pd[3] == _t2_last["main_kw"] and not _pd[_tc_h2]:
                                         _h2_target_row = _ri
                                         break
                                 if _h2_target_row is None:
                                     for _ri, _rd in enumerate(_h2_all_vals[1:], start=2):
-                                        _pd = _rd + [""] * (16 - len(_rd))
-                                        if not _pd[11]:
+                                        _pd = _rd + [""] * (_np_h2 - len(_rd))
+                                        if not _pd[_tc_h2]:
                                             _h2_target_row = _ri
                                             break
                                 if _h2_target_row is None:
                                     _h2_target_row = len(_h2_all_vals) + 1
                                 _h2_write_inp = dict(_t2_last.get("_inputs", {}))
-                                write_full_row(
-                                    ws_h2, _h2_target_row,
-                                    _h2_write_inp,
-                                    {**_t2_last, "html": _full_html},
-                                )
+                                _fw_h2 = write_full_row_knowhow if _kh_h2 else write_full_row
+                                _fw_h2(ws_h2, _h2_target_row, _h2_write_inp, {**_t2_last, "html": _full_html})
                                 st.success(f"✅ [{output_tab_sel}] 行{_h2_target_row}に書き込みました")
                             except Exception as _we3:
                                 import traceback as _tb3
