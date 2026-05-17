@@ -1341,7 +1341,14 @@ with _safe_tab(tab_custom):
             if _t2_last.get("debug"):
                 st.warning(f"⚠️ {_t2_last['debug']}")
         if _t2_last["todo_list"]:
-            st.warning("**[要確認]リスト**\n" + _t2_last["todo_list"])
+            _tl_raw = _t2_last["todo_list"]
+            if "---参考文献候補---" in _tl_raw:
+                _tl_main, _tl_refs = _tl_raw.split("---参考文献候補---", 1)
+                if _tl_main.strip():
+                    st.warning("**[要確認]リスト**\n" + _tl_main.strip())
+                st.info("**📚 参考文献候補**\n" + _tl_refs.strip())
+            else:
+                st.warning("**[要確認]リスト**\n" + _tl_raw)
         # ── H2ブロック編集UI ─────────────────────────────────────
         _html_hash = hashlib.md5(_t2_last["html"].encode()).hexdigest()
         if st.session_state.get("t2_h2_blocks_hash") != _html_hash:
