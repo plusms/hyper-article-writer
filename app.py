@@ -414,7 +414,8 @@ with _safe_tab(tab_batch):
     _batch_is_bulk = batch_tab_sel == "ノウハウ一括"
     if _batch_is_bulk:
         _bulk_col1, _bulk_col2 = st.columns(2)
-        bulk_site_name = _bulk_col1.text_input("サイト名（全行共通）", key="bulk_site_name")
+        _bnk_site_opts = ["指定なし"] + site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
+        bulk_site_name = _bulk_col1.selectbox("サイト名（全行共通）", _bnk_site_opts, key="bulk_site_name")
         bulk_genre     = _bulk_col2.text_input("ジャンル（全行共通）", key="bulk_genre")
 
     dry_run = st.toggle("ドライラン（APIを使わず対象行の確認のみ）", key="batch_dry_run")
@@ -455,7 +456,8 @@ with _safe_tab(tab_batch):
             _batch_is_kh   = batch_tab_sel == "ノウハウ" or _batch_is_bulk
 
             if _batch_is_bulk:
-                _b_site = st.session_state.get("bulk_site_name", "")
+                _b_site = st.session_state.get("bulk_site_name", "指定なし")
+                _b_site = "" if _b_site == "指定なし" else _b_site
                 _b_genre = st.session_state.get("bulk_genre", "")
                 rows = read_input_rows_knowhow_bulk(ws, site_name=_b_site, genre=_b_genre)
             elif batch_tab_sel == "ノウハウ":
@@ -763,7 +765,11 @@ with _safe_tab(tab_custom):
 
     with col_left:
         st.subheader("基本情報")
-        site_name = st.text_input("サイト名", key="t_site")
+        _cst_site_opts = ["指定なし"] + _registered_sites
+        if st.session_state.get("t_site", "") not in _cst_site_opts:
+            st.session_state["t_site"] = "指定なし"
+        _cst_site_sel = st.selectbox("サイト名", _cst_site_opts, key="t_site")
+        site_name = "" if _cst_site_sel == "指定なし" else _cst_site_sel
         genre     = st.text_input("ジャンル *", key="t_genre", placeholder="クマ取り / AGA治療 / 医療ダイエット")
         main_kw   = st.text_input("メインKW *", key="t_main_kw")
         sub_kw    = st.text_input("サブKW（カンマ区切り）", key="t_sub_kw")
