@@ -174,6 +174,20 @@ Q26. 人間が使わないような不自然な言葉・造語が使われてい
 ■ HTML構造
 Q27. まとめがdivボックスではなくh2タグで配置されているか
 Q28. [要確認]箇所が本文に組み込まれず、そのまま記載されているか
+
+■ タイトル（タイトルが提供された場合のみチェック）
+QT1. タイトルが30文字前後か（大幅に超えていないか）
+QT2. メインKWがタイトルの先頭（前半）に含まれているか
+QT3. サブKWが2つともタイトルに含まれているか
+QT4. タイトルに「！」以外の記号が使われていないか（補足の（）は許容）
+QT5. タイトルに具体的・定量的な表現（「料金比較」「ポイント3選」「○○解説」等）が含まれているか
+QT6. タイトルと導入文・記事テーマが整合しているか
+
+■ メタディスクリプション（メタが提供された場合のみチェック）
+QM1. メタが80〜100文字か
+QM2. メタの前半にメインKW・サブKWが含まれているか（記事テーマの提示）
+QM3. メタの後半が補足情報（解決できる問題・メリット）になっているか。記事の具体的な内容（料金・院名・数字）に踏み込んでいないか
+QM4. キーワードの詰め込みになっていないか（同じKWや類似KWの連続は禁止）
 """
 
 _QUALITY_LOCAL = """
@@ -669,7 +683,7 @@ def generate_body(
     return _finish(raw)
 
 
-def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude", check_mode: str = "standard") -> str:
+def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude", check_mode: str = "standard", title: str = "", meta: str = "") -> str:
     def _call_llm(p: str) -> str:
         if article_provider == "gemini" and gemini_api_key:
             return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": p}])
@@ -707,11 +721,14 @@ def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, clau
 
     criteria = _get_quality_criteria(article_type)
 
-    prompt = f"""以下の記事HTML（{article_type}記事）の品質チェックを実施してください。
+    _title_block = f"【タイトル】{title}\n" if title else ""
+    _meta_block  = f"【メタディスクリプション】{meta}\n" if meta else ""
+
+    prompt = f"""以下の記事（{article_type}記事）の品質チェックを実施してください。
 
 【メインKW】{main_kw}
 【サブKW】{', '.join(sub_kw)}
-
+{_title_block}{_meta_block}
 {criteria}
 
 【記事HTML】

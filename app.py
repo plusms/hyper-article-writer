@@ -1623,7 +1623,10 @@ with _safe_tab(tab_qual):
     )
     check_main_kw = st.text_input("メインKW", key="chk_kw")
     check_sub_kw  = st.text_input("サブKW（カンマ区切り）", key="chk_sub")
-    html_input    = st.text_area("HTMLを貼り付け", height=300, key="chk_html")
+    _chk_col1, _chk_col2 = st.columns(2)
+    check_title = _chk_col1.text_input("タイトル（任意）", key="chk_title")
+    check_meta  = _chk_col2.text_input("メタディスクリプション（任意）", key="chk_meta")
+    html_input  = st.text_area("HTMLを貼り付け", height=300, key="chk_html")
 
     if st.button("チェック実行", type="primary", key="run_check"):
         if not claude_key:
@@ -1639,6 +1642,8 @@ with _safe_tab(tab_qual):
                     gemini_api_key=gemini_key,
                     article_provider=article_provider,
                     check_mode=check_mode,
+                    title=check_title,
+                    meta=check_meta,
                 )
                 st.markdown(result)
 
