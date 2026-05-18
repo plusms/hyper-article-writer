@@ -133,6 +133,16 @@ def read_input_rows(ws: gspread.Worksheet, default_article_type: str = "") -> li
     return [r for r in rows if r["main_kw"]]  # 空行を除外
 
 
+def _reset_row_height(ws: gspread.Worksheet, row_index: int, pixel_size: int = 21) -> None:
+    """書き込み後に行の高さをデフォルトに戻す。"""
+    ws.spreadsheet.batch_update({"requests": [{"updateDimensionProperties": {
+        "range": {"sheetId": ws.id, "dimension": "ROWS",
+                  "startIndex": row_index - 1, "endIndex": row_index},
+        "properties": {"pixelSize": pixel_size},
+        "fields": "pixelSize",
+    }}]})
+
+
 def write_status(ws: gspread.Worksheet, row_index: int, status: str) -> None:
     ws.update_cell(row_index, COL_STATUS + 1, status)  # gspreadは1始まり
 
@@ -152,6 +162,7 @@ def write_output_row(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
             clinic_list_str,
         ]]
     )
+    _reset_row_height(ws, row_index)
 
 
 def _serialize_clinic(c: dict) -> str:
@@ -211,6 +222,7 @@ def write_full_row(ws: gspread.Worksheet, row_index: int, input_data: dict, outp
             clinic_str,
         ]]
     )
+    _reset_row_height(ws, row_index)
 
 
 def get_settings_sheet(sheet_url: str, creds_data: dict) -> gspread.Worksheet:
@@ -342,6 +354,7 @@ def write_output_row_knowhow(ws: gspread.Worksheet, row_index: int, data: dict) 
             data.get("todo_list", ""),
         ]]
     )
+    _reset_row_height(ws, row_index)
 
 
 def read_input_rows_knowhow_bulk(ws: gspread.Worksheet, site_name: str = "", genre: str = "") -> list:
@@ -384,6 +397,7 @@ def write_output_row_knowhow_bulk(ws: gspread.Worksheet, row_index: int, data: d
             data.get("todo_list", ""),
         ]]
     )
+    _reset_row_height(ws, row_index)
 
 
 def write_full_row_knowhow(ws: gspread.Worksheet, row_index: int, input_data: dict, output_data: dict) -> None:
@@ -410,3 +424,4 @@ def write_full_row_knowhow(ws: gspread.Worksheet, row_index: int, input_data: di
             output_data.get("todo_list", ""),
         ]]
     )
+    _reset_row_height(ws, row_index)
