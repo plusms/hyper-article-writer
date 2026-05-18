@@ -171,16 +171,16 @@ _site_cfg_creds = _get_gcp_creds(sheets_creds_file)
 
 _main_nav = st.session_state.get("main_nav", "📝 コンテンツ作成")
 if _main_nav == "📝 コンテンツ作成":
-    tab_batch, tab_custom, tab_rank, tab_qual = st.tabs([
-        "📋 一括作成", "📝 カスタム作成", "🏥 ランキングブロック", "✅ 品質チェック",
+    tab_batch, tab_custom, tab_rank, tab_qual, tab_writing_chat = st.tabs([
+        "📋 一括作成", "📝 カスタム作成", "🏥 ランキングブロック", "✅ 品質チェック", "✍️ 執筆チャット",
     ])
     tab_cases = tab_settings = tab_help = None
 elif _main_nav == "🗄️ データ・設定":
     tab_cases, tab_settings = st.tabs(["🗄️ 商品データベース", "⚙️ サイト設定"])
-    tab_batch = tab_custom = tab_rank = tab_qual = tab_help = None
+    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_help = None
 else:  # ❓ ヘルプ
     tab_help = True  # タブなしで直接描画
-    tab_batch = tab_custom = tab_rank = tab_qual = tab_cases = tab_settings = None
+    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_cases = tab_settings = None
 
 
 # ════════════════════════════════════════════════════════
@@ -1649,7 +1649,136 @@ with _safe_tab(tab_qual):
 
 
 # ════════════════════════════════════════════════════════
-#  Tab4: サイト設定
+#  Tab4: 執筆チャット
+# ════════════════════════════════════════════════════════
+_WRITING_KNOWLEDGE_DIR = pathlib.Path(__file__).parent / "knowledge"
+
+def _load_writing_knowledge(files: list) -> str:
+    texts = []
+    for fname in files:
+        p = _WRITING_KNOWLEDGE_DIR / fname
+        if p.exists():
+            texts.append(f"## {fname}\n\n{p.read_text(encoding='utf-8')}")
+    return "\n\n---\n\n".join(texts)
+
+_WRITING_CATEGORIES = {
+    "✏️ 添削・修正": {
+        "desc": "書いた文章を貼ると、ルール照合でフィードバック",
+        "files": ["writing-rules.md", "content-guidelines.md", "logic-structure.md"],
+        "system_extra": """添削・修正モードです。ユーザーが貼り付けた文章に対して、以下の観点でフィードバックしてください。
+
+【チェック観点】
+1. NGワード・禁止表現が使われていないか
+2. 医療広告ガイドラインに抵触する表現がないか
+3. PREP構造（結論→理由→具体例→結論）が守られているか
+4. 見出し・本文の論理構造に問題がないか
+5. 読者（初心者）にとってわかりやすい言葉になっているか
+
+【フィードバックの形式】
+- 問題箇所を引用してから指摘する
+- 「なぜNG/なぜ直す必要があるか」の理由を添える
+- 修正案を具体的に出す
+- 問題がなければ「問題なし」と明記し、良い点をコメントする""",
+    },
+    "📝 構成・見出し相談": {
+        "desc": "骨子・H2/H3の設計、見出し案のフィードバック",
+        "files": ["article-process.md", "content-guidelines.md", "logic-structure.md"],
+        "system_extra": "記事の構成・骨子・見出し設計に関する質問に答えます。具体的な見出し案や骨子のフィードバックも行えます。",
+    },
+    "💬 なんでも壁打ち": {
+        "desc": "「この記事どう思う？」「どこから手をつける？」",
+        "files": ["writing-rules.md", "content-guidelines.md", "logic-structure.md", "article-process.md", "kw-strategy.md", "search-intent.md"],
+        "system_extra": "SEOコンテンツ全般について、どんな質問・相談でも受け付けます。記事URL・見出し・本文を貼り付けてもらえれば具体的なフィードバックができます。",
+    },
+}
+
+_WRITING_BASE_SYSTEM = """あなたはSEOコンテンツのエキスパートです。
+医療・美容・ダイエット系のSEOメディアで豊富な実績があります。
+以下の社内ナレッジに基づいて、具体的・実践的に回答してください。
+
+【回答の原則】
+- 結論から先に答える
+- 「なぜそうするのか」の理由まで説明する
+- 抽象論で終わらず、具体例・サンプルを出す
+- 初心者（新卒・インターン・外部パートナー）でも理解できる言葉で説明する
+- 医療系のNG表現・法規制に関する質問は特に丁寧に答える
+
+【社内ナレッジ】
+{knowledge}
+
+{category_extra}
+"""
+
+with _safe_tab(tab_writing_chat):
+    st.title("✍️ 執筆チャット")
+    st.caption("社内ルールが前提として入った状態でAIに相談できます。文章を貼り付けると添削・フィードバックが返ります。")
+
+    _wc_col1, _wc_col2 = st.columns([1, 3])
+    with _wc_col1:
+        _wc_cat = st.radio(
+            "カテゴリ",
+            list(_WRITING_CATEGORIES.keys()),
+            key="wc_category",
+        )
+        st.caption(_WRITING_CATEGORIES[_wc_cat]["desc"])
+        st.divider()
+        if st.button("🗑️ 会話をリセット", key="wc_reset"):
+            st.session_state["wc_messages"] = []
+            st.session_state["wc_current_category"] = None
+            st.rerun()
+
+    with _wc_col2:
+        if st.session_state.get("wc_current_category") != _wc_cat:
+            st.session_state["wc_current_category"] = _wc_cat
+            st.session_state["wc_messages"] = []
+
+        if "wc_messages" not in st.session_state:
+            st.session_state["wc_messages"] = []
+
+        for _wc_msg in st.session_state["wc_messages"]:
+            with st.chat_message(_wc_msg["role"]):
+                st.markdown(_wc_msg["content"])
+
+        if _wc_prompt := st.chat_input("質問・文章を入力してください...", key="wc_input"):
+            if not claude_key:
+                st.error("Claude API Key が未設定です。左のサイドバーで設定してください。")
+            else:
+                st.session_state["wc_messages"].append({"role": "user", "content": _wc_prompt})
+                with st.chat_message("user"):
+                    st.markdown(_wc_prompt)
+
+                _wc_cat_info = _WRITING_CATEGORIES[_wc_cat]
+                _wc_knowledge = _load_writing_knowledge(_wc_cat_info["files"])
+                _wc_system = _WRITING_BASE_SYSTEM.format(
+                    knowledge=_wc_knowledge,
+                    category_extra=_wc_cat_info["system_extra"],
+                )
+
+                import anthropic as _anthropic
+                _wc_client = _anthropic.Anthropic(api_key=claude_key)
+
+                with st.chat_message("assistant"):
+                    _wc_response = ""
+                    _wc_placeholder = st.empty()
+                    with _wc_client.messages.stream(
+                        model="claude-sonnet-4-6",
+                        max_tokens=2048,
+                        system=_wc_system,
+                        messages=[
+                            {"role": m["role"], "content": m["content"]}
+                            for m in st.session_state["wc_messages"]
+                        ],
+                    ) as _wc_stream:
+                        for _wc_text in _wc_stream.text_stream:
+                            _wc_response += _wc_text
+                            _wc_placeholder.markdown(_wc_response + "▌")
+                        _wc_placeholder.markdown(_wc_response)
+
+                st.session_state["wc_messages"].append({"role": "assistant", "content": _wc_response})
+
+
+# ════════════════════════════════════════════════════════
+#  Tab5: サイト設定
 # ════════════════════════════════════════════════════════
 with _safe_tab(tab_settings):
     st.title("⚙️ サイト設定")
