@@ -469,6 +469,34 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             if is_bulk:
                 write_output_row_knowhow_bulk(ws, row_num, _out)
                 write_status_knowhow_bulk(ws, row_num, "完了")
+                # ── 画像生成（スラッグ指定 & サイト設定に画像テンプレートがある場合のみ）──
+                _bulk_slug = row.get("slug", "").strip()
+                if _bulk_slug and _batch_site_name:
+                    _bulk_sc = site_config_manager.load_site_config(_batch_site_name, _site_cfg_creds, _site_cfg_parent_folder)
+                    if _bulk_sc.get("image_templates"):
+                        try:
+                            st.write(f"　🖼️ 画像生成中: {kw} ...")
+                            _bulk_prompts = image_generator.generate_image_prompts(
+                                structure["structure_text"], _bulk_sc, claude_key, _bulk_slug,
+                            )
+                            _bulk_img_creds = _get_gcp_creds(sheets_creds_file)
+                            _bulk_drive_folder = _bulk_sc.get("drive_folder_id", "")
+                            for _bp in _bulk_prompts:
+                                _bulk_bytes = image_generator.generate_image_bytes(
+                                    _bp["prompt"],
+                                    gemini_api_key=gemini_key,
+                                    openai_api_key=openai_key,
+                                    provider=image_provider,
+                                )
+                                if _bulk_bytes:
+                                    drive_uploader.upload_image(
+                                        _bulk_bytes, _bp["filename"],
+                                        _batch_site_name, _bulk_slug,
+                                        _bulk_img_creds, _bulk_drive_folder,
+                                    )
+                            st.write(f"　　→ {len(_bulk_prompts)} 枚アップロード完了")
+                        except Exception as _img_e:
+                            st.warning(f"　　→ 画像生成エラー ({kw}): {_img_e}")
             elif tab_name == "ノウハウ":
                 write_output_row_knowhow(ws, row_num, _out)
                 write_status_knowhow(ws, row_num, "完了")

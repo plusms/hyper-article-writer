@@ -44,7 +44,7 @@ COL_TITLE_KNOWHOW     = 9   # J（タイトル、"未処理"チェック用）
 _HEADERS: dict[str, list[str]] = {
     "ノウハウ一括": [
         "メインKW", "サブKW", "関連KW",
-        "追加指示", "競合URL",
+        "追加指示", "スラッグ", "競合URL",
         "ステータス", "タイトル", "メタ", "HTML", "要確認",
     ],
     "ノウハウ": [
@@ -76,17 +76,18 @@ _HEADER_DEFAULT = [
 
 ARTICLE_TABS = ["ノウハウ一括", "ノウハウ", "地域", "比較", "商標"]
 
-# ノウハウ一括専用 列マッピング（10列: A〜J）
+# ノウハウ一括専用 列マッピング（11列: A〜K）
 COL_IN_KNOWHOW_BULK = {
     "main_kw":             0,  # A
     "sub_kw":              1,  # B
     "related_kw":          2,  # C
     "custom_block":        3,  # D
-    "competitor_urls_raw": 4,  # E
-    "status":              5,  # F
+    "slug":                4,  # E
+    "competitor_urls_raw": 5,  # F
+    "status":              6,  # G
 }
-COL_STATUS_KNOWHOW_BULK = 5   # F
-COL_TITLE_KNOWHOW_BULK  = 6   # G
+COL_STATUS_KNOWHOW_BULK = 6   # G
+COL_TITLE_KNOWHOW_BULK  = 7   # H
 
 
 def get_sheet(sheet_url: str, creds_data: dict, tab_name: str = "") -> gspread.Worksheet:
@@ -362,7 +363,7 @@ def read_input_rows_knowhow_bulk(ws: gspread.Worksheet, site_name: str = "", gen
     all_values = ws.get_all_values()
     rows = []
     for i, row in enumerate(all_values[1:], start=2):
-        padded = row + [""] * (6 - len(row))
+        padded = row + [""] * (7 - len(row))
         if not padded[COL_IN_KNOWHOW_BULK["main_kw"]]:
             continue
         rows.append({
@@ -374,6 +375,7 @@ def read_input_rows_knowhow_bulk(ws: gspread.Worksheet, site_name: str = "", gen
             "sub_kw":              padded[COL_IN_KNOWHOW_BULK["sub_kw"]],
             "related_kw":          padded[COL_IN_KNOWHOW_BULK["related_kw"]],
             "custom_block":        padded[COL_IN_KNOWHOW_BULK["custom_block"]],
+            "slug":                padded[COL_IN_KNOWHOW_BULK["slug"]],
             "competitor_urls_raw": padded[COL_IN_KNOWHOW_BULK["competitor_urls_raw"]],
             "clinics_raw":         "",
             "recommended":         "",
@@ -387,9 +389,9 @@ def write_status_knowhow_bulk(ws: gspread.Worksheet, row_index: int, status: str
 
 
 def write_output_row_knowhow_bulk(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
-    """ノウハウ一括タブ出力列（G〜J: タイトル・メタ・HTML・要確認）に書き込む。"""
+    """ノウハウ一括タブ出力列（H〜K: タイトル・メタ・HTML・要確認）に書き込む。"""
     ws.update(
-        f"G{row_index}:J{row_index}",
+        f"H{row_index}:K{row_index}",
         [[
             data.get("title", ""),
             data.get("meta", ""),
