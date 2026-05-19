@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLUS コンテンツガイドライン</title>
+<style>
+  :root {
+    --main: #3b4fa8;
+    --accent: #5c6fca;
+    --light: #eef1fb;
+    --border: #d0d6f0;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --ok: #16a34a;
+    --ng: #dc2626;
+    --warn: #d97706;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Noto Sans JP", "Hiragino Sans", "Meiryo", sans-serif;
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text);
+    background: #f8f9fc;
+  }
+
+  .wrapper { display: flex; min-height: 100vh; }
+
+  nav {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--main);
+    color: #fff;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 28px 0 40px;
+  }
+  nav .logo {
+    font-size: 13px;
+    font-weight: 700;
+    padding: 0 18px 18px;
+    border-bottom: 1px solid rgba(255,255,255,.2);
+    margin-bottom: 14px;
+    line-height: 1.4;
+  }
+  nav .logo span { display: block; font-size: 10px; font-weight: 400; opacity: .65; margin-top: 3px; }
+  nav ul { list-style: none; }
+  nav ul li a {
+    display: block;
+    padding: 6px 18px;
+    color: rgba(255,255,255,.85);
+    text-decoration: none;
+    font-size: 12.5px;
+    transition: background .15s;
+  }
+  nav ul li a:hover { background: rgba(255,255,255,.12); color: #fff; }
+  nav ul li.group {
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.45);
+    padding: 14px 18px 4px;
+    font-weight: 700;
+  }
+
+  main {
+    flex: 1;
+    max-width: 860px;
+    padding: 48px 52px 80px;
+  }
+
+  section { margin-bottom: 56px; scroll-margin-top: 24px; }
+
+  h1 { font-size: 22px; font-weight: 700; color: var(--main); margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 32px; padding-bottom: 18px; border-bottom: 2px solid var(--border); }
+
+  h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--main);
+    margin-bottom: 14px;
+    padding: 9px 14px;
+    background: var(--light);
+    border-left: 4px solid var(--main);
+    border-radius: 0 6px 6px 0;
+  }
+  h2 .badge {
+    display: inline-block;
+    background: var(--main);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 20px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  h3 {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 22px 0 9px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+
+  h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 14px 0 6px;
+  }
+
+  p { margin-bottom: 10px; font-size: 13.5px; }
+
+  ul.body-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 6px 0 14px;
+  }
+  ul.body-list li {
+    font-size: 13.5px;
+    padding: 3px 0 3px 18px;
+    position: relative;
+    line-height: 1.7;
+  }
+  ul.body-list li::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-size: 11px;
+    top: 5px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 16px;
+    font-size: 13px;
+  }
+  th { background: var(--main); color: #fff; font-weight: 600; padding: 8px 12px; text-align: left; }
+  td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: var(--light); }
+  tr:last-child td { border-bottom: none; }
+
+  .note { background: var(--light); border-left: 3px solid var(--accent); border-radius: 6px; padding: 13px 16px; margin: 12px 0; font-size: 13px; line-height: 1.7; }
+  .warn { background: #fffbeb; border-left: 3px solid var(--warn); border-radius: 6px; padding: 13px 16px; margin: 12px 0; font-size: 13px; line-height: 1.7; }
+  .note strong, .warn strong { display: block; margin-bottom: 4px; font-size: 11px; letter-spacing: .05em; color: var(--accent); }
+  .warn strong { color: var(--warn); }
+
+  /* チェックリスト */
+  .checklist { list-style: none; padding-left: 0; margin: 8px 0 16px; }
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 10px;
+    border-bottom: 1px solid #f0f2fa;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    accent-color: var(--main);
+    cursor: pointer;
+  }
+  .checklist-section {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .checklist-section h3 {
+    border-bottom: none;
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--main);
+    background: var(--light);
+    padding: 5px 10px;
+    border-radius: 4px;
+  }
+
+  /* OK/NGサンプル */
+  .example-pair { margin: 10px 0 16px; }
+  .ex { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; font-size: 13px; }
+  .ex-label {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-top: 2px;
+    white-space: nowrap;
+  }
+  .ex-label.ok { background: #dcfce7; color: var(--ok); }
+  .ex-label.ng { background: #fee2e2; color: var(--ng); }
+  .ex-body { line-height: 1.6; }
+
+  /* 禁止ワードタグ */
+  .ban-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
+  .ban {
+    display: inline-block;
+    background: #fee2e2;
+    color: var(--ng);
+    border: 1px solid #fca5a5;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  /* PREP flow */
+  .prep-flow { display: flex; gap: 0; margin: 10px 0 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .prep-step { flex: 1; padding: 10px 12px; background: #fff; border-right: 1px solid var(--border); font-size: 12.5px; }
+  .prep-step:last-child { border-right: none; }
+  .prep-step .label { font-weight: 700; color: var(--main); font-size: 11px; margin-bottom: 3px; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+
+  code {
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 12.5px;
+    font-family: "Consolas", "Monaco", monospace;
+  }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 12px 0 16px;
+  }
+  .kpi-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .kpi-card .kpi-label { font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
+  .kpi-card .kpi-val { font-size: 15px; font-weight: 700; color: var(--main); }
+  .kpi-card .kpi-note { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  @media (max-width: 720px) {
+    nav { display: none; }
+    main { padding: 24px 20px 60px; }
+    .kpi-grid { grid-template-columns: 1fr; }
+  }
+
+  @media print {
+    nav { display: none; }
+    main { padding: 20px; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<nav>
+  <div class="logo">PLUS コンテンツガイドライン<span>記事品質の標準化ドキュメント</span></div>
+  <ul>
+    <li class="group">はじめに</li>
+    <li><a href="#overview">全体概要・目的</a></li>
+    <li class="group">記事の設計</li>
+    <li><a href="#sec1">1. テーマ・検索意図の把握</a></li>
+    <li><a href="#sec2">2. 記事構成のルール</a></li>
+    <li><a href="#sec3">3. まとめ・結論・CTA</a></li>
+    <li><a href="#sec4">4. ロジックの組み立て</a></li>
+    <li class="group">コンテンツ品質</li>
+    <li><a href="#sec5">5. 視覚的エレメント</a></li>
+    <li><a href="#sec6">6. 文字数と情報量</a></li>
+    <li><a href="#sec7">7. タイトルとメタ情報</a></li>
+    <li><a href="#sec8">8. 画像の活用</a></li>
+    <li><a href="#sec9">9. エビデンスと信頼性</a></li>
+    <li class="group">サイト設計</li>
+    <li><a href="#sec10">10. 内部リンク</a></li>
+    <li class="group">実務フロー</li>
+    <li><a href="#sec11">11. 執筆フロー</a></li>
+    <li><a href="#sec12">12. KPI・評価指標</a></li>
+  </ul>
+</nav>
+
+<main>
+
+  <h1>PLUS コンテンツガイドライン</h1>
+  <p class="subtitle">記事執筆前に必ず読んでください。このガイドラインに沿って執筆することで、検索意図・構成・SEO基本要件を一通り満たした記事を作成できます。</p>
+
+  <!-- ────────────── 全体概要 ────────────── -->
+  <section id="overview">
+    <h2>全体概要</h2>
+
+    <h3>目的</h3>
+    <p>初心者でもスムーズに、高品質なSEO記事を作成できるようにする。PLUSのコンテンツ均質化・質の底上げを目指しています。</p>
+    <ul class="body-list">
+      <li>トップランク記事を複数学習し、そこから共通して見られた「構成要素」や「文章の組み立て方」を標準化する</li>
+      <li>主にビューティージャンルのCVキーワードで上位表示している自社コンテンツおよびライバルのコンテンツをAIで学習・分析したものがこのコンテンツガイドのベースです</li>
+    </ul>
+
+    <h3>想定する読者（ターゲットライター）</h3>
+    <p>社内ライター／担当者が、記事執筆前にこのガイドラインを読めば、検索意図や構成・SEOの基本要件を一通り満たせるレベルを狙う。</p>
+
+    <h3>記事完成後の評価</h3>
+    <p>最終的には「記事の品質チェックリスト」と照合し、料金・比較表の正確性や導線（CTA）などをセルフチェックする。</p>
+    <div class="note"><strong>📝 補足</strong>品質チェックリストは現在新規作成中です（2025年8月現在）。</div>
+  </section>
+
+  <!-- ────────────── 1. テーマ・検索意図の把握 ────────────── -->
+  <section id="sec1">
+    <h2><span class="badge">1</span>テーマ・検索意図の把握</h2>
+
+    <h3>1-1 キーワードリサーチ</h3>
+
+    <div class="checklist-section">
+      <h3>キーワード設定</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>メインキーワードを1つ明確化する</strong><br>テーマを最も端的に表す語句（例：「○○ 通販」「△△ 料金」など）。記事全体で繰り返し意識し、タイトルや見出しなどに自然に含める</span></li>
+        <li><input type="checkbox"><span><strong>サブキーワードを2つピックアップする</strong><br>関連キーワードやサジェストキーワードから選び、ユーザーが併せて知りたい内容をカバーする</span></li>
+        <li><input type="checkbox"><span><strong>メインKWとサブKWの関係性を確認する</strong><br>1つの記事で同時に上位表示を狙えるキーワードをメイン・サブに設定する（検索結果を実際に確認する）</span></li>
+      </ul>
+    </div>
+
+    <div class="warn"><strong>サブKWに設定しないもの（消去法）</strong>
+      同義のキーワードはサブに設定しない。<br>
+      例：評判と口コミ、料金と費用、おすすめと人気
+    </div>
+
+    <p>メインKWとサブKWは基本的に検索意図が近く、ユーザーが同時に抱きやすい疑問を表すキーワードになります。理解の目安は、自社や競合の記事のタイトルを見てメインKW・サブKWを予想できることです。</p>
+
+    <div class="checklist-section">
+      <h3>競合・ライバル分析</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>上位10〜20件を調査する</strong><br>メインKWおよびサブKWで上位に表示されている記事を調査し、共通の構成・内容（最低限押さえるポイント）と差別化要素を把握する</span></li>
+      </ul>
+    </div>
+    <div class="note"><strong>📝 上位表示の基本法則</strong>実際に上位表示している競合が押さえている情報を網羅する＋独自コンテンツ。記事研修で競合調査を行う際は、上位10〜20記事の分析を一つの目安にします。</div>
+
+    <h3>1-2 テーマを定義する</h3>
+
+    <div class="checklist-section">
+      <h3>検索意図・ペルソナ設定</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>検索者の主要な悩み・疑問を3つ設定する</strong><br>メインKW・サブKW①・サブKW②の検索意図が主要な悩み・疑問に該当する</span></li>
+        <li><input type="checkbox"><span><strong>ペルソナ（ターゲット読者）を設定する</strong><br>年齢 / 性別 / 職業 / 居住地域 / 予算 を明確化し、5W1Hに当てはめてユーザーの悩みや知りたい情報を明確化する</span></li>
+      </ul>
+    </div>
+
+    <div class="note">
+      <strong>📝 ペルソナ設定の例</strong>
+      例：メインKW「マンジャロ 安い」、サブKW「マンジャロ 安い オンライン」「マンジャロ 購入」<br>
+      ⇒ 疑問①マンジャロを安く購入できるのはどこ？ / ②マンジャロをオンラインで安く購入する方法は？ / ③マンジャロってそもそもどこで購入できる？
+    </div>
+    <div class="note">
+      <strong>📝 ペルソナは絞るほど刺さる</strong>
+      誰にでも刺さるコンテンツは逆に誰にも刺さりません。「100人読んだら1人に刺されば良い」レベルでペルソナは絞った方が、説得力・納得感の高いコンテンツ（CVRの高いコンテンツ）に仕上がります。
+    </div>
+
+    <table>
+      <tr><th>5W1H</th><th>確認すること</th></tr>
+      <tr><td>Who（誰が）</td><td>誰が悩んでいる</td></tr>
+      <tr><td>What（何を）</td><td>何に悩んでいる</td></tr>
+      <tr><td>When（いつ）</td><td>いつ悩んでいる</td></tr>
+      <tr><td>Why（なぜ）</td><td>なぜ悩んでいる</td></tr>
+      <tr><td>Where（どこで）</td><td>どこで悩んでいる</td></tr>
+      <tr><td>How（どのように）</td><td>どのように解決したいか、解決した結果どうなりたいか</td></tr>
+    </table>
+  </section>
+
+  <!-- ────────────── 2. 記事構成のルール ────────────── -->
+  <section id="sec2">
+    <h2><span class="badge">2</span>記事構成のルール</h2>
+
+    <h3>2-1 全体の流れと導入文</h3>
+
+    <div class="checklist-section">
+      <h3>導入文</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>冒頭で結論やメリットを簡潔に提示する</strong><br>「この記事でわかること」「結論・要点の簡単なサマリー」を配置する。ユーザーが最初に読み続けるかを判断する重要パート</span></li>
+        <li><input type="checkbox"><span><strong>メインKWとサブKWは冒頭文の前半に必ず含める</strong></span></li>
+      </ul>
+    </div>
+
+    <p>導入文には以下の3点を盛り込みます。</p>
+    <ul class="body-list">
+      <li>この記事を読むことでどのようなメリットがあるのか</li>
+      <li>読み終わったときにどのような行動を取ることができるのか</li>
+      <li>この記事の情報を知らないとどのようなリスク・デメリットがあるのか</li>
+    </ul>
+    <div class="note"><strong>📝 良い冒頭文とは</strong>ユーザーが「読了後に幸せになっている自分」「悩みや疑問が解決できて納得のいくアクションを取れている自分」を想像できる冒頭文が良い冒頭文です。</div>
+
+    <h3>2-2 見出し構成：H2とH3の設定</h3>
+
+    <div class="note">
+      <strong>📝 H1〜H3の基本と役割</strong>
+
+      <h4 style="color:var(--main);font-size:12.5px;margin:10px 0 4px;">なぜ見出し（Hタグ）が重要なのか？</h4>
+      <p style="font-size:13px;">Webページは文章が長くなりやすいため、見出し（Hタグ）で構造を整理することが大切です。見出しには2つの役割があります。</p>
+      <ul class="body-list" style="font-size:13px;">
+        <li><strong>SEOテクニカル的な役割：</strong>Googleはすべての本文を細かく精読しているわけではなく、まずは見出し構成＝目次を見て「このページが何について書かれているか」を理解する。検索意図にマッチした見出しを設定すれば、そのKWで評価されやすくなる</li>
+        <li><strong>ユーザー視点での役割：</strong>読者が知りたい情報を探しやすく、理解しやすくする</li>
+      </ul>
+
+      <table style="margin-top:10px;">
+        <tr><th>タグ</th><th>SEO的役割</th><th>ユーザー視点の役割</th></tr>
+        <tr>
+          <td><strong>H1</strong></td>
+          <td>ページのタイトル（最重要見出し）。ページ内に1つだけ。メインKWを自然に入れることが望ましい</td>
+          <td>検索結果に表示されるユーザーとコンテンツの最初の接触点。ページを開いた瞬間に「自分の知りたいことが書かれていそうか」を判断する基準</td>
+        </tr>
+        <tr>
+          <td><strong>H2</strong></td>
+          <td>ページの大きな章立て。検索意図をカバーする主要トピックをH2に配置する</td>
+          <td>記事全体の「目次」にあたる部分。流し読みをする読者が、知りたい情報にすぐたどり着ける</td>
+        </tr>
+        <tr>
+          <td><strong>H3</strong></td>
+          <td>H2をさらに分割して補足する見出し。長文になりやすいH2を小分けにすることで検索エンジンに細かいテーマを伝えられる</td>
+          <td>読者が途中から読んでも理解できるように整理する役割。具体的なテーマごとにまとめることで、読みやすさを高める</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="checklist-section">
+      <h3>H2（大見出し）のルール</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span>基本的にメインKWを含める（ただし不自然になりそうな見出しは必ずしも入れる必要はない）</span></li>
+        <li><input type="checkbox"><span>サブKWも積極的に、かつ自然に含める。特にサブKWの検索意図に回答するブロックでは必ず含める</span></li>
+        <li><input type="checkbox"><span>基本的に3〜5個（少ないと情報の網羅性が低い可能性あり。多いと記事の主軸がブレている可能性あり）</span></li>
+        <li><input type="checkbox"><span>それぞれのH2で「検索者の主要疑問・悩み」を1つずつ解決する</span></li>
+        <li><input type="checkbox"><span>メインKWとサブKWの検索意図に回答するブロックをH2単位で必ず1つずつ設ける</span></li>
+      </ul>
+    </div>
+
+    <div class="note">
+      <strong>📝 H2の例</strong>
+      例：メインKW「医療ダイエット おすすめ」サブKW「医療ダイエット クリニック / 医療ダイエット 比較」<br>
+      ⇒「医療ダイエットを受けられるおすすめクリニックを紹介する」ブロック ／「医療ダイエットを受けられるクリニックを比較する」ブロックがある
+    </div>
+
+    <div class="checklist-section">
+      <h3>H3（中見出し）のルール</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span>メインKW・サブKWを必ず入れる必要はないが、共起語を含めてその記事のテーマでしか通じない見出しにする</span></li>
+        <li><input type="checkbox"><span>基本的に1つのH2に対して3〜4個</span></li>
+        <li><input type="checkbox"><span>H2で提示している「検索者の主要疑問・悩み」に回答するために必要な情報を細分化して掘り下げる</span></li>
+        <li><input type="checkbox"><span>H3で新たな疑問を提示しないように注意する（「結局何を伝えたいブロックなんだっけ？」＝H2単位での主題のブレ）</span></li>
+        <li><input type="checkbox"><span>H2とH3の整合性を意識した見出しを設定する（例：H2「〜はなぜ？」⇒H3には理由が並ぶ）</span></li>
+        <li><input type="checkbox"><span>1つのH3は300文字以上</span></li>
+      </ul>
+    </div>
+
+    <div class="note">
+      <strong>📝 共起語とは</strong>
+      あるキーワードがコンテンツに出現する際に、一緒に使われる頻度が高い単語やフレーズのこと。<br>
+      例：「アップル」という語が出るとき、「iPhone」「Mac」「CEO」など一緒に出現しやすい語が共起語。<br>
+      参考：<a href="https://mieru-ca.com/blog/co-occurrence/" target="_blank" rel="noopener noreferrer">https://mieru-ca.com/blog/co-occurrence/</a>
+    </div>
+
+    <div class="checklist-section">
+      <h3>その他の構成チェック</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>同じトピックを複数のブロックで繰り返さない</strong><br>ノウハウ記事の【効果/メリット/デメリット/対策】などは表現を変えて繰り返しがちになる。「そのH2で何を伝えたいか？」を明確にすることで防げる</span></li>
+        <li><input type="checkbox"><span><strong>見出し導入文を簡単に書く</strong><br>H2の下（最初のH3に入る前）に「この見出しで何を解決するか」を1〜2文で示す</span></li>
+      </ul>
+    </div>
+
+    <h3>2-3 見出し構成のチェックポイント</h3>
+
+    <div class="checklist-section">
+      <h3>重複・競合・詰め込みを防ぐ</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>重複・類似見出しを回避する</strong><br><code>"（ダブルクォート）"で囲んで検索</code>して、他サイトや自社内でほぼ同じ表現がヒットする場合は、類語や独自表現に置き換える</span></li>
+        <li><input type="checkbox"><span><strong>上位サイト・自社内での競合を回避する</strong><br>他社サイトや自サイトのタイトル・見出しが完全一致しないようにする。類語辞典などで言い回しを変更し差別化を図る</span></li>
+        <li><input type="checkbox"><span><strong>過度な繰り返しキーワードを使わない</strong><br>同じワードをタイトルやH2・H3などで何度も使うと「キーワード詰め込み」とみなされる恐れがある。メインKWに関連する語（共起語）を入れる</span></li>
+        <li><input type="checkbox"><span><strong>記事内容に合致した見出しを設定する</strong><br>ページ内で実際に説明しているトピックを適切に反映した見出しにする。「内容と見出しがズレている」と検索意図に合わず評価されにくいケースがある</span></li>
+      </ul>
+    </div>
+
+    <h3>2-4 見出しの順番と流れ</h3>
+    <p>検索意図やユーザー属性を踏まえて設計します。</p>
+
+    <table>
+      <tr><th>記事タイプ</th><th>想定ユーザー</th><th>見出しの流れの考え方</th></tr>
+      <tr>
+        <td><strong>ノウハウ記事</strong></td>
+        <td>テーマについてほとんど知識がない状態</td>
+        <td>論理的に系統立てた流れを意識する<br>例：定義 → メリット → 手順 → 注意点 → まとめ</td>
+      </tr>
+      <tr>
+        <td><strong>CV記事</strong></td>
+        <td>今すぐ買いたい／知りたいユーザーが多い</td>
+        <td>先に結論やメリット・CTAを提示するなど柔軟な構成にする<br>例：冒頭に結論（おすすめ商品・プラン）→ 詳細説明・比較 → 購入誘導</td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- ────────────── 3. まとめ・結論・CTA ────────────── -->
+  <section id="sec3">
+    <h2><span class="badge">3</span>まとめ・結論・CTA（行動喚起）</h2>
+
+    <div class="checklist-section">
+      <h3>まとめ・CTA配置</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>まとめ・結論をH2レベルで設置し、記事全体の要点を再度整理する</strong></span></li>
+        <li><input type="checkbox"><span><strong>まとめの見出し＝記事の結論にする。「まとめ」という見出し名はNG</strong><br>H2にしないとFAQの見出し内にまとめが入るなど構造的にも不自然になる</span></li>
+        <li><input type="checkbox"><span><strong>CTAを配置し、読者が「購入・問い合わせ・申し込み」などをしやすくする</strong><br>CTAはCVに寄与する見出しの下に入れる。ユーザーの気持ちの遷移を考えて「ここで申し込むだろう」という箇所に配置する</span></li>
+        <li><input type="checkbox"><span><strong>記事を最後までじっくり読んだユーザーに1位案件を明確に再訴求する</strong></span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ────────────── 4. ロジックの組み立て ────────────── -->
+  <section id="sec4">
+    <h2><span class="badge">4</span>ロジックの組み立て（ピラミッドストラクチャー）</h2>
+
+    <h3>記事全体の構成</h3>
+    <p>総論 → 各論 → 結論の流れで記事全体を構成します。</p>
+    <table>
+      <tr><th>パート</th><th>内容</th></tr>
+      <tr><td><strong>総論</strong></td><td>総じて伝えたいこと、この記事の主張や主題</td></tr>
+      <tr><td><strong>各論</strong></td><td>総論で述べた事の具体的な説明、この総論に至った理由など。総論で述べていない補足情報を入れても良いがボリュームが大きくならないように気を付ける</td></tr>
+      <tr><td><strong>結論</strong></td><td>つまり何が言いたいか＝記事全体のSo what、どう行動してほしいか</td></tr>
+    </table>
+
+    <h3>各見出しの文章で意識するポイント</h3>
+    <p>主張 → 理由 → 具体例 → So what の流れで各ブロックを構成します。</p>
+
+    <div class="prep-flow">
+      <div class="prep-step"><div class="label">主張</div>○○すべき</div>
+      <div class="prep-step"><div class="label">理由</div>△△だから</div>
+      <div class="prep-step"><div class="label">事実・根拠</div>人によって言うことの変わらない事、具体例</div>
+      <div class="prep-step"><div class="label">So What</div>つまり何が言いたいか、どのように行動してほしいか</div>
+    </div>
+
+    <div class="note"><strong>📝 なぜこの順番か</strong>H3の下に主張（＝結論）が入っていると、ユーザーは「読みやすい」、クローラーは「この見出しは何について書かれているか評価しやすい」という両方の効果があります。</div>
+
+    <h3>不要な文を排除する</h3>
+    <p>削除しても意味の通じる文・不要な文が存在しないか一文単位で確認する。文には4つの役割があり、いずれにも当てはまらない文は基本的に削除します。</p>
+
+    <table>
+      <tr><th>役割</th><th>説明</th></tr>
+      <tr><td><strong>① トピックセンテンス</strong></td><td>その段落・ブロックの主張を示す文</td></tr>
+      <tr><td><strong>② サポーティングセンテンス</strong></td><td>主張を支持する根拠・理由を述べる文</td></tr>
+      <tr><td><strong>③ セミサポーティングセンテンス</strong></td><td>根拠をさらに補足・例示する文</td></tr>
+      <tr><td><strong>④ コンクルーディングセンテンス</strong></td><td>その段落の結論・まとめを述べる文</td></tr>
+    </table>
+
+    <div class="warn"><strong>⚠️ 入れてはいけない文</strong>「次の項目を事前に確認しましょう」「それでは次の章で具体例を確認しましょう」などの声かけ・接続の文は入れない。役割のない文は削除。</div>
+  </section>
+
+  <!-- ────────────── 5. 視覚的エレメント ────────────── -->
+  <section id="sec5">
+    <h2><span class="badge">5</span>視覚的エレメント（箇条書き・表）を積極的に利用</h2>
+
+    <div class="checklist-section">
+      <h3>レイアウト・配置</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span>SPで1画面に、テキストのみが続かないよう表・リスト・画像・ボックスを配置する</span></li>
+        <li><input type="checkbox"><span>比較表や一覧表を冒頭やH2直下に入れ、読者が一覧で確認できるようにする</span></li>
+        <li><input type="checkbox"><span>情報を比較する目的には表を、並列の情報を羅列する目的には箇条書きを使用する</span></li>
+      </ul>
+    </div>
+
+    <h3>表のルール</h3>
+    <ul class="body-list">
+      <li>必ず見出しを入れる</li>
+      <li>ユーザーの理解を促す目的で適切な箇所に入れる</li>
+      <li>「その情報をユーザーにどのように解釈してほしいか」を必ずテキストで入れる</li>
+    </ul>
+    <div class="note">
+      <strong>📝 表の直後テキスト例</strong>
+      「この中で最安は〇〇円です」「予約のしやすさを重視するなら△△がおすすめ」のように、表の直後に解説テキストを追加する。
+    </div>
+
+    <h3>箇条書きのルール</h3>
+    <ul class="body-list">
+      <li>必ず見出しを入れる</li>
+      <li>ユーザーの理解を促す目的で適切な箇所に入れる</li>
+      <li>文章を分割し、要点をわかりやすく提示する</li>
+      <li>表と同様、「その情報をユーザーにどのように解釈してほしいのか」を必ずテキストで入れる</li>
+    </ul>
+
+    <h3>マーカー装飾のルール</h3>
+    <ul class="body-list">
+      <li>各H2/H3ブロックでハイライトは1箇所・30字以内</li>
+      <li>見出しと直接紐づく結論をマークする</li>
+    </ul>
+  </section>
+
+  <!-- ────────────── 6. 文字数と情報量 ────────────── -->
+  <section id="sec6">
+    <h2><span class="badge">6</span>文字数と情報量</h2>
+
+    <div class="checklist-section">
+      <h3>文字数・ボリュームの考え方</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>文字数は上位の競合から大きく不足させない</strong><br>文字数はあくまで疑問を網羅・回答した結果として増やす方針。不要な重複や蛇足は避け、読みやすさを優先する。パスカルの推奨文字数を参考にする</span></li>
+        <li><input type="checkbox"><span><strong>メインKWとサブKWの検索意図に回答するH2は、ほかのH2よりもコンテンツのボリュームを大きくする</strong><br>記事の主要なトピックであり、ユーザーが最も知りたい情報なので、必然的にボリュームは大きくなる。補足的な情報を増やしすぎると記事の主軸がぶれてしまうので、主要なトピック以外はあえてボリュームを小さくするか小見出し程度に抑える</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ────────────── 7. タイトルとメタ情報 ────────────── -->
+  <section id="sec7">
+    <h2><span class="badge">7</span>タイトルとメタ情報</h2>
+
+    <h3>7-1 タイトル</h3>
+
+    <div class="checklist-section">
+      <h3>タイトルのルール</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>30文字前後が目安</strong>（検索結果で途切れにくい）</span></li>
+        <li><input type="checkbox"><span><strong>メインKWを先頭に含める</strong>（検索クエリがすぐに目に入るほうがCTRも上がりやすい）</span></li>
+        <li><input type="checkbox"><span><strong>サブKWを2つとも自然に含める</strong></span></li>
+        <li><input type="checkbox"><span><strong>メインKWで上位表示されている記事のタイトルも参考にする</strong>（競合サイトがタイトルに含めているKWを確認する）</span></li>
+        <li><input type="checkbox"><span><strong>具体的・定量的な表現を使う</strong>（例：「料金比較」「ポイント3選」「○○解説」など）</span></li>
+      </ul>
+    </div>
+
+    <h3>記号の使用ルール（タイトル）</h3>
+    <table>
+      <tr><th>記号</th><th>使用可否</th><th>補足</th></tr>
+      <tr><td>！（感嘆符）</td><td><span style="color:var(--ok);font-weight:700;">OK</span></td><td>使用可</td></tr>
+      <tr><td>（）（丸括弧）</td><td><span style="color:var(--ok);font-weight:700;">OK</span></td><td>補足目的のみ。例：フィナステリド(プロペシア)の通販が〜</td></tr>
+      <tr><td>その他の括弧・記号</td><td><span style="color:var(--ng);font-weight:700;">NG</span></td><td>使用不可</td></tr>
+    </table>
+
+    <div class="checklist-section">
+      <h3>整合性チェック</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span>タイトルと導入文は整合性が取れているか確認する</span></li>
+        <li><input type="checkbox"><span>導入文と記事内容は整合性が取れているか確認する</span></li>
+      </ul>
+    </div>
+
+    <h3>7-2 メタディスクリプション</h3>
+
+    <div class="checklist-section">
+      <h3>メタディスクリプションのルール</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>80〜100文字程度</strong></span></li>
+        <li><input type="checkbox"><span><strong>メインKWとサブKWを自然に含める</strong>（前半にKW・記事テーマ、後半に補足的な情報）</span></li>
+        <li><input type="checkbox"><span><strong>記事で解決できる問題・メリットを端的に説明し、記事の具体的な内容には入らない</strong></span></li>
+        <li><input type="checkbox"><span><strong>過剰なキーワード詰め込みはNG</strong>（含めるKWの推奨個数はパスカルで確認可能）</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ────────────── 8. 画像の活用 ────────────── -->
+  <section id="sec8">
+    <h2><span class="badge">8</span>画像の活用</h2>
+
+    <div class="checklist-section">
+      <h3>画像配置・altタグ</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>2000文字につき1枚を目安に画像を配置する</strong>（オリジナルバナーを除く）</span></li>
+        <li><input type="checkbox"><span><strong>オリジナル写真・イラスト・スクリーンショットなどを使い、理解をサポートする目的で挿入する</strong>（独自性につながる）</span></li>
+        <li><input type="checkbox"><span><strong>altタグに画像内容を簡潔に説明する</strong>（画像検索で表示されることを考慮してKWを適切に含んだ画像の説明を入れる）</span></li>
+      </ul>
+    </div>
+
+    <div class="note"><strong>📝 altタグの書き方</strong>詳細は社内Slackの過去チャット（#SEO-knowledge）を確認してください。画像の内容をそのまま説明しつつ、関連KWを自然に含める形式が推奨です。</div>
+  </section>
+
+  <!-- ────────────── 9. エビデンスと信頼性 ────────────── -->
+  <section id="sec9">
+    <h2><span class="badge">9</span>エビデンスと信頼性</h2>
+
+    <h3>9-1 E-E-A-T（経験・専門性・権威性・信頼性）を意識</h3>
+
+    <div class="checklist-section">
+      <h3>E-E-A-T・YMYL対応</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>医療・美容・金融など専門領域ほど根拠や信頼性が重要（YMYL）</strong></span></li>
+        <li><input type="checkbox"><span><strong>引用元・参考資料を明示する</strong>（公的機関、厚生労働省、FDA、学術論文、製薬会社公式発表など権威あるサイト）</span></li>
+        <li><input type="checkbox"><span><strong>本体が言及している情報を用いる際は、外部リンクではなく内部リンクで本体とつなげる</strong>（nofollowを入れないリンク）</span></li>
+      </ul>
+    </div>
+
+    <div class="note">
+      <strong>📝 YMYLとは？</strong>
+      「Your Money Your Life」の略。お金・健康・進路・住宅など、人の人生に大きく影響する分野を指す。Googleはここを特に厳しく評価する（間違った情報で人生が変わると困るから）。<br><br>
+      <strong>対象ジャンル：</strong>健康（病気・薬・安全）、お金（投資・ローン・保険・税金）、法律・公共サービス・教育・就職、ネットショッピング（特に決済ページ）<br><br>
+      <strong>SEOで重要になるポイント：</strong>E-E-A-T（経験・専門性・権威性・信頼性）が必須。専門家の監修や著者情報を出す。出典・根拠を明示する。情報を最新に保つ。サイト全体の信頼性もチェックされる。<br><br>
+      まとめると：「YMYL領域は厳しいけど、専門性と信頼性を示せば上位表示のチャンスはある」<br>
+      参考：<a href="https://www.seohacks.net/blog/3099/" target="_blank" rel="noopener noreferrer">https://www.seohacks.net/blog/3099/</a>
+    </div>
+
+    <h3>9-2 引用ルール</h3>
+
+    <div class="checklist-section">
+      <h3>引用の原則</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>引用の定義を守る：</strong>原文を一部抜き出して掲載し、引用元を明示する</span></li>
+        <li><input type="checkbox"><span><strong>単なる引用の羅列や過剰な引用は避け、記事内で必要な部分に限定する</strong></span></li>
+        <li><input type="checkbox"><span><strong>必要最低限の範囲のみ引用する</strong>（文章の大半をコピペするような引用は不可）。引用は自作品（オリジナル記事）が主、引用部分が従になるよう注意</span></li>
+        <li><input type="checkbox"><span><strong>引用箇所を明確に区別する</strong>（引用パーツを用いて本文と明確に区別し、引用元を記載する）</span></li>
+        <li><input type="checkbox"><span><strong>適切なリンクテキストを配置する</strong>（「こちら」「Click here」など抽象的でなく、引用先内容がわかるリンクテキストを使う）</span></li>
+      </ul>
+    </div>
+
+    <div class="note">
+      <strong>📝 引用元の記載例</strong>
+      「(○○省××ページより)」「出典：○○協会 発表資料（URL）」<br>
+      リンクテキスト例：「政府広報オンラインで注意喚起されている偽薬問題」（「こちら」はNG）
+    </div>
+
+    <h3>9-3 参照ルール</h3>
+
+    <div class="checklist-section">
+      <h3>参照・参考文献の原則</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>参照の定義を守る：</strong>記事執筆時に参考にした情報源を明示し、要点を自分の言葉で書き直す</span></li>
+        <li><input type="checkbox"><span><strong>数値データ・統計情報を記載する際は、必ずセットで参照情報も載せる</strong><br>テーブルや箇条書きが終わった直下に参照元・ソースを明記し、リンクを置く</span></li>
+        <li><input type="checkbox"><span><strong>参照リスト（参考文献）を作成する</strong>（記事末尾や文末に「参考文献」「参考URL」を掲載）</span></li>
+      </ul>
+    </div>
+
+    <div class="note">
+      <strong>📝 参考文献の記載例</strong>
+      <code>参考文献／参考サイト</code><br>
+      1） 政府広報オンライン「海外から個人輸入する医薬品のリスク」<br>
+      2） ○○製薬「フィナステリド錠 添付文書」<br><br>
+      本体ドメインのジャンルとは異なるジャンルのコンテンツは特に参考文献を入れたほうが良い。
+    </div>
+
+    <h3>9-4 「書いてはダメなこと」と「書かないとダメなこと」</h3>
+
+    <div class="checklist-section">
+      <h3>医療広告ガイドライン準拠</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span>載せてはいけない情報（または表現）と、載せないといけない情報のルールを遵守する。遵守できない場合は医療広告ガイドラインやそのほかの法令・ガイドラインに抵触する恐れあり</span></li>
+      </ul>
+    </div>
+
+    <h4>書いてはダメなこと（医療広告ガイドライン抵触リスク）</h4>
+    <div class="ban-list">
+      <span class="ban">期間の虚偽</span>
+      <span class="ban">行政の保証（例：厚生労働省が推奨）</span>
+      <span class="ban">最上級の表現</span>
+      <span class="ban">無制限の表現</span>
+      <span class="ban">科学的根拠が乏しい情報</span>
+      <span class="ban">治療内容や効果に関する体験談</span>
+      <span class="ban">Before &amp; After</span>
+    </div>
+
+    <table>
+      <tr><th>禁止カテゴリ</th><th>NG例</th></tr>
+      <tr><td>最上級の表現</td><td>「絶対」「完璧」「100％」「必ず」「唯一無二」「世界一」「ナンバーワン」「最高」「No.1」「最強」「完治保証」「極限までコストを抑えた最安値」</td></tr>
+      <tr><td>無制限の表現</td><td>「無制限」「し放題」「回数制限なく」</td></tr>
+    </table>
+
+    <h4>書かないとダメなこと</h4>
+    <ul class="body-list">
+      <li>公的医療保険が適用されない自由診療であること</li>
+      <li>標準的な費用記載（治療内容・期間回数・金額・リスク）</li>
+      <li>別途発生する費用（初診料や送料など）</li>
+      <li>「国内の承認医薬品等の有無」について</li>
+      <li>いずれの治療を提供するかを明確に記載する</li>
+      <li>費用相場を記載する際はエビデンスをあわせて載せる（例：○○を取り扱うクリニック△院の料金の平均値）</li>
+      <li>全記事統一で冒頭に下記の注釈を記載する：料金はすべて税込表記 ／ 公的医療保険が適用されない自由診療であること</li>
+    </ul>
+
+    <div class="note"><strong>📝 補足</strong>載せないといけない情報は必ずしも本文テキストで記載する必要はない。テーブル下部に注釈で記載も可。テンプレとして全記事統一で冒頭に注釈を入れる形式でも可。</div>
+  </section>
+
+  <!-- ────────────── 10. 内部リンク ────────────── -->
+  <section id="sec10">
+    <h2><span class="badge">10</span>内部リンク</h2>
+
+    <div class="note">
+      <strong>📝 内部リンクとは（ざっくり）</strong>
+      サイトの中でページ同士をつなぐリンクのこと。全体をワクワクする地図にするようなもの。文脈の中に自然に忍ばせることで、「あ、これ関連してるな」が分かるように。SEO的には、クローラーにも「このページ同士、手をつないでますよ」と教えてあげるイメージ。<br><br>
+      <strong>トピッククラスターと内部リンクの絡み：</strong><br>
+      ▸ ピラーページ：大きなテーマをざっくりまとめた"中心記事"<br>
+      ▸ クラスターページ：そのテーマの細かい話題を掘り下げた"詳細記事"<br>
+      この二者が内部リンクで往復することで、「このサイト、このテーマ得意です！」と検索エンジンにアピールできる。さらに、クラスターページ同士でも関連があればリンクすると、より情報のつながりが強まります。
+    </div>
+
+    <div class="checklist-section">
+      <h3>内部リンクの配置ルール</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>サイト内の関連記事やカテゴリーページへの誘導を行い、回遊性を高める</strong></span></li>
+        <li><input type="checkbox"><span><strong>キーワードの近似性を考慮して自然な記事へのリンクを配置する</strong>（NG例：「ダイエット漢方薬」の記事⇒「リベルサス通販」の記事へのリンク）</span></li>
+        <li><input type="checkbox"><span><strong>重要な記事（主力記事）へのリンクは記事の上部に入れる</strong>（特に、ノウハウ記事は可能な限り上部に配置する。重要な記事へのリンクはコンテンツ内に配置し、関連記事にしない）</span></li>
+        <li><input type="checkbox"><span><strong>同じ記事へのリンクは記事内にひとつだけにする</strong></span></li>
+        <li><input type="checkbox"><span><strong>内部リンクの置き方はサイト内で複数パターン設ける</strong>（ボックスパーツ、右寄せリンクのパーツ、テキストリンクなど）</span></li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>アンカーテキスト（リンクテキスト）</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>アンカーテキストにはキーワードを必ず入れる</strong></span></li>
+        <li><input type="checkbox"><span><strong>内部リンクの周辺にはキーワードの共起語を入れる</strong></span></li>
+        <li><input type="checkbox"><span><strong>リンク先の記事で狙っているキーワードを意識した内部リンクの配置をする</strong></span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ────────────── 11. 執筆フロー ────────────── -->
+  <section id="sec11">
+    <h2><span class="badge">11</span>執筆フロー</h2>
+
+    <div class="checklist-section">
+      <h3>11-1 キーワードリサーチ・構成案の作成</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span>メインKW＋サブKWを洗い出す</span></li>
+        <li><input type="checkbox"><span>H2/H3見出し案を設定する</span></li>
+        <li><input type="checkbox"><span>記事のゴール（CV／PV）を明確化する</span></li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>11-2 本文執筆</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span>ガイドラインのロジックを意識して執筆する</span></li>
+        <li><input type="checkbox"><span>導入文にて「悩みを提示 → この記事でどう解決するか → 簡単な結論」を書く</span></li>
+        <li><input type="checkbox"><span>表・画像・箇条書きを入れ、可読性を上げる</span></li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>11-3 校正・推敲</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>正しい日本語が使用されているかチェック</strong>（正しい日本語として存在しない造語を使用しない。助詞（てにおは）を正しく使用する）</span></li>
+        <li><input type="checkbox"><span><strong>誤字脱字や表記ゆれチェック</strong>（文賢を使用）</span></li>
+        <li><input type="checkbox"><span>こそあど言葉（これ・それ・あれ・どれ）を削除する</span></li>
+        <li><input type="checkbox"><span>不要な繰り返しがないかトピック単位で確認する</span></li>
+        <li><input type="checkbox"><span>不要な文・言葉がないか一文単位で確認する</span></li>
+        <li><input type="checkbox"><span>料金や公式情報との齟齬がないか「ファクトチェック」をする</span></li>
+        <li><input type="checkbox"><span><strong>メイン／サブKWの出現率を確認する（目安：2〜4%）</strong>（パスカルの推奨パーセンテージも参考に）</span></li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>11-4 メタ情報設定</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>タイトル：</strong>30文字前後、メインKWを先頭に、サブKWも自然に含める</span></li>
+        <li><input type="checkbox"><span><strong>ディスクリプション：</strong>80〜100文字、解決できることを端的に、メインKWとサブKWを必ず含める</span></li>
+        <li><input type="checkbox"><span><strong>altタグ：</strong>画像内容を簡潔に説明する</span></li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>11-5 最終チェック</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span>内部リンク・外部リンクが妥当か？</span></li>
+        <li><input type="checkbox"><span>CTA（予約ページ・問い合わせフォームなど）は明確か？</span></li>
+        <li><input type="checkbox"><span>文字数・見出し数などKPIを満たすか？</span></li>
+        <li><input type="checkbox"><span>チェックリスト（料金・デメリット・比較ポイント）と整合するか？</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ────────────── 12. KPI・評価指標 ────────────── -->
+  <section id="sec12">
+    <h2><span class="badge">12</span>KPI・評価指標</h2>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">文字数</div>
+        <div class="kpi-val">パスカル推奨値</div>
+        <div class="kpi-note">パスカルの推奨文字数を参考にする</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">H2見出し数</div>
+        <div class="kpi-val">3〜5個</div>
+        <div class="kpi-note">パスカルの推奨個数も参考に</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">KW出現率（メインKW）</div>
+        <div class="kpi-val">2〜4%</div>
+        <div class="kpi-note">パスカルの推奨パーセンテージも参考に</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">画像・図表数</div>
+        <div class="kpi-val">2000文字に1枚</div>
+        <div class="kpi-note">オリジナルバナーを除く</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">タイトル文字数</div>
+        <div class="kpi-val">30文字前後</div>
+        <div class="kpi-note">メインKW前半・サブKW含める</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">メタディスクリプション</div>
+        <div class="kpi-val">80〜100文字</div>
+        <div class="kpi-note">メインKW・サブKWを自然に含む</div>
+      </div>
+    </div>
+
+    <div class="checklist-section">
+      <h3>リンク設定</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"><span><strong>内部リンク：</strong>必要な記事に対して自然にリンクする</span></li>
+        <li><input type="checkbox"><span><strong>外部リンク：</strong>2000文字に1つが目安</span></li>
+      </ul>
+    </div>
+
+    <table>
+      <tr><th>KPI項目</th><th>基準</th><th>備考</th></tr>
+      <tr><td>文字数</td><td>パスカル推奨値</td><td></td></tr>
+      <tr><td>H2数</td><td>3〜5個</td><td>パスカル推奨も参考に</td></tr>
+      <tr><td>H3数（H2あたり）</td><td>3〜4個</td><td></td></tr>
+      <tr><td>1H3あたりの文字数</td><td>300文字以上</td><td></td></tr>
+      <tr><td>KW出現率（メインKW）</td><td>2〜4%</td><td></td></tr>
+      <tr><td>画像</td><td>2000文字に1枚</td><td></td></tr>
+      <tr><td>タイトル</td><td>30文字前後</td><td>メインKW先頭、サブKW含む</td></tr>
+      <tr><td>メタディスクリプション</td><td>80〜100文字</td><td>メインKW・サブKW含む</td></tr>
+      <tr><td>外部リンク</td><td>2000文字に1本目安</td><td></td></tr>
+    </table>
+  </section>
+
+</main>
+</div>
+</body>
+</html>
