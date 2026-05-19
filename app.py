@@ -496,7 +496,7 @@ with _safe_tab(tab_batch):
     if not article_sheet_url:
         st.warning("サイドバーで「記事スプレッドシートURL」を設定してください。")
 
-    batch_tab_sel = st.selectbox("処理するタブ", ARTICLE_TABS, key="batch_tab_sel")
+    batch_tab_sel = st.selectbox("処理するタブ", ["ノウハウ一括", "ノウハウ"], key="batch_tab_sel")
 
     # ノウハウ一括はサイト名・ジャンルを列に持たないのでUIで入力
     _batch_is_bulk = batch_tab_sel == "ノウハウ一括"
@@ -824,7 +824,7 @@ with _safe_tab(tab_custom):
         site_name = "" if _cst_site_sel == "指定なし" else _cst_site_sel
         genre     = st.text_input("ジャンル *", key="t_genre", placeholder="クマ取り / AGA治療 / 医療ダイエット")
         main_kw   = st.text_input("メインKW *", key="t_main_kw")
-        sub_kw    = st.text_input("サブKW（カンマ区切り）", key="t_sub_kw")
+        sub_kw    = st.text_input("サブKW * （カンマ区切り）", key="t_sub_kw")
         related_kw = st.text_area(
             "関連KW（任意・改行区切り）",
             key="t_related_kw",
@@ -1051,9 +1051,10 @@ with _safe_tab(tab_custom):
     if st.button(_run_label, type="primary", use_container_width=True, key="run_test"):
         valid_clinics = [c for c in st.session_state.get("test_clinics", []) if c["name"] and c["domain"]]
         errs = []
-        if not claude_key:  errs.append("Claude API Key 未設定")
-        if not main_kw:     errs.append("メインKW を入力してください")
-        if not genre:       errs.append("ジャンル を入力してください")
+        if not claude_key:      errs.append("Claude API Key 未設定")
+        if not main_kw:         errs.append("メインKW を入力してください")
+        if not sub_kw.strip():  errs.append("サブKW を入力してください")
+        if not genre:           errs.append("ジャンル を入力してください")
         if article_type == "商標" and not valid_clinics:
             errs.append("商標記事：案件名とドメインを入力してください")
         for e in errs:
