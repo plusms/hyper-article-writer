@@ -139,7 +139,7 @@ def generate_image_prompts(
 ## 使用ルール
 - テンプレートの {{{{変数名}}}} を記事の各H2/H3の内容に合わせて差し替える
 - 構造・カラーコード・レイアウトは変更しない。テキスト内容のみ差し替える
-- filenameは「{slug}-英単語.webp」形式（重複なし・英小文字・ハイフン区切り可）
+- filenameは「{slug}-英単語.webp」形式。英単語は画像の内容を1語で表す説明的な単語にすること（例：effect / cost / flow / merit / risk / compare / method / point）。番号（1・2・3）や"word"は使用禁止
 - 出力JSONの各要素に "template_id": 1 を含める"""
     else:
         tmpl_blocks = "\n\n".join(
@@ -156,7 +156,7 @@ def generate_image_prompts(
 - 各画像ごとに最適なテンプレートを選ぶ（すべて同じテンプレートである必要はない）
 - テンプレートの {{{{変数名}}}} を記事の各H2/H3の内容に合わせて差し替える
 - 構造・カラーコード・レイアウトは変更しない。テキスト内容のみ差し替える
-- filenameは「{slug}-英単語.webp」形式（重複なし・英小文字・ハイフン区切り可）
+- filenameは「{slug}-英単語.webp」形式。英単語は画像の内容を1語で表す説明的な単語にすること（例：effect / cost / flow / merit / risk / compare / method / point）。番号（1・2・3）や"word"は使用禁止
 - 出力JSONの各要素に "template_id": （使用したテンプレート番号: {tmpl_ids}のいずれか）を含める"""
 
     prompt = f"""あなたは画像プロンプト生成の専門家です。
@@ -178,7 +178,7 @@ def generate_image_prompts(
 [
   {{
     "position": "挿入位置の見出しテキスト",
-    "filename": "{slug}-word.webp",
+    "filename": "{slug}-effect.webp",
     "alt": "画像の内容説明（日本語20〜40字）",
     "template_id": 1,
     "prompt": "（変数差し替え済みのプロンプト全文。{{{{}}}}形式の文字列が一切含まれないこと）"
