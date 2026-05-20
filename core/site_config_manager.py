@@ -146,11 +146,22 @@ def list_sites(creds_data: dict | None = None, drive_parent_folder_id: str = "")
             service = _get_drive_service(creds_data)
             folder_id = _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
             query = f"'{folder_id}' in parents and name contains '.json' and trashed=false"
-            results = service.files().list(
-                q=query, fields="files(name)",
-                supportsAllDrives=True, includeItemsFromAllDrives=True,
-            ).execute()
-            return sorted([f["name"][:-5] for f in results.get("files", [])])
+            all_files = []
+            page_token = None
+            while True:
+                kwargs = dict(
+                    q=query, fields="nextPageToken, files(name)",
+                    supportsAllDrives=True, includeItemsFromAllDrives=True,
+                    pageSize=1000,
+                )
+                if page_token:
+                    kwargs["pageToken"] = page_token
+                results = service.files().list(**kwargs).execute()
+                all_files.extend(results.get("files", []))
+                page_token = results.get("nextPageToken")
+                if not page_token:
+                    break
+            return sorted([f["name"][:-5] for f in all_files])
         except Exception:
             pass
     if not os.path.exists(SITES_CONFIG_DIR):
