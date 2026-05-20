@@ -140,28 +140,54 @@ def _find_drive_file(service, filename: str, folder_id: str) -> str | None:
 
 # ── 公開API ────────────────────────────────────────────────────
 
+def _list_all_folder_ids(service, folder_name: str, parent_id: str) -> List[str]:
+    """指定名のフォルダをすべて返す（重複フォルダ対策）。"""
+    query = (
+        f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' "
+        f"and '{parent_id}' in parents and trashed=false"
+    )
+    results = service.files().list(
+        q=query, fields="files(id)",
+        supportsAllDrives=True, includeItemsFromAllDrives=True,
+        pageSize=100,
+    ).execute()
+    ids = [f["id"] for f in results.get("files", [])]
+    if not ids:
+        metadata = {
+            "name": folder_name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent_id],
+        }
+        folder = service.files().create(
+            body=metadata, fields="id", supportsAllDrives=True,
+        ).execute()
+        ids = [folder["id"]]
+    return ids
+
+
 def list_sites(creds_data: dict | None = None, drive_parent_folder_id: str = "") -> List[str]:
     if creds_data and drive_parent_folder_id:
         try:
             service = _get_drive_service(creds_data)
-            folder_id = _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
-            query = f"'{folder_id}' in parents and name contains '.json' and trashed=false"
+            folder_ids = _list_all_folder_ids(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
             all_files = []
-            page_token = None
-            while True:
-                kwargs = dict(
-                    q=query, fields="nextPageToken, files(name)",
-                    supportsAllDrives=True, includeItemsFromAllDrives=True,
-                    pageSize=1000,
-                )
-                if page_token:
-                    kwargs["pageToken"] = page_token
-                results = service.files().list(**kwargs).execute()
-                all_files.extend(results.get("files", []))
-                page_token = results.get("nextPageToken")
-                if not page_token:
-                    break
-            return sorted([f["name"][:-5] for f in all_files])
+            for folder_id in folder_ids:
+                query = f"'{folder_id}' in parents and name contains '.json' and trashed=false"
+                page_token = None
+                while True:
+                    kwargs = dict(
+                        q=query, fields="nextPageToken, files(name)",
+                        supportsAllDrives=True, includeItemsFromAllDrives=True,
+                        pageSize=1000,
+                    )
+                    if page_token:
+                        kwargs["pageToken"] = page_token
+                    results = service.files().list(**kwargs).execute()
+                    all_files.extend(results.get("files", []))
+                    page_token = results.get("nextPageToken")
+                    if not page_token:
+                        break
+            return sorted(list({f["name"][:-5] for f in all_files}))
         except Exception:
             pass
     if not os.path.exists(SITES_CONFIG_DIR):
