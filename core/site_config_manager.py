@@ -10,7 +10,6 @@ _DRIVE_FOLDER_NAME = "サイト設定情報"
 _DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 # SITE_CONFIG_FOLDER_ID secretで直接フォルダIDを指定した場合に設定される
 SITE_CONFIG_FOLDER_ID_OVERRIDE: str = ""
-_LIST_SITES_LAST_ERROR: list = [""]
 
 # ── 固定23スロット ──────────────────────────────────────────────
 FIXED_COMPONENT_SCHEMA: List[str] = [
@@ -194,8 +193,7 @@ def list_sites(creds_data: dict | None = None, drive_parent_folder_id: str = "")
                     if not page_token:
                         break
             return sorted(list({f["name"][:-5] for f in all_files}))
-        except Exception as _e:
-            _LIST_SITES_LAST_ERROR[0] = str(_e)
+        except Exception:
             pass
     if not os.path.exists(SITES_CONFIG_DIR):
         return []

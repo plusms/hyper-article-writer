@@ -539,7 +539,6 @@ with _safe_tab(tab_batch):
     if _batch_is_bulk:
         _bulk_col1, _bulk_col2 = st.columns(2)
         _bnk_site_opts = ["指定なし"] + site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
-        st.caption(f"[debug] override={site_config_manager.SITE_CONFIG_FOLDER_ID_OVERRIDE} creds={_site_cfg_creds is not None} sites={_bnk_site_opts} err={site_config_manager._LIST_SITES_LAST_ERROR[0]}")
         bulk_site_name = _bulk_col1.selectbox("サイト名（全行共通）", _bnk_site_opts, key="bulk_site_name")
         bulk_genre     = _bulk_col2.text_input("ジャンル（全行共通）", key="bulk_genre")
 
