@@ -65,8 +65,7 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
 # ── APIキー（Secrets優先 → サイドバー入力 fallback）──────────
 _claude_key_default  = _secret("CLAUDE_API_KEY")
 _gemini_key_default  = _secret("GEMINI_API_KEY")
-_drive_folder_id          = _secret("DRIVE_PARENT_FOLDER_ID", "1CHqNruWiOVdeJPs7Nyd3Nfjt3sLxMc2c")
-_edit_logs_folder_id      = "0AFZI9kNsa56QUk9PVA"
+_drive_folder_id          = _secret("DRIVE_PARENT_FOLDER_ID", "0ANR02wEPgx88Uk9PVA")
 _site_cfg_parent_folder   = _secret("SITE_CONFIG_FOLDER_ID") or _drive_folder_id
 _article_sheet_url_default    = _secret("ARTICLE_SHEET_URL")
 _db_sheet_url_default         = _secret("CLINIC_DB_SHEET_URL")
@@ -1323,6 +1322,7 @@ with _safe_tab(tab_custom):
                             _sl_ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                             _sl_kw = _t2_draft["inputs"].get("main_kw", "")[:20].replace(" ", "_")
                             _sl_atype = _t2_draft["inputs"].get("article_type", "不明")
+                            _sl_yyyymm = datetime.datetime.now().strftime("%Y%m")
                             drive_uploader.upload_json(
                                 {
                                     "date": datetime.date.today().isoformat(),
@@ -1333,9 +1333,9 @@ with _safe_tab(tab_custom):
                                     "after_structure": _new_struct["structure_text"],
                                 },
                                 f"struct_{_sl_ts}_{_sl_kw}.json",
-                                ["修正ログ", "構成", _sl_atype],
+                                ["修正ログ", _sl_atype, _sl_yyyymm],
                                 _struct_log_creds,
-                                _edit_logs_folder_id,
+                                _drive_folder_id,
                             )
                         except Exception:
                             pass
@@ -1497,6 +1497,7 @@ with _safe_tab(tab_custom):
                                         _log_ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                                         _log_kw = _t2_last["main_kw"][:20].replace(" ", "_")
                                         _log_atype = _t2_last.get("_inputs", {}).get("article_type", "不明")
+                                        _log_yyyymm = datetime.datetime.now().strftime("%Y%m")
                                         drive_uploader.upload_json(
                                             {
                                                 "date": datetime.date.today().isoformat(),
@@ -1508,9 +1509,9 @@ with _safe_tab(tab_custom):
                                                 "after_html": _new_html,
                                             },
                                             f"edit_{_log_ts}_{_log_kw}.json",
-                                            ["修正ログ", "本文", _log_atype],
+                                            ["修正ログ", _log_atype, _log_yyyymm],
                                             _edit_creds,
-                                            _edit_logs_folder_id,
+                                            _drive_folder_id,
                                         )
                                     except Exception:
                                         pass

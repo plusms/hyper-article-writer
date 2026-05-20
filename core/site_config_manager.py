@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from bs4 import BeautifulSoup
 
 SITES_CONFIG_DIR = "config/sites"
-_DRIVE_FOLDER_NAME = "_site_configs"
+_DRIVE_FOLDER_NAME = "サイト設定情報"
 _DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 # ── 固定23スロット ──────────────────────────────────────────────
