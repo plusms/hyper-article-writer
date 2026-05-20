@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 SITES_CONFIG_DIR = "config/sites"
 _DRIVE_FOLDER_NAME = "サイト設定情報"
 _DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
+# SITE_CONFIG_FOLDER_ID secretで直接フォルダIDを指定した場合に設定される
+SITE_CONFIG_FOLDER_ID_OVERRIDE: str = ""
 
 # ── 固定23スロット ──────────────────────────────────────────────
 FIXED_COMPONENT_SCHEMA: List[str] = [
@@ -166,10 +168,13 @@ def _list_all_folder_ids(service, folder_name: str, parent_id: str) -> List[str]
 
 
 def list_sites(creds_data: dict | None = None, drive_parent_folder_id: str = "") -> List[str]:
-    if creds_data and drive_parent_folder_id:
+    if creds_data and (drive_parent_folder_id or SITE_CONFIG_FOLDER_ID_OVERRIDE):
         try:
             service = _get_drive_service(creds_data)
-            folder_ids = _list_all_folder_ids(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
+            if SITE_CONFIG_FOLDER_ID_OVERRIDE:
+                folder_ids = [SITE_CONFIG_FOLDER_ID_OVERRIDE]
+            else:
+                folder_ids = _list_all_folder_ids(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
             all_files = []
             for folder_id in folder_ids:
                 query = f"'{folder_id}' in parents and name contains '.json' and trashed=false"
@@ -196,11 +201,11 @@ def list_sites(creds_data: dict | None = None, drive_parent_folder_id: str = "")
 
 
 def load_site_config(site_name: str, creds_data: dict | None = None, drive_parent_folder_id: str = "") -> Dict[str, Any]:
-    if creds_data and drive_parent_folder_id:
+    if creds_data and (drive_parent_folder_id or SITE_CONFIG_FOLDER_ID_OVERRIDE):
         try:
             from googleapiclient.http import MediaIoBaseDownload
             service = _get_drive_service(creds_data)
-            folder_id = _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
+            folder_id = SITE_CONFIG_FOLDER_ID_OVERRIDE or _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
             file_id = _find_drive_file(service, f"{site_name}.json", folder_id)
             if file_id:
                 fh = io.BytesIO()
@@ -243,11 +248,11 @@ def load_site_config(site_name: str, creds_data: dict | None = None, drive_paren
 
 
 def save_site_config(site_name: str, config: Dict[str, Any], creds_data: dict | None = None, drive_parent_folder_id: str = "") -> bool:
-    if creds_data and drive_parent_folder_id:
+    if creds_data and (drive_parent_folder_id or SITE_CONFIG_FOLDER_ID_OVERRIDE):
         try:
             from googleapiclient.http import MediaIoBaseUpload
             service = _get_drive_service(creds_data)
-            folder_id = _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
+            folder_id = SITE_CONFIG_FOLDER_ID_OVERRIDE or _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
             json_bytes = json.dumps(config, ensure_ascii=False, indent=2).encode("utf-8")
             media = MediaIoBaseUpload(io.BytesIO(json_bytes), mimetype="application/json")
             existing_id = _find_drive_file(service, f"{site_name}.json", folder_id)
@@ -278,10 +283,10 @@ def save_site_config(site_name: str, config: Dict[str, Any], creds_data: dict | 
 
 
 def delete_site_config(site_name: str, creds_data: dict | None = None, drive_parent_folder_id: str = "") -> bool:
-    if creds_data and drive_parent_folder_id:
+    if creds_data and (drive_parent_folder_id or SITE_CONFIG_FOLDER_ID_OVERRIDE):
         try:
             service = _get_drive_service(creds_data)
-            folder_id = _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
+            folder_id = SITE_CONFIG_FOLDER_ID_OVERRIDE or _find_or_create_drive_folder(service, _DRIVE_FOLDER_NAME, drive_parent_folder_id)
             file_id = _find_drive_file(service, f"{site_name}.json", folder_id)
             if file_id:
                 service.files().delete(fileId=file_id, supportsAllDrives=True).execute()

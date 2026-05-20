@@ -66,7 +66,10 @@ def _get_gcp_creds(uploaded_file) -> dict | None:
 _claude_key_default  = _secret("CLAUDE_API_KEY")
 _gemini_key_default  = _secret("GEMINI_API_KEY")
 _drive_folder_id          = _secret("DRIVE_PARENT_FOLDER_ID", "0ANR02wEPgx88Uk9PVA")
-_site_cfg_parent_folder   = _secret("SITE_CONFIG_FOLDER_ID") or _drive_folder_id
+_site_cfg_parent_folder   = _drive_folder_id
+_site_cfg_direct_id       = _secret("SITE_CONFIG_FOLDER_ID", "")
+if _site_cfg_direct_id:
+    site_config_manager.SITE_CONFIG_FOLDER_ID_OVERRIDE = _site_cfg_direct_id
 _article_sheet_url_default    = _secret("ARTICLE_SHEET_URL")
 _db_sheet_url_default         = _secret("CLINIC_DB_SHEET_URL")
 _lifestyle_sheet_url_default  = _secret("LIFESTYLE_DB_SHEET_URL")
