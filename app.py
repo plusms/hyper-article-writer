@@ -486,7 +486,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                                 structure["structure_text"], _bulk_sc, claude_key, _bulk_slug,
                             )
                             _bulk_img_creds = _get_gcp_creds(sheets_creds_file)
-                            _bulk_drive_folder = _bulk_sc.get("drive_folder_id", "")
+                            _bulk_drive_folder = _drive_folder_id
                             for _bp in _bulk_prompts:
                                 _bulk_bytes = image_generator.generate_image_bytes(
                                     _bp["prompt"],
