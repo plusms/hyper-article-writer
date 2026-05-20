@@ -471,9 +471,15 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                 write_status_knowhow_bulk(ws, row_num, "完了")
                 # ── 画像生成（スラッグ指定 & サイト設定に画像テンプレートがある場合のみ）──
                 _bulk_slug = row.get("slug", "").strip()
-                if _bulk_slug and _batch_site_name:
+                if not _bulk_slug:
+                    st.caption(f"　⏭️ 画像スキップ（スラッグ未設定）: {kw}")
+                elif not _batch_site_name:
+                    st.caption(f"　⏭️ 画像スキップ（サイト名未設定）: {kw}")
+                else:
                     _bulk_sc = site_config_manager.load_site_config(_batch_site_name, _site_cfg_creds, _site_cfg_parent_folder)
-                    if _bulk_sc.get("image_templates"):
+                    if not _bulk_sc.get("image_templates"):
+                        st.caption(f"　⏭️ 画像スキップ（{_batch_site_name} に画像テンプレート未登録）: {kw}")
+                    else:
                         try:
                             st.write(f"　🖼️ 画像生成中: {kw} ...")
                             _bulk_prompts = image_generator.generate_image_prompts(
