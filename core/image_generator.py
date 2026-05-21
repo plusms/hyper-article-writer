@@ -18,8 +18,8 @@ try:
 except ImportError:
     _OPENAI_AVAILABLE = False
 
-_IMAGE_MODEL = "gemini-3.1-flash-image-preview"   # backward compat alias
-_IMAGE_MODEL_GEMINI = "gemini-3.1-flash-image-preview"
+_IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"   # backward compat alias
+_IMAGE_MODEL_GEMINI = "gemini-2.0-flash-preview-image-generation"
 _IMAGE_MODEL_DALLE  = "dall-e-3"
 
 

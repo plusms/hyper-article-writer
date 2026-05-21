@@ -599,7 +599,7 @@ def generate_body(
         client = anthropic.Anthropic(api_key=claude_api_key)
         msg = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=8192,
+            max_tokens=16000,
             messages=messages,
         )
         return msg.content[0].text
