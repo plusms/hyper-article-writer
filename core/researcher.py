@@ -399,13 +399,15 @@ def extract_text_from_lp_images(
         return f"[LP画像解析失敗: {e}]"
 
 
-def build_content_with_lp(crawl_content: str, lp_text: str) -> str:
-    """クロール結果とLP解析テキストを結合する。LP情報を優先ラベル付きで追記。"""
+def build_content_with_lp(crawl_content: str, lp_text: str, extra_content: str = "") -> str:
+    """優先順: LP → 追加指定URL → クロール（35000字上限）"""
     parts = []
-    if crawl_content:
-        parts.append(crawl_content)
     if lp_text:
         parts.append(f"【LP情報（ランディングページ）— クーポン・料金・訴求軸はこちらを優先】\n{lp_text}")
+    if extra_content:
+        parts.append(f"【追加指定ページ情報】\n{extra_content}")
+    if crawl_content:
+        parts.append(crawl_content[:35000])
     return "\n\n".join(parts)
 
 

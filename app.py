@@ -77,13 +77,12 @@ _lifestyle_sheet_url_default  = _secret("LIFESTYLE_DB_SHEET_URL")
 
 # ── サイドバー：設定 ──────────────────────────────────────
 with st.sidebar:
-    st.header("設定")
+    st.header("カテゴリ")
     st.radio(
         "セクション",
-        ["📝 コンテンツ作成", "🗄️ データ・設定", "❓ ヘルプ"],
+        ["📝 コンテンツ作成", "🗄️ データ・設定", "🖼️ 画像生成", "❓ ヘルプ"],
         key="main_nav",
         label_visibility="collapsed",
-        horizontal=True,
     )
     st.divider()
     if _claude_key_default:
@@ -177,13 +176,16 @@ if _main_nav == "📝 コンテンツ作成":
     tab_batch, tab_custom, tab_rank, tab_qual, tab_writing_chat = st.tabs([
         "📋 一括作成", "📝 カスタム作成", "🏥 ランキングブロック", "✅ 品質チェック", "✍️ 執筆チャット",
     ])
-    tab_cases = tab_settings = tab_help = None
+    tab_cases = tab_settings = tab_help = tab_image_gen = None
 elif _main_nav == "🗄️ データ・設定":
     tab_cases, tab_settings = st.tabs(["🗄️ 商品データベース", "⚙️ サイト設定"])
-    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_help = None
+    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_help = tab_image_gen = None
+elif _main_nav == "🖼️ 画像生成":
+    tab_image_gen = True  # タブなしで直接描画
+    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_cases = tab_settings = tab_help = None
 else:  # ❓ ヘルプ
     tab_help = True  # タブなしで直接描画
-    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_cases = tab_settings = None
+    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_cases = tab_settings = tab_image_gen = None
 
 
 # ════════════════════════════════════════════════════════
@@ -1015,11 +1017,33 @@ with _safe_tab(tab_custom):
         for i, c in enumerate(st.session_state.test_clinics):
             is_first = (i == 0)
             st.caption("案件 1（最上位）" if is_first else f"案件 {i + 1}")
-            tc0, tc1, tc2 = st.columns([3, 3, 1])
+            tc0, tc1, tc2, tc3 = st.columns([3, 3, 1.2, 0.8])
             n = tc0.text_input("案件名 *", value=c["name"],   key=f"tcn_{i}", placeholder="TCB東京中央美容外科")
-            d = tc1.text_input("ドメイン *", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...")
-            if tc2.button("✕", key=f"trm_{i}") and len(st.session_state.test_clinics) > 1:
+            d = tc1.text_input("ドメイン", value=c["domain"], key=f"tcd_{i}", placeholder="tcb.net または https://lp.example.com/...")
+            tc2.markdown("<div style='padding-top:1.6rem'></div>", unsafe_allow_html=True)
+            if tc2.button("📂 DB", key=f"tcdb_{i}", use_container_width=True, help="案件名でDB検索してドメイン・情報を読込"):
+                if n.strip() and genre.strip():
+                    _ca_db_creds = _get_gcp_creds(sheets_creds_file)
+                    _ca_db_url = db_sheet_url if custom_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
+                    _ca_db_data = clinic_db_manager.load_db(creds_data=_ca_db_creds, sheet_url=_ca_db_url, genre=genre.strip())
+                    if n.strip() in _ca_db_data:
+                        _ca_entry = _ca_db_data[n.strip()]
+                        if _ca_entry.get("domain"):
+                            st.session_state[f"tcd_{i}"] = _ca_entry["domain"]
+                        st.session_state[f"t_ca_db_info_{i}"] = _ca_entry.get("info", "")
+                    else:
+                        st.session_state[f"t_ca_db_info_{i}"] = ""
+                        st.info(f"「{n}」はDBに未登録です（スクレイピングで取得）")
+                else:
+                    st.warning("案件名とジャンルを入力してください")
+            tc3.markdown("<div style='padding-top:1.6rem'></div>", unsafe_allow_html=True)
+            if tc3.button("✕", key=f"trm_{i}", use_container_width=True) and len(st.session_state.test_clinics) > 1:
                 to_remove.append(i)
+            _ca_db_info_val = st.session_state.get(f"t_ca_db_info_{i}")
+            if _ca_db_info_val:
+                st.caption("📂 DB情報（記事生成に反映されます）")
+                st.text_area("", value=_ca_db_info_val, height=100, disabled=True,
+                             key=f"t_ca_db_preview_{i}", label_visibility="collapsed")
             rec_label = "最訴求プラン *" if is_first else "最訴求プラン（任意）"
             r = st.text_input(rec_label, value=c["recommended"], key=f"tcr_{i}", placeholder="例：セマグルチド0.5mgプラン")
             a = st.text_area("強み・比較優位性（任意）", value=c["appeal"], height=60, key=f"tca_{i}", placeholder="例：他社より処方量が1段階上から始められる")
@@ -2502,23 +2526,24 @@ with _safe_tab(tab_cases):
                 try:
                     _crawl_content = ""
                     _lp_text = ""
+                    _extra_content = ""
 
                     if _has_url:
                         _start_url = _domain_new if _domain_new.startswith("http") else f"https://{_domain_new}"
-                        st.write("🔍 メインURLをクロール中（最大20ページ）...")
+                        st.write("🔍 トップページ・サイトをクロール中（最大20ページ）...")
                         _crawl_content = crawl_site(_start_url, _genre_new, max_pages=20)
                         for _eu in _extra_urls_list:
                             st.write(f"🔍 追加URL取得中: {_eu}")
                             _eu_content = fetch_page_text(_eu)
                             if not _eu_content.startswith("[取得失敗"):
-                                _crawl_content += f"\n\n--- 追加URL: {_eu} ---\n{_eu_content}"
+                                _extra_content += f"\n\n--- 追加URL: {_eu} ---\n{_eu_content}"
 
                     if _has_lp:
                         st.write(f"🖼️ LP画像を解析中（{len(_db_new_lp_images)}枚）...")
                         _lp_bytes_list = [f.read() for f in _db_new_lp_images]
                         _lp_text = extract_text_from_lp_images(_lp_bytes_list, _name_new, claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
 
-                    _content_new = build_content_with_lp(_crawl_content, _lp_text)
+                    _content_new = build_content_with_lp(_crawl_content, _lp_text, extra_content=_extra_content)
                     _provider_label_db = "Gemini Flash" if research_provider == "gemini" else "Claude Sonnet"
                     st.write(f"🤖 「{_genre_new}」向けに情報抽出中（{_provider_label_db}）...")
                     _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider)
@@ -2660,6 +2685,157 @@ with _safe_tab(tab_cases):
                                         except Exception as _rr_e:
                                             _upd_st.update(label="❌ エラー", state="error")
                                             st.error(f"エラー: {_rr_e}")
+
+
+# ════════════════════════════════════════════════════════
+#  画像生成セクション
+# ════════════════════════════════════════════════════════
+if tab_image_gen:
+    from bs4 import BeautifulSoup as _ig_bs
+
+    st.title("🖼️ 画像生成")
+    st.caption("記事HTMLを貼り付けてH2ごとに画像を生成し、Driveにアップロードします。")
+
+    _ig_sites = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
+    _ig_col1, _ig_col2 = st.columns([2, 2])
+    _ig_site = _ig_col1.selectbox("サイト *", ["-- 選択 --"] + _ig_sites, key="ig_site")
+    _ig_slug = _ig_col2.text_input("スラッグ *", key="ig_slug", placeholder="aga-treatment-tokyo")
+    _ig_html = st.text_area("記事HTML *", height=200, key="ig_html",
+                             placeholder="<h1>...</h1>\n<h2>AGAとは</h2>\n<p>...</p>")
+
+    if st.button("🖼️ 画像を生成", type="primary", key="ig_gen_all"):
+        _ig_errs = []
+        if _ig_site == "-- 選択 --":
+            _ig_errs.append("サイトを選択してください")
+        if not _ig_slug.strip():
+            _ig_errs.append("スラッグを入力してください")
+        if not _ig_html.strip():
+            _ig_errs.append("記事HTMLを入力してください")
+        if not claude_key:
+            _ig_errs.append("Claude API Key が未設定です")
+        for _ig_e in _ig_errs:
+            st.error(_ig_e)
+
+        if not _ig_errs:
+            _ig_sc = site_config_manager.load_site_config(_ig_site, _site_cfg_creds, _site_cfg_parent_folder)
+            if not _ig_sc.get("image_templates"):
+                st.error(f"「{_ig_site}」に画像テンプレートが未登録です。サイト設定で登録してください。")
+            else:
+                _ig_soup_obj = _ig_bs(_ig_html, "html.parser")
+                _ig_headings = [f"H2: {h.get_text(strip=True)}" for h in _ig_soup_obj.find_all("h2")]
+                _ig_body_text = _ig_soup_obj.get_text(separator="\n", strip=True)[:5000]
+                _ig_structure_text = "【見出し構成】\n" + "\n".join(_ig_headings) + "\n\n【本文抜粋】\n" + _ig_body_text
+
+                with st.status("画像を生成中...", expanded=True) as _ig_status:
+                    st.write("📋 プロンプトを生成中...")
+                    _ig_new_prompts = image_generator.generate_image_prompts(
+                        _ig_structure_text, _ig_sc, claude_key, _ig_slug.strip()
+                    )
+                    st.write(f"✅ {len(_ig_new_prompts)} 件のプロンプト生成完了")
+
+                    _ig_new_images = []
+                    for _ig_np in _ig_new_prompts:
+                        st.write(f"🖼️ 生成中: {_ig_np['filename']} ...")
+                        try:
+                            _ig_nb = image_generator.generate_image_bytes(
+                                _ig_np["prompt"],
+                                gemini_api_key=gemini_key,
+                                openai_api_key=openai_key,
+                                provider=image_provider,
+                            )
+                            _ig_new_images.append(_ig_nb)
+                        except Exception as _ig_ge:
+                            st.warning(f"生成エラー ({_ig_np['filename']}): {_ig_ge}")
+                            _ig_new_images.append(None)
+
+                    st.session_state["ig_prompts"] = _ig_new_prompts
+                    st.session_state["ig_images"] = _ig_new_images
+                    for _ig_pi, _ig_pp in enumerate(_ig_new_prompts):
+                        st.session_state[f"ig_edit_prompt_{_ig_pi}"] = _ig_pp["prompt"]
+                    _ig_status.update(label="✅ 生成完了", state="complete")
+
+    # ── 生成結果表示 ──────────────────────────────────────────
+    if st.session_state.get("ig_prompts"):
+        st.divider()
+        st.subheader("生成結果")
+        st.caption("各画像を確認・修正してアップロードしてください。")
+
+        _ig_disp_prompts = st.session_state["ig_prompts"]
+        _ig_disp_images  = st.session_state.get("ig_images", [None] * len(_ig_disp_prompts))
+
+        for _ig_di, (_ig_dp, _ig_dimg) in enumerate(zip(_ig_disp_prompts, _ig_disp_images)):
+            with st.expander(
+                f"📷 {_ig_di + 1}. {_ig_dp.get('position', '不明')} — {_ig_dp['filename']}",
+                expanded=True,
+            ):
+                _ig_rc1, _ig_rc2 = st.columns([1, 1])
+
+                with _ig_rc1:
+                    if _ig_dimg:
+                        st.image(_ig_dimg, caption=_ig_dp.get("alt", ""))
+                    else:
+                        st.info("画像の生成に失敗しました")
+
+                with _ig_rc2:
+                    _ig_epkey = f"ig_edit_prompt_{_ig_di}"
+                    if _ig_epkey not in st.session_state:
+                        st.session_state[_ig_epkey] = _ig_dp["prompt"]
+                    st.text_area("プロンプト（編集可）", key=_ig_epkey, height=150)
+                    _ig_instr_val = st.text_input(
+                        "修正指示（任意）", key=f"ig_instr_{_ig_di}",
+                        placeholder="もっと明るいトーンで / 比較表レイアウトで",
+                    )
+                    _ig_bc1, _ig_bc2 = st.columns(2)
+
+                    if _ig_bc1.button("🔄 再生成", key=f"ig_regen_{_ig_di}", use_container_width=True):
+                        _ig_rp = st.session_state[_ig_epkey]
+                        _ig_ri = st.session_state.get(f"ig_instr_{_ig_di}", "").strip()
+                        if _ig_ri:
+                            _ig_rp = _ig_rp + f"\n\n修正指示: {_ig_ri}"
+                        with st.spinner("再生成中..."):
+                            try:
+                                _ig_rb = image_generator.generate_image_bytes(
+                                    _ig_rp,
+                                    gemini_api_key=gemini_key,
+                                    openai_api_key=openai_key,
+                                    provider=image_provider,
+                                )
+                                st.session_state["ig_images"][_ig_di] = _ig_rb
+                                st.rerun()
+                            except Exception as _ig_re:
+                                st.error(f"再生成エラー: {_ig_re}")
+
+                    if _ig_dimg:
+                        if _ig_bc2.button("⬆️ アップロード", key=f"ig_upload_{_ig_di}", use_container_width=True):
+                            try:
+                                _ig_uc = _get_gcp_creds(sheets_creds_file)
+                                drive_uploader.upload_image(
+                                    _ig_dimg, _ig_dp["filename"],
+                                    _ig_site, _ig_slug.strip(),
+                                    _ig_uc, _drive_folder_id,
+                                )
+                                st.success(f"✅ {_ig_dp['filename']} をアップロードしました")
+                            except Exception as _ig_ue:
+                                st.error(f"アップロードエラー: {_ig_ue}")
+
+        st.divider()
+        if st.button("⬆️ 全件アップロード", key="ig_upload_all", type="primary", use_container_width=True):
+            _ig_all_creds = _get_gcp_creds(sheets_creds_file)
+            _ig_all_ok = 0
+            for _ig_ai, (_ig_apm, _ig_aim) in enumerate(
+                zip(st.session_state["ig_prompts"], st.session_state.get("ig_images", []))
+            ):
+                if _ig_aim:
+                    try:
+                        drive_uploader.upload_image(
+                            _ig_aim, _ig_apm["filename"],
+                            _ig_site, _ig_slug.strip(),
+                            _ig_all_creds, _drive_folder_id,
+                        )
+                        _ig_all_ok += 1
+                    except Exception as _ig_ae:
+                        st.warning(f"エラー ({_ig_apm['filename']}): {_ig_ae}")
+            st.success(f"✅ {_ig_all_ok} 件アップロード完了")
 
 
 # ════════════════════════════════════════════════════════
