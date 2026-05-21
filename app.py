@@ -2487,9 +2487,14 @@ with _safe_tab(tab_cases):
         _db_new_domain = _db_fb.text_input("メインURL（任意・ドメイン or パス指定）", placeholder="tcb.net  または  tcb.net/osaka/umeda/")
         _db_new_extra_urls = st.text_area(
             "追加クロールURL（任意・1行1URL）",
-            placeholder="https://tcb.net/price/\nhttps://tcb.net/payment/\n料金ページや支払いページのURLを直接指定すると取得精度が上がります",
+            placeholder="https://tcb.net/clinic/\nhttps://tcb.net/price/\n院一覧・料金ページなど。指定URLを起点に最大5ページたどります",
             height=90,
             key="db_new_extra_urls",
+        )
+        _db_new_extra_instruction = st.text_input(
+            "追加クロールの取得指示（任意）",
+            placeholder="例：各院の住所と診療時間を全都市分取ってきてほしい",
+            key="db_new_extra_instruction",
         )
         _db_new_lp_images = st.file_uploader(
             "LPスクリーンショット（任意・複数可）",
@@ -2533,10 +2538,10 @@ with _safe_tab(tab_cases):
                         st.write("🔍 トップページ・サイトをクロール中（最大20ページ）...")
                         _crawl_content = crawl_site(_start_url, _genre_new, max_pages=20)
                         for _eu in _extra_urls_list:
-                            st.write(f"🔍 追加URL取得中: {_eu}")
-                            _eu_content = fetch_page_text(_eu)
-                            if not _eu_content.startswith("[取得失敗"):
-                                _extra_content += f"\n\n--- 追加URL: {_eu} ---\n{_eu_content}"
+                            st.write(f"🔍 追加URL起点クロール中（最大5ページ）: {_eu}")
+                            _eu_content = crawl_site(_eu, _genre_new, max_pages=5)
+                            if _eu_content:
+                                _extra_content += f"\n\n--- 追加URL起点: {_eu} ---\n{_eu_content}"
 
                     if _has_lp:
                         st.write(f"🖼️ LP画像を解析中（{len(_db_new_lp_images)}枚）...")
@@ -2546,7 +2551,7 @@ with _safe_tab(tab_cases):
                     _content_new = build_content_with_lp(_crawl_content, _lp_text, extra_content=_extra_content)
                     _provider_label_db = "Gemini Flash" if research_provider == "gemini" else "Claude Sonnet"
                     st.write(f"🤖 「{_genre_new}」向けに情報抽出中（{_provider_label_db}）...")
-                    _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider)
+                    _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider, extra_instruction=_db_new_extra_instruction.strip())
                     clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, creds_data=_db_creds, sheet_url=_active_db_url)
                     _add_status.update(label=f"✅ 「{_name_new}」を「{_genre_new}」に追加しました（{_mode_label}）", state="complete")
                     st.rerun()
@@ -2628,9 +2633,14 @@ with _safe_tab(tab_cases):
                             st.caption("更新モード")
                             _upd_extra_urls = st.text_area(
                                 "追加クロールURL（任意・1行1URL）",
-                                placeholder="https://tcb.net/price/\nhttps://tcb.net/payment/\n料金・キャンペーンページなど重点的に取得したいURLを指定",
+                                placeholder="https://tcb.net/clinic/\nhttps://tcb.net/price/\n院一覧・料金ページなど。指定URLを起点に最大5ページたどります",
                                 height=80,
                                 key=f"db_extra_urls_{_g_name}_{_dn}",
+                            )
+                            _upd_extra_instruction = st.text_input(
+                                "追加クロールの取得指示（任意）",
+                                placeholder="例：各院の住所と診療時間を全都市分取ってきてほしい",
+                                key=f"db_extra_instr_{_g_name}_{_dn}",
                             )
                             _upd_lp_imgs = st.file_uploader(
                                 "LPスクリーンショット（LP更新時に添付）",
@@ -2681,10 +2691,10 @@ with _safe_tab(tab_cases):
                                                     st.write("🔍 クロール中（最大20ページ）...")
                                                     _crawl_content2 = crawl_site(_start2, _clinic_genres2[0] if _clinic_genres2 else "", max_pages=20)
                                                     for _eu2 in _upd_extra_list:
-                                                        st.write(f"🔍 追加URL取得中: {_eu2}")
-                                                        _eu2_content = fetch_page_text(_eu2)
-                                                        if not _eu2_content.startswith("[取得失敗"):
-                                                            _extra_content2 += f"\n\n--- 追加URL: {_eu2} ---\n{_eu2_content}"
+                                                        st.write(f"🔍 追加URL起点クロール中（最大5ページ）: {_eu2}")
+                                                        _eu2_content = crawl_site(_eu2, _clinic_genres2[0] if _clinic_genres2 else "", max_pages=5)
+                                                        if _eu2_content:
+                                                            _extra_content2 += f"\n\n--- 追加URL起点: {_eu2} ---\n{_eu2_content}"
 
                                             if _use_lp:
                                                 st.write(f"🖼️ LP画像を解析中（{len(_upd_lp_imgs)}枚）...")
@@ -2692,9 +2702,10 @@ with _safe_tab(tab_cases):
                                                 _lp_text2 = extract_text_from_lp_images(_lp_bytes2, _dn, claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
 
                                             _combined2 = build_content_with_lp(_crawl_content2, _lp_text2, extra_content=_extra_content2)
+                                            _upd_instr = st.session_state.get(f"db_extra_instr_{_g_name}_{_dn}", "")
                                             for _cg2 in _clinic_genres2:
                                                 st.write(f"🤖 「{_cg2}」向けに情報抽出中...")
-                                                _ci2 = extract_clinic_info_from_content(_combined2, _dn, _cg2, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider)
+                                                _ci2 = extract_clinic_info_from_content(_combined2, _dn, _cg2, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider, extra_instruction=_upd_instr.strip())
                                                 clinic_db_manager.upsert_clinic(_dn, _dom2, _cg2, _ci2, creds_data=_db_creds, sheet_url=_active_db_url)
                                             _upd_st.update(label=f"✅ 更新完了（{_mode_str}・{len(_clinic_genres2)} ジャンル）", state="complete")
                                             st.rerun()

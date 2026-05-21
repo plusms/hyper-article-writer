@@ -412,15 +412,19 @@ def build_content_with_lp(crawl_content: str, lp_text: str, extra_content: str =
     return "\n\n".join(parts)
 
 
-def extract_clinic_info_from_content(content: str, name: str, genre: str, claude_api_key: str, db_type: str = DB_TYPE_CLINIC, gemini_api_key: str = "", research_provider: str = "claude") -> str:
+def extract_clinic_info_from_content(content: str, name: str, genre: str, claude_api_key: str, db_type: str = DB_TYPE_CLINIC, gemini_api_key: str = "", research_provider: str = "claude", extra_instruction: str = "") -> str:
     """クロール済みコンテンツから指定ジャンルの情報を抽出する。案件DB保存用。"""
     fields = _get_fields(db_type)
     genre_note = (
         f"対象ジャンルは「{genre}」です。料金詳細は「{genre}」のプランのみ記載してください。\n"
         if genre and db_type == DB_TYPE_CLINIC else ""
     )
+    instruction_note = (
+        f"\n## 追加取得指示\n{extra_instruction}\n"
+        if extra_instruction.strip() else ""
+    )
     prompt = f"""以下の{name}のWebサイト内容から情報を抽出してください。
-{genre_note}
+{genre_note}{instruction_note}
 ## 出力ルール（厳守）
 - 「■ 基本項目」「■ 追加項目」「■ LP情報」の3セクション構成で出力する
 - 「■ 基本項目」：下記フィールドをすべて記載する。フィールド名・順番は変えない。値が見つからない場合は「[要確認]」。補完・推測は禁止
