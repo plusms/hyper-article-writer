@@ -2817,6 +2817,7 @@ with _safe_tab(tab_cases):
                                                     "domain": _dom2, "info": _ci2, "updated_at": str(datetime.date.today()),
                                                 }
                                             _upd_st.update(label=f"✅ 更新完了（{_mode_str}・{len(_clinic_genres2)} ジャンル）", state="complete")
+                                            st.session_state.pop(f"db_info_{_g_name}_{_dn}", None)
                                             st.rerun()
                                         except Exception as _rr_e:
                                             _upd_st.update(label="❌ エラー", state="error")
