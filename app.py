@@ -2708,6 +2708,12 @@ with _safe_tab(tab_cases):
                                 placeholder="例：各院の住所と診療時間を全都市分取ってきてほしい",
                                 key=f"db_extra_instr_{_g_name}_{_dn}",
                             )
+                            _upd_paste_info = st.text_area(
+                                "手動貼り付け情報（任意）",
+                                placeholder="料金表・住所一覧・診療時間など、直接貼り付けたい情報。\nクロール結果と組み合わせて使えます。URLが未登録でもこれだけで抽出可能です。",
+                                height=120,
+                                key=f"db_paste_{_g_name}_{_dn}",
+                            )
                             _upd_lp_imgs = st.file_uploader(
                                 "LPスクリーンショット（LP更新時に添付）",
                                 type=["png", "jpg", "jpeg", "webp"],
@@ -2725,6 +2731,12 @@ with _safe_tab(tab_cases):
                                 disabled=not _missing_fields,
                                 use_container_width=True,
                             )
+                            _do_paste_only  = st.button(
+                                "📋 貼り付けで更新",
+                                key=f"db_paste_btn_{_g_name}_{_dn}",
+                                disabled=not _upd_paste_info.strip(),
+                                use_container_width=True,
+                            )
 
                             if _do_delete:
                                 clinic_db_manager.delete_clinic(_dn, genre=_g_name, creds_data=_db_creds, sheet_url=_active_db_url)
@@ -2734,7 +2746,7 @@ with _safe_tab(tab_cases):
                                     st.session_state[_ck].get(_g_name, {}).pop(_dn, None)
                                 st.rerun()
 
-                            _need_update = _do_crawl_only or _do_lp_only or _do_both or _do_fill_gaps
+                            _need_update = _do_crawl_only or _do_lp_only or _do_both or _do_fill_gaps or _do_paste_only
                             if _need_update:
                                 if not claude_key:
                                     st.error("Claude API Key が未設定です")
@@ -2745,6 +2757,7 @@ with _safe_tab(tab_cases):
                                     _use_lp    = _do_lp_only or _do_both
                                     _mode_str  = (
                                         f"空欄補完（{len(_missing_fields)}項目）" if _do_fill_gaps else
+                                        "貼り付けで更新" if _do_paste_only else
                                         "再クロール＋LP" if (_use_crawl and _use_lp) else
                                         "LP更新のみ" if _use_lp else "再クロールのみ"
                                     )
@@ -2768,6 +2781,8 @@ with _safe_tab(tab_cases):
                                             _crawl_content2 = ""
                                             _lp_text2 = ""
                                             _extra_content2 = ""
+                                            if _upd_paste_info.strip():
+                                                _extra_content2 += f"\n\n--- 手動貼り付け情報 ---\n{_upd_paste_info.strip()}"
 
                                             if _use_crawl:
                                                 if not _dom2:
