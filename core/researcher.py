@@ -1,3 +1,4 @@
+import base64
 import requests
 import anthropic
 from bs4 import BeautifulSoup
@@ -324,6 +325,84 @@ _EXTRACTION_FIELDS = _CLINIC_FIELDS
 
 def _get_fields(db_type: str) -> str:
     return _LIFESTYLE_FIELDS if db_type == DB_TYPE_LIFESTYLE else _CLINIC_FIELDS
+
+
+_LP_IMAGE_PROMPT = """\
+LPに記載されている以下の情報をすべて抜き出してください。補完・推測は一切しないでください。
+
+- キャッチコピー・メイン訴求（LPの冒頭・目立つ見出し）
+- 訴求軸・強み（なぜ選ばれるか・他院との違い）
+- メインプラン・おすすめプランの料金と内容
+- LP限定クーポン・割引情報・キャンペーン
+- CTA（今すぐ予約・無料カウンセリング等のボタン文言）
+- その他、クロールでは取れないLP固有の情報
+
+見つからない項目は省略してください。形式は自由でよいので、読み取れた情報をすべて出力してください。"""
+
+
+def _lp_images_gemini(image_bytes_list: list[bytes], name: str, gemini_api_key: str) -> str:
+    from google import genai as _genai
+    from google.genai import types as _gtypes
+    client = _genai.Client(api_key=gemini_api_key)
+    parts = []
+    for img_bytes in image_bytes_list:
+        mime = "image/jpeg" if img_bytes[:2] == b"\xff\xd8" else "image/png"
+        parts.append(_gtypes.Part.from_bytes(data=img_bytes, mime_type=mime))
+    parts.append(f"上記は「{name}」のランディングページ（LP）のスクリーンショットです。\n{_LP_IMAGE_PROMPT}")
+    response = client.models.generate_content(model="gemini-2.0-flash", contents=parts)
+    return response.text
+
+
+def _lp_images_claude(image_bytes_list: list[bytes], name: str, claude_api_key: str) -> str:
+    image_contents = []
+    for img_bytes in image_bytes_list:
+        b64 = base64.standard_b64encode(img_bytes).decode("utf-8")
+        media_type = "image/jpeg" if img_bytes[:2] == b"\xff\xd8" else "image/png"
+        image_contents.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type, "data": b64},
+        })
+    image_contents.append({
+        "type": "text",
+        "text": f"上記は「{name}」のランディングページ（LP）のスクリーンショットです。\n{_LP_IMAGE_PROMPT}",
+    })
+    client = anthropic.Anthropic(api_key=claude_api_key)
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": image_contents}],
+    )
+    return msg.content[0].text
+
+
+def extract_text_from_lp_images(
+    image_bytes_list: list[bytes],
+    name: str,
+    claude_api_key: str,
+    gemini_api_key: str = "",
+    research_provider: str = "gemini",
+) -> str:
+    """LPスクリーンショット画像群からテキスト情報を抽出する。Gemini優先、フォールバックClaude。"""
+    if not image_bytes_list:
+        return ""
+    try:
+        if research_provider == "gemini" and gemini_api_key:
+            return _lp_images_gemini(image_bytes_list, name, gemini_api_key)
+        if claude_api_key:
+            return _lp_images_claude(image_bytes_list, name, claude_api_key)
+        return "[LP画像解析失敗: APIキー未設定]"
+    except Exception as e:
+        return f"[LP画像解析失敗: {e}]"
+
+
+def build_content_with_lp(crawl_content: str, lp_text: str) -> str:
+    """クロール結果とLP解析テキストを結合する。LP情報を優先ラベル付きで追記。"""
+    parts = []
+    if crawl_content:
+        parts.append(crawl_content)
+    if lp_text:
+        parts.append(f"【LP情報（ランディングページ）— クーポン・料金・訴求軸はこちらを優先】\n{lp_text}")
+    return "\n\n".join(parts)
 
 
 def extract_clinic_info_from_content(content: str, name: str, genre: str, claude_api_key: str, db_type: str = DB_TYPE_CLINIC, gemini_api_key: str = "", research_provider: str = "claude") -> str:
