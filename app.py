@@ -2651,6 +2651,18 @@ with _safe_tab(tab_cases):
 
                             st.divider()
                             st.caption("更新モード")
+                            # [要確認]フィールドを自動検出
+                            _missing_fields = [
+                                ln.split("：")[0].strip()
+                                for ln in _d_info.splitlines()
+                                if "[要確認]" in ln
+                                and not ln.strip().startswith(("■", "【", "#"))
+                                and ln.split("：")[0].strip()
+                            ]
+                            _fill_gaps_instr = (
+                                f"以下のフィールドが未取得です。サイト内を重点的に探して埋めてください：{', '.join(_missing_fields)}"
+                                if _missing_fields else ""
+                            )
                             _upd_extra_urls = st.text_area(
                                 "追加クロールURL（任意・1行1URL）",
                                 placeholder="https://tcb.net/clinic/\nhttps://tcb.net/price/\n院一覧・料金ページなど。指定URLを起点に最大5ページたどります",
@@ -2673,6 +2685,12 @@ with _safe_tab(tab_cases):
                             _do_lp_only     = _upd_c2.button("🖼️ LP更新のみ",    key=f"db_lp_{_g_name}_{_dn}")
                             _do_both        = _upd_c3.button("🔄🖼️ 両方",         key=f"db_both_{_g_name}_{_dn}")
                             _do_delete      = _upd_c4.button("🗑️ 削除",           key=f"db_del_{_g_name}_{_dn}")
+                            _do_fill_gaps   = st.button(
+                                f"✨ 空欄を補完（未取得 {len(_missing_fields)} 項目）" if _missing_fields else "✨ 空欄を補完（未取得なし）",
+                                key=f"db_fill_{_g_name}_{_dn}",
+                                disabled=not _missing_fields,
+                                use_container_width=True,
+                            )
 
                             if _do_delete:
                                 clinic_db_manager.delete_clinic(_dn, genre=_g_name, creds_data=_db_creds, sheet_url=_active_db_url)
@@ -2682,16 +2700,20 @@ with _safe_tab(tab_cases):
                                     st.session_state[_ck].get(_g_name, {}).pop(_dn, None)
                                 st.rerun()
 
-                            _need_update = _do_crawl_only or _do_lp_only or _do_both
+                            _need_update = _do_crawl_only or _do_lp_only or _do_both or _do_fill_gaps
                             if _need_update:
                                 if not claude_key:
                                     st.error("Claude API Key が未設定です")
                                 elif (_do_lp_only or _do_both) and not _upd_lp_imgs:
                                     st.error("LP更新にはスクリーンショットを添付してください")
                                 else:
-                                    _use_crawl = _do_crawl_only or _do_both
+                                    _use_crawl = _do_crawl_only or _do_both or _do_fill_gaps
                                     _use_lp    = _do_lp_only or _do_both
-                                    _mode_str  = "再クロール＋LP" if (_use_crawl and _use_lp) else ("LP更新のみ" if _use_lp else "再クロールのみ")
+                                    _mode_str  = (
+                                        f"空欄補完（{len(_missing_fields)}項目）" if _do_fill_gaps else
+                                        "再クロール＋LP" if (_use_crawl and _use_lp) else
+                                        "LP更新のみ" if _use_lp else "再クロールのみ"
+                                    )
                                     _upd_extra_list = [
                                         u.strip() for u in _upd_extra_urls.splitlines()
                                         if u.strip().startswith("http")
@@ -2727,7 +2749,10 @@ with _safe_tab(tab_cases):
                                                 _lp_text2 = extract_text_from_lp_images(_lp_bytes2, _dn, claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
 
                                             _combined2 = build_content_with_lp(_crawl_content2, _lp_text2, extra_content=_extra_content2)
-                                            _upd_instr = st.session_state.get(f"db_extra_instr_{_g_name}_{_dn}", "")
+                                            _upd_instr = (
+                                                _fill_gaps_instr if _do_fill_gaps
+                                                else st.session_state.get(f"db_extra_instr_{_g_name}_{_dn}", "")
+                                            )
                                             _ck = f"_db_nested_cache_{_db_type_sel}"
                                             for _cg2 in _clinic_genres2:
                                                 st.write(f"🤖 「{_cg2}」向けに情報抽出中...")
