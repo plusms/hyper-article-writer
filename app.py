@@ -2551,7 +2551,7 @@ with _safe_tab(tab_cases):
                         _crawl_content = crawl_site(_start_url, _genre_new, max_pages=20)
                         for _eu in _extra_urls_list:
                             st.write(f"🔍 追加URL起点クロール中（最大5ページ）: {_eu}")
-                            _eu_content = crawl_site(_eu, _genre_new, max_pages=5)
+                            _eu_content = crawl_site(_eu, _genre_new, max_pages=5, restrict_path=False)
                             if _eu_content:
                                 _extra_content += f"\n\n--- 追加URL起点: {_eu} ---\n{_eu_content}"
 
@@ -2717,7 +2717,7 @@ with _safe_tab(tab_cases):
                                                     _crawl_content2 = crawl_site(_start2, _clinic_genres2[0] if _clinic_genres2 else "", max_pages=20)
                                                     for _eu2 in _upd_extra_list:
                                                         st.write(f"🔍 追加URL起点クロール中（最大5ページ）: {_eu2}")
-                                                        _eu2_content = crawl_site(_eu2, _clinic_genres2[0] if _clinic_genres2 else "", max_pages=5)
+                                                        _eu2_content = crawl_site(_eu2, _clinic_genres2[0] if _clinic_genres2 else "", max_pages=5, restrict_path=False)
                                                         if _eu2_content:
                                                             _extra_content2 += f"\n\n--- 追加URL起点: {_eu2} ---\n{_eu2_content}"
 

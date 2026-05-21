@@ -17,7 +17,7 @@ def fetch_page_text(url: str) -> str:
         r = requests.get(url, headers=headers, timeout=15)
         r.encoding = r.apparent_encoding
         soup = BeautifulSoup(r.text, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+        for tag in soup(["script", "style", "nav", "header"]):
             tag.decompose()
         headings = [
             f"{h.name.upper()}: {h.get_text(strip=True)}"
@@ -217,8 +217,10 @@ def _find_price_pages(base_url: str, genre: str, max_pages: int = 2) -> list[str
         return []
 
 
-def crawl_site(start_url: str, genre: str, max_pages: int = 20) -> str:
-    """指定URLから同ドメイン内をBFSクロールし、収集ページのテキストを結合して返す。"""
+def crawl_site(start_url: str, genre: str, max_pages: int = 20, restrict_path: bool = True) -> str:
+    """指定URLから同ドメイン内をBFSクロールし、収集ページのテキストを結合して返す。
+    restrict_path=False のとき、path_prefix 制約を外してドメイン全体をたどる。
+    """
     from collections import deque
 
     if not start_url.startswith("http"):
@@ -226,7 +228,7 @@ def crawl_site(start_url: str, genre: str, max_pages: int = 20) -> str:
 
     parsed = urlparse(start_url)
     base_domain = parsed.netloc
-    path_prefix = parsed.path.rstrip("/")
+    path_prefix = parsed.path.rstrip("/") if restrict_path else ""
 
     priority_kw = [
         "料金", "price", "費用", "プラン", "plan", "menu", "メニュー",
@@ -261,7 +263,7 @@ def crawl_site(start_url: str, genre: str, max_pages: int = 20) -> str:
             r = requests.get(clean_url, headers=headers_ua, timeout=15)
             r.encoding = r.apparent_encoding
             soup = BeautifulSoup(r.text, "html.parser")
-            for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+            for tag in soup(["script", "style", "nav", "header"]):
                 tag.decompose()
             headings = [
                 f"{h.name.upper()}: {h.get_text(strip=True)}"
