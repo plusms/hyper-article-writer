@@ -2554,6 +2554,10 @@ with _safe_tab(tab_cases):
                     _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider, extra_instruction=_db_new_extra_instruction.strip())
                     clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, creds_data=_db_creds, sheet_url=_active_db_url)
                     _add_status.update(label=f"✅ 「{_name_new}」を「{_genre_new}」に追加しました（{_mode_label}）", state="complete")
+                    _ck = f"_db_nested_cache_{_db_type_sel}"
+                    st.session_state.setdefault(_ck, {}).setdefault(_genre_new, {})[_name_new] = {
+                        "domain": _domain_new, "info": _info_new, "updated_at": str(datetime.date.today()),
+                    }
                     st.rerun()
                 except Exception as _e_new:
                     import traceback as _tb
@@ -2564,6 +2568,14 @@ with _safe_tab(tab_cases):
     # ── ジャンル別タブ表示 ──────────────────────────────────
     st.divider()
     _db_nested = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
+    _db_cache_key = f"_db_nested_cache_{_db_type_sel}"
+    if _db_nested:
+        st.session_state[_db_cache_key] = _db_nested
+    else:
+        if clinic_db_manager.last_load_error:
+            st.warning(f"⚠️ Sheets読込エラー（前回データを表示）: {clinic_db_manager.last_load_error}")
+        if _db_cache_key in st.session_state:
+            _db_nested = st.session_state[_db_cache_key]
     _all_genre_names = list(_db_nested.keys())
 
     if not _all_genre_names:
@@ -2600,6 +2612,7 @@ with _safe_tab(tab_cases):
                                     except Exception as _be:
                                         st.write(f"　→ ❌ エラー: {_be}")
                                 _batch_st.update(label="✅ 一括取得完了", state="complete")
+                            st.session_state.pop(f"_db_nested_cache_{_db_type_sel}", None)  # 一括後は全量再取得を優先
                             st.rerun()
 
                 # ── 登録済み一覧 ──────────────────────────────
@@ -2627,6 +2640,9 @@ with _safe_tab(tab_cases):
                                     creds_data=_db_creds, sheet_url=_active_db_url,
                                 )
                                 st.success("保存しました")
+                                _ck = f"_db_nested_cache_{_db_type_sel}"
+                                st.session_state.setdefault(_ck, {}).setdefault(_g_name, {}).setdefault(_dn, {})["info"] = _d_info_edited
+                                st.session_state[_ck][_g_name][_dn]["updated_at"] = str(datetime.date.today())
                                 st.rerun()
 
                             st.divider()
@@ -2657,6 +2673,9 @@ with _safe_tab(tab_cases):
                             if _do_delete:
                                 clinic_db_manager.delete_clinic(_dn, genre=_g_name, creds_data=_db_creds, sheet_url=_active_db_url)
                                 st.success(f"「{_dn}」を「{_g_name}」から削除しました")
+                                _ck = f"_db_nested_cache_{_db_type_sel}"
+                                if _ck in st.session_state:
+                                    st.session_state[_ck].get(_g_name, {}).pop(_dn, None)
                                 st.rerun()
 
                             _need_update = _do_crawl_only or _do_lp_only or _do_both
@@ -2677,6 +2696,8 @@ with _safe_tab(tab_cases):
                                         try:
                                             _full_db2 = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
                                             _clinic_genres2 = [g for g, ge in _full_db2.items() if _dn in ge]
+                                            if not _clinic_genres2:
+                                                _clinic_genres2 = [_g_name]
                                             _dom2 = _de.get("domain", "")
 
                                             _crawl_content2 = ""
@@ -2703,10 +2724,14 @@ with _safe_tab(tab_cases):
 
                                             _combined2 = build_content_with_lp(_crawl_content2, _lp_text2, extra_content=_extra_content2)
                                             _upd_instr = st.session_state.get(f"db_extra_instr_{_g_name}_{_dn}", "")
+                                            _ck = f"_db_nested_cache_{_db_type_sel}"
                                             for _cg2 in _clinic_genres2:
                                                 st.write(f"🤖 「{_cg2}」向けに情報抽出中...")
                                                 _ci2 = extract_clinic_info_from_content(_combined2, _dn, _cg2, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider, extra_instruction=_upd_instr.strip())
                                                 clinic_db_manager.upsert_clinic(_dn, _dom2, _cg2, _ci2, creds_data=_db_creds, sheet_url=_active_db_url)
+                                                st.session_state.setdefault(_ck, {}).setdefault(_cg2, {})[_dn] = {
+                                                    "domain": _dom2, "info": _ci2, "updated_at": str(datetime.date.today()),
+                                                }
                                             _upd_st.update(label=f"✅ 更新完了（{_mode_str}・{len(_clinic_genres2)} ジャンル）", state="complete")
                                             st.rerun()
                                         except Exception as _rr_e:

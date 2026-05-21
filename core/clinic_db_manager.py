@@ -56,11 +56,16 @@ def list_genre_tabs(creds_data=None, sheet_url=None) -> list[str]:
     return sorted(db.keys())
 
 
+last_load_error: str = ""
+
+
 def load_db(creds_data=None, sheet_url=None, genre: str = "") -> dict:
     """
     genre指定あり → {name: {domain, info, updated_at}} のフラットdict
     genre指定なし → {genre: {name: {domain, info, updated_at}}} のネストdict
     """
+    global last_load_error
+    last_load_error = ""
     if creds_data and sheet_url:
         try:
             spreadsheet = _get_spreadsheet(creds_data, sheet_url)
@@ -71,8 +76,8 @@ def load_db(creds_data=None, sheet_url=None, genre: str = "") -> dict:
                 return _parse_worksheet(spreadsheet.worksheet(genre))
             else:
                 return {tab: _parse_worksheet(spreadsheet.worksheet(tab)) for tab in tabs}
-        except Exception:
-            pass
+        except Exception as e:
+            last_load_error = f"{type(e).__name__}: {e}"
     db = _load_local()
     if genre:
         return db.get(genre, {})
