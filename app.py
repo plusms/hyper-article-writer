@@ -2470,10 +2470,22 @@ with _safe_tab(tab_cases):
     else:
         st.caption(f"✅ Google Sheets DB に接続中　｜　URL: `{_active_db_url[:60]}...`")
 
+    # ── DBデータ取得（TTLキャッシュ：30秒以内は再取得しない） ────────
+    _ck = f"_db_nested_cache_{_db_type_sel}"
+    _ts_key = f"_db_cache_ts_{_db_type_sel}"
+    _cache_age = time.time() - st.session_state.get(_ts_key, 0)
+    if _ck not in st.session_state or _cache_age > 30:
+        _fresh = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
+        if _fresh:
+            st.session_state[_ck] = _fresh
+            st.session_state[_ts_key] = time.time()
+        elif clinic_db_manager.last_load_error and _ck not in st.session_state:
+            st.warning(f"⚠️ Sheets読込エラー: {clinic_db_manager.last_load_error}")
+
     # ── 新規追加フォーム ──────────────────────────────────
     st.subheader("＋ 新規追加")
 
-    _existing_genres = list(clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url).keys())
+    _existing_genres = list(st.session_state.get(_ck, {}).keys())
     _genre_options = _existing_genres + ["＋ 新規ジャンル"]
     _db_genre_sel = st.selectbox("ジャンル", _genre_options, key="db_genre_sel")
     if _db_genre_sel == "＋ 新規ジャンル":
@@ -2567,15 +2579,7 @@ with _safe_tab(tab_cases):
 
     # ── ジャンル別タブ表示 ──────────────────────────────────
     st.divider()
-    _db_nested = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
-    _db_cache_key = f"_db_nested_cache_{_db_type_sel}"
-    if _db_nested:
-        st.session_state[_db_cache_key] = _db_nested
-    else:
-        if clinic_db_manager.last_load_error:
-            st.warning(f"⚠️ Sheets読込エラー（前回データを表示）: {clinic_db_manager.last_load_error}")
-        if _db_cache_key in st.session_state:
-            _db_nested = st.session_state[_db_cache_key]
+    _db_nested = st.session_state.get(_ck, {})
     _all_genre_names = list(_db_nested.keys())
 
     if not _all_genre_names:
@@ -2596,7 +2600,7 @@ with _safe_tab(tab_cases):
                             st.error("Claude API Key が未設定です")
                         else:
                             with st.status("一括取得中...", expanded=True) as _batch_st:
-                                _full_db_now = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
+                                _full_db_now = st.session_state.get(_ck, {})
                                 for _dn in sorted(_g_entries):
                                     _de = _g_entries[_dn]
                                     st.write(f"🔍 {_dn} をクロール中...")
@@ -2694,7 +2698,7 @@ with _safe_tab(tab_cases):
                                     ]
                                     with st.status(f"{_dn} を更新中（{_mode_str}）...", expanded=True) as _upd_st:
                                         try:
-                                            _full_db2 = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
+                                            _full_db2 = st.session_state.get(_ck, {})
                                             _clinic_genres2 = [g for g, ge in _full_db2.items() if _dn in ge]
                                             if not _clinic_genres2:
                                                 _clinic_genres2 = [_g_name]
