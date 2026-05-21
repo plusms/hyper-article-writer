@@ -232,6 +232,7 @@ def crawl_site(start_url: str, genre: str, max_pages: int = 20) -> str:
         "料金", "price", "費用", "プラン", "plan", "menu", "メニュー",
         "access", "アクセス", "flow", "流れ", "faq", "よくある",
         "実績", "症例", "診療", "初診", "about", "概要", "特徴",
+        "院一覧", "クリニック一覧", "店舗一覧", "全国の院", "clinic-list", "location", "locations",
     ]
     if genre:
         priority_kw.append(genre[:5])
@@ -298,7 +299,7 @@ DB_TYPE_LIFESTYLE  = "ライフスタイル"
 
 _CLINIC_FIELDS = """\
 院名：
-住所：
+主要都市の住所（東京・大阪・名古屋・札幌・福岡等、見つかった分のみ）：
 診療時間：
 休診日：
 予約方法：
@@ -415,18 +416,30 @@ def extract_clinic_info_from_content(content: str, name: str, genre: str, claude
     """クロール済みコンテンツから指定ジャンルの情報を抽出する。案件DB保存用。"""
     fields = _get_fields(db_type)
     genre_note = (
-        f"「{genre}」に関する情報のみ抽出してください。料金詳細は「{genre}」のプランのみ記載してください。\n"
+        f"対象ジャンルは「{genre}」です。料金詳細は「{genre}」のプランのみ記載してください。\n"
         if genre and db_type == DB_TYPE_CLINIC else ""
     )
     prompt = f"""以下の{name}のWebサイト内容から情報を抽出してください。
-{genre_note}取得できない項目は「[要確認]」と記載してください。補完・推測は一切しないでください。
+{genre_note}
+## 出力ルール（厳守）
+- 「■ 基本項目」「■ 追加項目」「■ LP情報」の3セクション構成で出力する
+- 「■ 基本項目」：下記フィールドをすべて記載する。フィールド名・順番は変えない。値が見つからない場合は「[要確認]」。補完・推測は禁止
+- 「■ 追加項目」：基本項目以外で記事執筆に使える情報があれば自由に追加してよい（なければ「なし」）
+- 「■ LP情報」：コンテンツ内の【LP情報（ランディングページ）】セクションおよび【追加指定ページ情報】セクションから読み取れた情報をそのまま転記する（なければ「なし」）
 
-{content[:40000]}
+{content[:45000]}
 
-出力は「【{name}】」の見出しで始め、以下の形式で記載してください：
+## 出力形式
 
 【{name}】
-{fields}"""
+
+■ 基本項目
+{fields}
+
+■ 追加項目
+
+■ LP情報
+"""
     return _research_call(prompt, claude_api_key, gemini_api_key, research_provider, max_tokens=8192)
 
 
