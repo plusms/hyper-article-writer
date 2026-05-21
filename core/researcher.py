@@ -270,7 +270,7 @@ def crawl_site(start_url: str, genre: str, max_pages: int = 20, restrict_path: b
                 for h in soup.find_all(["h1", "h2", "h3"])
                 if h.get_text(strip=True)
             ]
-            body = soup.get_text(separator="\n", strip=True)[:10000]
+            body = soup.get_text(separator="\n", strip=True)[:20000]
             collected.append(
                 f"=== {clean_url} ===\n"
                 "【見出し構成】\n" + "\n".join(headings) + "\n\n【本文抜粋】\n" + body
