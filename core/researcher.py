@@ -64,7 +64,11 @@ def _research_call(
     max_tokens: int = 4096,
 ) -> str:
     if provider == "gemini" and gemini_api_key:
-        return _gemini_call(gemini_api_key, prompt)
+        result = _gemini_call(gemini_api_key, prompt)
+        # 503/502等の一時的な障害時はClaudeにフォールバック
+        if result.startswith("[情報取得失敗:") and claude_api_key:
+            return _claude_call(claude_api_key, prompt, max_tokens)
+        return result
     return _claude_call(claude_api_key, prompt, max_tokens)
 
 
