@@ -207,6 +207,33 @@ def _safe_tab(tab):
         _ph.empty()
 
 
+def _parse_sanko_urls(info_text: str) -> list:
+    """info_text の「参照URL：」行からURLリストを返す。"""
+    for line in info_text.splitlines():
+        if line.startswith("参照URL") and "：" in line:
+            raw = line.split("：", 1)[1].strip()
+            return [u.strip() for u in raw.replace("、", ",").split(",") if u.strip().startswith("http")]
+    return []
+
+
+def _merge_sanko_urls_in_info(new_info: str, old_urls: list) -> str:
+    """new_info の参照URLフィールドに old_urls を重複なしで追記する。"""
+    if not old_urls:
+        return new_info
+    lines = new_info.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("参照URL") and "：" in line:
+            raw = line.split("：", 1)[1].strip()
+            existing = [u.strip() for u in raw.replace("、", ",").split(",") if u.strip().startswith("http")]
+            merged = existing[:]
+            for u in old_urls:
+                if u not in merged:
+                    merged.append(u)
+            lines[i] = f"参照URL：{', '.join(merged)}" if merged else line
+            return "\n".join(lines)
+    return new_info
+
+
 def _save_output_cache(kw: str, data: dict) -> None:
     _OUTPUT_CACHE_DIR.mkdir(exist_ok=True)
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -2608,9 +2635,16 @@ with _safe_tab(tab_cases):
                                         _clinic_genres_all = [g for g, ge in _full_db_now.items() if _dn in ge]
                                         _dom = _de.get("domain", _dn)
                                         _start = _dom if _dom.startswith("http") else f"https://{_dom}"
+                                        _old_sanko_b = _parse_sanko_urls(_de.get("info", ""))
                                         _content_b = crawl_site(_start, _clinic_genres_all[0] if _clinic_genres_all else "", max_pages=20)
+                                        for _su_b in _old_sanko_b:
+                                            st.write(f"　🔍 参照URL起点クロール中（最大5ページ）: {_su_b}")
+                                            _su_b_content = crawl_site(_su_b, _clinic_genres_all[0] if _clinic_genres_all else "", max_pages=5, restrict_path=False)
+                                            if _su_b_content:
+                                                _content_b += f"\n\n--- 参照URL起点: {_su_b} ---\n{_su_b_content}"
                                         for _cg in _clinic_genres_all:
                                             _ci = extract_clinic_info_from_content(_content_b, _dn, _cg, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider)
+                                            _ci = _merge_sanko_urls_in_info(_ci, _old_sanko_b)
                                             clinic_db_manager.upsert_clinic(_dn, _dom, _cg, _ci, creds_data=_db_creds, sheet_url=_active_db_url)
                                         st.write("　→ ✅ 完了")
                                     except Exception as _be:
@@ -2718,6 +2752,11 @@ with _safe_tab(tab_cases):
                                         u.strip() for u in _upd_extra_urls.splitlines()
                                         if u.strip().startswith("http")
                                     ]
+                                    _old_sanko_urls = _parse_sanko_urls(_d_info)
+                                    if _use_crawl:
+                                        for _su in _old_sanko_urls:
+                                            if _su not in _upd_extra_list:
+                                                _upd_extra_list.append(_su)
                                     with st.status(f"{_dn} を更新中（{_mode_str}）...", expanded=True) as _upd_st:
                                         try:
                                             _full_db2 = st.session_state.get(_ck, {})
@@ -2757,6 +2796,7 @@ with _safe_tab(tab_cases):
                                             for _cg2 in _clinic_genres2:
                                                 st.write(f"🤖 「{_cg2}」向けに情報抽出中...")
                                                 _ci2 = extract_clinic_info_from_content(_combined2, _dn, _cg2, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider, extra_instruction=_upd_instr.strip())
+                                                _ci2 = _merge_sanko_urls_in_info(_ci2, _old_sanko_urls)
                                                 clinic_db_manager.upsert_clinic(_dn, _dom2, _cg2, _ci2, creds_data=_db_creds, sheet_url=_active_db_url)
                                                 st.session_state.setdefault(_ck, {}).setdefault(_cg2, {})[_dn] = {
                                                     "domain": _dom2, "info": _ci2, "updated_at": str(datetime.date.today()),
