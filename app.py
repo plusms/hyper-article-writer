@@ -2626,6 +2626,12 @@ with _safe_tab(tab_cases):
 
                             st.divider()
                             st.caption("更新モード")
+                            _upd_extra_urls = st.text_area(
+                                "追加クロールURL（任意・1行1URL）",
+                                placeholder="https://tcb.net/price/\nhttps://tcb.net/payment/\n料金・キャンペーンページなど重点的に取得したいURLを指定",
+                                height=80,
+                                key=f"db_extra_urls_{_g_name}_{_dn}",
+                            )
                             _upd_lp_imgs = st.file_uploader(
                                 "LPスクリーンショット（LP更新時に添付）",
                                 type=["png", "jpg", "jpeg", "webp"],
@@ -2653,6 +2659,10 @@ with _safe_tab(tab_cases):
                                     _use_crawl = _do_crawl_only or _do_both
                                     _use_lp    = _do_lp_only or _do_both
                                     _mode_str  = "再クロール＋LP" if (_use_crawl and _use_lp) else ("LP更新のみ" if _use_lp else "再クロールのみ")
+                                    _upd_extra_list = [
+                                        u.strip() for u in _upd_extra_urls.splitlines()
+                                        if u.strip().startswith("http")
+                                    ]
                                     with st.status(f"{_dn} を更新中（{_mode_str}）...", expanded=True) as _upd_st:
                                         try:
                                             _full_db2 = clinic_db_manager.load_db(creds_data=_db_creds, sheet_url=_active_db_url)
@@ -2661,6 +2671,7 @@ with _safe_tab(tab_cases):
 
                                             _crawl_content2 = ""
                                             _lp_text2 = ""
+                                            _extra_content2 = ""
 
                                             if _use_crawl:
                                                 if not _dom2:
@@ -2669,13 +2680,18 @@ with _safe_tab(tab_cases):
                                                     _start2 = _dom2 if _dom2.startswith("http") else f"https://{_dom2}"
                                                     st.write("🔍 クロール中（最大20ページ）...")
                                                     _crawl_content2 = crawl_site(_start2, _clinic_genres2[0] if _clinic_genres2 else "", max_pages=20)
+                                                    for _eu2 in _upd_extra_list:
+                                                        st.write(f"🔍 追加URL取得中: {_eu2}")
+                                                        _eu2_content = fetch_page_text(_eu2)
+                                                        if not _eu2_content.startswith("[取得失敗"):
+                                                            _extra_content2 += f"\n\n--- 追加URL: {_eu2} ---\n{_eu2_content}"
 
                                             if _use_lp:
                                                 st.write(f"🖼️ LP画像を解析中（{len(_upd_lp_imgs)}枚）...")
                                                 _lp_bytes2 = [f.read() for f in _upd_lp_imgs]
                                                 _lp_text2 = extract_text_from_lp_images(_lp_bytes2, _dn, claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
 
-                                            _combined2 = build_content_with_lp(_crawl_content2, _lp_text2)
+                                            _combined2 = build_content_with_lp(_crawl_content2, _lp_text2, extra_content=_extra_content2)
                                             for _cg2 in _clinic_genres2:
                                                 st.write(f"🤖 「{_cg2}」向けに情報抽出中...")
                                                 _ci2 = extract_clinic_info_from_content(_combined2, _dn, _cg2, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider)
