@@ -2544,7 +2544,10 @@ with _safe_tab(tab_rank):
             st.divider()
 
         _all_html = "\n\n".join(
-            f"<!-- {r['rank']}位: {r['name']} -->\n{st.session_state.get(f'cb_res_edit_{r[\"rank\"]}', r['html'])}"
+            "<!-- {}位: {} -->\n{}".format(
+                r["rank"], r["name"],
+                st.session_state.get(f"cb_res_edit_{r['rank']}", r["html"])
+            )
             for r in _cb_results
         )
         st.download_button(
