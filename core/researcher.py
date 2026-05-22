@@ -449,6 +449,18 @@ def extract_clinic_info_from_content(content: str, name: str, genre: str, claude
     return _research_call(prompt, claude_api_key, gemini_api_key, research_provider, max_tokens=8192)
 
 
+def extract_clinic_names_from_article(article_text: str, claude_api_key: str, gemini_api_key: str = "", research_provider: str = "claude") -> list:
+    """記事テキストから紹介されているクリニック名リストを抽出する。"""
+    prompt = f"""以下の記事テキストから、紹介・比較されているクリニック名・医院名をすべて抽出してください。
+固有のブランド名・クリニック名のみを抽出してください（「クリニック」「病院」などの一般名称のみは除外）。
+1行1クリニック名で出力し、番号・説明・記号は不要です。
+
+{article_text[:20000]}
+"""
+    result = _research_call(prompt, claude_api_key, gemini_api_key, research_provider, max_tokens=1024)
+    return [ln.strip() for ln in result.splitlines() if ln.strip() and not ln.startswith("[")]
+
+
 def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None, full_crawl: bool = False, db_type: str = DB_TYPE_CLINIC, gemini_api_key: str = "", research_provider: str = "claude") -> dict:
     if not clinics:
         return {}

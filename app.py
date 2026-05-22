@@ -14,6 +14,7 @@ from core.researcher import (
     discover_clinics_from_competitors, auto_discover_clinics,
     crawl_site, fetch_page_text, extract_clinic_info_from_content,
     extract_text_from_lp_images, build_content_with_lp,
+    extract_clinic_names_from_article,
     DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE,
 )
 from core.planner import generate_structure
@@ -2603,6 +2604,91 @@ with _safe_tab(tab_cases):
                     _add_status.update(label="❌ エラー", state="error")
                     st.error(f"取得エラー: {type(_e_new).__name__}: {_e_new}")
                     st.code(_tb.format_exc())
+
+    # ── 記事から一括登録・更新 ───────────────────────────────
+    st.divider()
+    with st.expander("📄 記事から一括登録・更新", expanded=False):
+        st.caption("修正済み記事を貼り付け → クリニック名を抽出 → DBに登録・更新します")
+        _art_text = st.text_area(
+            "記事テキスト（HTMLまたはプレーンテキスト）",
+            height=180,
+            placeholder="記事のHTMLまたはテキストをここに貼り付けてください",
+            key=f"db_art_text_{_db_type_sel}",
+        )
+        _art_genre_opts = list(st.session_state.get(_ck, {}).keys()) + ["＋ 新規ジャンル"]
+        _art_genre_sel = st.selectbox("ジャンル（登録先）", _art_genre_opts, key="db_art_genre_sel")
+        if _art_genre_sel == "＋ 新規ジャンル":
+            _art_genre = st.text_input("新規ジャンル名", key="db_art_new_genre")
+        else:
+            _art_genre = _art_genre_sel
+
+        _art_extract_btn = st.button(
+            "🔍 クリニック名を自動抽出",
+            key="db_art_extract",
+            disabled=not _art_text.strip(),
+        )
+        if _art_extract_btn:
+            if not claude_key:
+                st.error("Claude API Key が未設定です")
+            else:
+                with st.spinner("クリニック名を抽出中..."):
+                    _extracted_names = extract_clinic_names_from_article(
+                        _art_text, claude_key, gemini_api_key=gemini_key, research_provider=research_provider
+                    )
+                    st.session_state[f"db_art_clinics_edit_{_db_type_sel}"] = "\n".join(_extracted_names)
+
+        _art_clinics_edited = st.text_area(
+            "登録・更新するクリニック名（1行1院名・編集可）",
+            height=130,
+            placeholder="「クリニック名を自動抽出」で自動入力されます。直接入力も可能です。",
+            key=f"db_art_clinics_edit_{_db_type_sel}",
+        )
+        st.caption("不要な院は削除、追加したい院は追記してください")
+
+        if st.button(
+            "📥 登録・更新する",
+            key="db_art_register",
+            disabled=not (_art_clinics_edited.strip() and _art_text.strip()),
+            type="primary",
+            use_container_width=True,
+        ):
+            _target_names = [n.strip() for n in _art_clinics_edited.splitlines() if n.strip()]
+            if not _art_genre.strip():
+                st.error("ジャンルを選択してください")
+            elif not claude_key:
+                st.error("Claude API Key が未設定です")
+            else:
+                _art_article_content = build_content_with_lp(
+                    "", "", extra_content=f"--- 記事テキスト ---\n{_art_text.strip()}"
+                )
+                _full_db_art = st.session_state.get(_ck, {})
+                with st.status(f"{len(_target_names)} 件を登録・更新中...", expanded=True) as _art_status:
+                    try:
+                        for _art_name in _target_names:
+                            st.write(f"🤖 「{_art_name}」の情報を抽出中...")
+                            _art_domain = ""
+                            for _gv in _full_db_art.values():
+                                if isinstance(_gv, dict) and _art_name in _gv:
+                                    _art_domain = _gv[_art_name].get("domain", "")
+                                    break
+                            _art_ci = extract_clinic_info_from_content(
+                                _art_article_content, _art_name, _art_genre, claude_key,
+                                db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider,
+                            )
+                            clinic_db_manager.upsert_clinic(
+                                _art_name, _art_domain, _art_genre, _art_ci,
+                                creds_data=_db_creds, sheet_url=_active_db_url,
+                            )
+                            st.session_state.setdefault(_ck, {}).setdefault(_art_genre, {})[_art_name] = {
+                                "domain": _art_domain, "info": _art_ci, "updated_at": str(datetime.date.today()),
+                            }
+                            st.write("　✅ 完了")
+                        _art_status.update(label=f"✅ {len(_target_names)} 件の登録・更新が完了しました", state="complete")
+                        st.session_state.pop(f"db_art_clinics_edit_{_db_type_sel}", None)
+                        st.rerun()
+                    except Exception as _art_e:
+                        _art_status.update(label="❌ エラー", state="error")
+                        st.error(f"エラー: {_art_e}")
 
     # ── ジャンル別タブ表示 ──────────────────────────────────
     st.divider()
