@@ -2291,6 +2291,49 @@ with _safe_tab(tab_settings):
                 else:
                     st.error("保存に失敗しました。")
 
+            # ── 4. リンク設定 ────────────────────────────────────
+            st.markdown("---")
+            st.markdown("### 🔗 4. リンク設定")
+            st.caption("アフィリリンク・外部リンクのルールを登録します。登録するとランキングブロック生成のプロンプトに反映されます。")
+            _current_ls = _config4.get("link_settings", {})
+            with st.form(f"link_settings_form_{_current_site4}"):
+                _ls_base_url = st.text_input(
+                    "アフィリリンク ベースURL",
+                    value=_current_ls.get("affili_base_url", ""),
+                    placeholder="https://koizumi-seikei.jp/obesity/web/",
+                    key=f"ls_base_url_{_current_site4}",
+                )
+                _ls_col1, _ls_col2 = st.columns(2)
+                _ls_positions = _ls_col1.text_input(
+                    "記事の場所コード（コンマ区切り）",
+                    value=_current_ls.get("affili_param_positions", "top,rank,matome,ryokin,kuchikomi"),
+                    help="top=冒頭 / rank=ランキング / matome=まとめ / ryokin=料金 / kuchikomi=口コミ",
+                    key=f"ls_pos_{_current_site4}",
+                )
+                _ls_formats = _ls_col2.text_input(
+                    "形式コード（コンマ区切り）",
+                    value=_current_ls.get("affili_param_formats", "bt,bn,txt"),
+                    help="bt=ボタン / bn=バナー / txt=テキスト / txt2=テキスト2箇所目など",
+                    key=f"ls_fmt_{_current_site4}",
+                )
+                st.caption("パラメータ形式（固定）: ?{記事スラッグ}_{記事の場所}_{形式}　例: ?diet-dmmrybelsus_rank_bn")
+                st.caption("アフィリリンク属性（固定）: target=\"_blank\" rel=\"nofollow noopener noreferrer\"")
+                st.caption("外部リンク属性（固定）: target=\"_blank\" rel=\"noopener noreferrer\"")
+                _ls_submitted = st.form_submit_button("💾 リンク設定を保存", type="primary")
+
+            if _ls_submitted:
+                _ls_save_config = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
+                _ls_save_config["link_settings"] = {
+                    "affili_base_url": _ls_base_url.strip(),
+                    "affili_param_positions": _ls_positions.strip(),
+                    "affili_param_formats": _ls_formats.strip(),
+                }
+                if site_config_manager.save_site_config(_current_site4, _ls_save_config, _site_cfg_creds, _site_cfg_parent_folder):
+                    st.success("リンク設定を保存しました。")
+                    st.rerun()
+                else:
+                    st.error("保存に失敗しました。")
+
 
 # ════════════════════════════════════════════════════════
 #  Tab5: ランキングブロック
@@ -2306,10 +2349,14 @@ with _safe_tab(tab_rank):
     _cb_site_cfg = {}
     _cb_templates = []
     _cb_template_names = []
+    _cb_link_settings = {}
+    _cb_affili_base = ""
     if _cb_sel_site != "（なし）":
         _cb_site_cfg = site_config_manager.load_site_config(_cb_sel_site, _site_cfg_creds, _site_cfg_parent_folder)
         _cb_templates = _cb_site_cfg.get("clinic_block_templates", [])
         _cb_template_names = [t.get("name", f"テンプレート{i+1}") for i, t in enumerate(_cb_templates)]
+        _cb_link_settings = _cb_site_cfg.get("link_settings", {})
+        _cb_affili_base = _cb_link_settings.get("affili_base_url", "").strip().rstrip("/")
 
     _cb_sel_tmpl = None
     if _cb_templates:
@@ -2393,12 +2440,35 @@ with _safe_tab(tab_rank):
                 )
 
                 if _is_top3:
+                    # アフィリファイル名（DBキャッシュから初期値を取得）
+                    _cb_affili_key = f"cb_affili_{_r}"
+                    if _cb_affili_key not in st.session_state:
+                        _cb_db_nested_tmp = st.session_state.get(f"_db_nested_cache_{st.session_state.get('cb_db_type', DB_TYPE_CLINIC)}", {})
+                        for _gv_tmp in _cb_db_nested_tmp.values():
+                            if isinstance(_gv_tmp, dict) and _cbc["name"] in _gv_tmp:
+                                st.session_state[_cb_affili_key] = _gv_tmp[_cbc["name"]].get("affili_filename", "")
+                                break
+                    if _cb_affili_base:
+                        _cbc_affili_file = st.text_input(
+                            "アフィリファイル名",
+                            key=_cb_affili_key,
+                            placeholder="diet-dmm-ryb.html",
+                            help="DBに登録済みの場合は自動入力。ベースURLと合わせてリンクURLを構築します。",
+                        )
+                        _auto_link = f"{_cb_affili_base}/{_cbc_affili_file}" if _cbc_affili_file else ""
+                    else:
+                        _cbc_affili_file = ""
+                        _auto_link = ""
+
+                    _default_link_val = st.session_state.get(f"cb_link_{_r}") or _auto_link or _cbc_url
                     _cbc_link = st.text_input(
                         "リンクURL（LP等）",
-                        value=st.session_state.get(f"cb_link_{_r}", _cbc_url),
+                        value=_default_link_val,
                         key=f"cb_link_{_r}",
-                        placeholder="CTAボタン・見出しリンクのリンク先URL",
+                        placeholder="CTAボタン・見出しリンクのリンク先URL（パラメータは ?スラッグ_場所_形式 で追記）",
                     )
+                    if _auto_link:
+                        st.caption(f"↑ アフィリURL候補: `{_auto_link}`")
                     _cbc_lp = st.text_area(
                         "LP掲載プラン",
                         value=st.session_state.get(f"cb_lp_{_r}", ""),
@@ -2454,6 +2524,10 @@ with _safe_tab(tab_rank):
                 _cb_results = []
                 _cb_reference_html = ""  # 1院目のHTMLをフォーマット参照として後続院に渡す
                 _cb_clinics_to_gen = _cb_clinics[:_cb_clinic_count] if _cb_clinic_count > 0 else _cb_clinics
+                # link_settings をサイトパーツに追記
+                _cb_link_rule_str = site_config_manager.format_link_settings(_cb_link_settings)
+                if _cb_link_rule_str:
+                    _cb_site_parts = (_cb_site_parts + "\n\n" + _cb_link_rule_str).strip() if _cb_site_parts else _cb_link_rule_str
                 with st.status("案件ブロック生成中...", expanded=True) as _cb_status:
                     for _cbc in _cb_clinics_to_gen:
                         _r = _cbc["rank"]
@@ -2635,6 +2709,12 @@ with _safe_tab(tab_cases):
         _db_fa, _db_fb = st.columns([2, 2])
         _db_new_name   = _db_fa.text_input("案件名（クリニック名・商品名等）", placeholder="TCB東京中央美容外科")
         _db_new_domain = _db_fb.text_input("メインURL（任意・ドメイン or パス指定）", placeholder="tcb.net  または  tcb.net/osaka/umeda/")
+        _db_new_affili = st.text_input(
+            "アフィリファイル名（任意）",
+            placeholder="diet-dmm-ryb.html",
+            help="アフィリリンクの *.html 部分。サイト設定のベースURLと組み合わせてリンクURLを自動構築します。",
+            key="db_new_affili",
+        )
         _db_new_extra_urls = st.text_area(
             "追加クロールURL（任意・1行1URL）",
             placeholder="https://tcb.net/clinic/\nhttps://tcb.net/price/\n院一覧・料金ページなど。指定URLを起点に最大5ページたどります",
@@ -2702,11 +2782,12 @@ with _safe_tab(tab_cases):
                     _provider_label_db = "Gemini Flash" if research_provider == "gemini" else "Claude Sonnet"
                     st.write(f"🤖 「{_genre_new}」向けに情報抽出中（{_provider_label_db}）...")
                     _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider, extra_instruction=_db_new_extra_instruction.strip())
-                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, creds_data=_db_creds, sheet_url=_active_db_url)
+                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, affili_filename=_db_new_affili.strip(), creds_data=_db_creds, sheet_url=_active_db_url)
                     _add_status.update(label=f"✅ 「{_name_new}」を「{_genre_new}」に追加しました（{_mode_label}）", state="complete")
                     _ck = f"_db_nested_cache_{_db_type_sel}"
                     st.session_state.setdefault(_ck, {}).setdefault(_genre_new, {})[_name_new] = {
                         "domain": _domain_new, "info": _info_new, "updated_at": str(datetime.date.today()),
+                        "affili_filename": _db_new_affili.strip(),
                     }
                     st.rerun()
                 except Exception as _e_new:
@@ -2777,9 +2858,11 @@ with _safe_tab(tab_cases):
                         for _art_name in _target_names:
                             st.write(f"🤖 「{_art_name}」の情報を抽出中...")
                             _art_domain = ""
+                            _art_affili = ""
                             for _gv in _full_db_art.values():
                                 if isinstance(_gv, dict) and _art_name in _gv:
                                     _art_domain = _gv[_art_name].get("domain", "")
+                                    _art_affili = _gv[_art_name].get("affili_filename", "")
                                     break
                             _art_ci = extract_clinic_info_from_content(
                                 _art_article_content, _art_name, _art_genre, claude_key,
@@ -2787,10 +2870,12 @@ with _safe_tab(tab_cases):
                             )
                             clinic_db_manager.upsert_clinic(
                                 _art_name, _art_domain, _art_genre, _art_ci,
+                                affili_filename=_art_affili,
                                 creds_data=_db_creds, sheet_url=_active_db_url,
                             )
                             st.session_state.setdefault(_ck, {}).setdefault(_art_genre, {})[_art_name] = {
                                 "domain": _art_domain, "info": _art_ci, "updated_at": str(datetime.date.today()),
+                                "affili_filename": _art_affili,
                             }
                             st.write("　✅ 完了")
                         _art_status.update(label=f"✅ {len(_target_names)} 件の登録・更新が完了しました", state="complete")
@@ -2841,7 +2926,7 @@ with _safe_tab(tab_cases):
                                         for _cg in _clinic_genres_all:
                                             _ci = extract_clinic_info_from_content(_content_b, _dn, _cg, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider)
                                             _ci = _merge_sanko_urls_in_info(_ci, _old_sanko_b)
-                                            clinic_db_manager.upsert_clinic(_dn, _dom, _cg, _ci, creds_data=_db_creds, sheet_url=_active_db_url)
+                                            clinic_db_manager.upsert_clinic(_dn, _dom, _cg, _ci, affili_filename=_de.get("affili_filename", ""), creds_data=_db_creds, sheet_url=_active_db_url)
                                         st.write("　→ ✅ 完了")
                                     except Exception as _be:
                                         st.write(f"　→ ❌ エラー: {_be}")
@@ -2860,7 +2945,25 @@ with _safe_tab(tab_cases):
                         _d_has_info = bool(_de.get("info"))
                         _d_label = f"{'🟢' if _d_has_info else '🟡'} {_dn}　｜　更新: {_d_updated}"
                         with st.expander(_d_label, expanded=False):
-                            st.caption(f"URL: {_de.get('domain', '')}")
+                            _d_affili = _de.get("affili_filename", "")
+                            _aff_col, _url_col = st.columns([2, 3])
+                            _d_affili_edited = _aff_col.text_input(
+                                "アフィリファイル名",
+                                value=_d_affili,
+                                key=f"db_affili_{_g_name}_{_dn}",
+                                placeholder="diet-dmm-ryb.html",
+                            )
+                            _url_col.caption(f"URL: {_de.get('domain', '')}")
+                            if _aff_col.button("💾 ファイル名を保存", key=f"db_save_affili_{_g_name}_{_dn}"):
+                                clinic_db_manager.upsert_clinic(
+                                    _dn, _de.get("domain", ""), _g_name, _de.get("info", ""),
+                                    affili_filename=_d_affili_edited,
+                                    creds_data=_db_creds, sheet_url=_active_db_url,
+                                )
+                                st.success("アフィリファイル名を保存しました")
+                                _ck = f"_db_nested_cache_{_db_type_sel}"
+                                st.session_state.setdefault(_ck, {}).setdefault(_g_name, {}).setdefault(_dn, {})["affili_filename"] = _d_affili_edited
+
                             _d_info = _de.get("info", "")
                             _d_info_edited = st.text_area(
                                 "取得済み情報（直接編集可）",
@@ -2871,6 +2974,7 @@ with _safe_tab(tab_cases):
                             if st.button("💾 この内容で保存", key=f"db_save_manual_{_g_name}_{_dn}"):
                                 clinic_db_manager.upsert_clinic(
                                     _dn, _de.get("domain", ""), _g_name, _d_info_edited,
+                                    affili_filename=_de.get("affili_filename", ""),
                                     creds_data=_db_creds, sheet_url=_active_db_url,
                                 )
                                 st.success("保存しました")
@@ -3008,9 +3112,10 @@ with _safe_tab(tab_cases):
                                                 st.write(f"🤖 「{_cg2}」向けに情報抽出中...")
                                                 _ci2 = extract_clinic_info_from_content(_combined2, _dn, _cg2, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider, extra_instruction=_upd_instr.strip())
                                                 _ci2 = _merge_sanko_urls_in_info(_ci2, _old_sanko_urls)
-                                                clinic_db_manager.upsert_clinic(_dn, _dom2, _cg2, _ci2, creds_data=_db_creds, sheet_url=_active_db_url)
+                                                clinic_db_manager.upsert_clinic(_dn, _dom2, _cg2, _ci2, affili_filename=_de.get("affili_filename", ""), creds_data=_db_creds, sheet_url=_active_db_url)
                                                 st.session_state.setdefault(_ck, {}).setdefault(_cg2, {})[_dn] = {
                                                     "domain": _dom2, "info": _ci2, "updated_at": str(datetime.date.today()),
+                                                    "affili_filename": _de.get("affili_filename", ""),
                                                 }
                                             _upd_st.update(label=f"✅ 更新完了（{_mode_str}・{len(_clinic_genres2)} ジャンル）", state="complete")
                                             st.session_state.pop(f"db_info_{_g_name}_{_dn}", None)

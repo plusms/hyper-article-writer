@@ -95,6 +95,11 @@ def get_default_site_config() -> Dict[str, Any]:
             for slot in FIXED_COMPONENT_SCHEMA
         ],
         "clinic_block_templates": [],
+        "link_settings": {
+            "affili_base_url": "",
+            "affili_param_positions": "top,rank,matome,ryokin,kuchikomi",
+            "affili_param_formats": "bt,bn,txt",
+        },
     }
 
 
@@ -351,6 +356,62 @@ def parse_parts_page(html_content: str) -> List[Dict[str, Any]]:
         components.append({"name": slot, "pattern": pattern, "active": True})
 
     return components
+
+
+_POSITION_LABELS = {
+    "top": "冒頭",
+    "rank": "ランキング",
+    "matome": "まとめ",
+    "ryokin": "料金",
+    "kuchikomi": "口コミ",
+}
+_FORMAT_LABELS = {
+    "bt": "ボタン",
+    "bn": "バナー",
+    "txt": "テキスト",
+}
+
+
+def format_link_settings(link_settings: Dict[str, Any]) -> str:
+    """link_settings をプロンプト用インストラクション文字列に変換する。"""
+    if not link_settings:
+        return ""
+    base_url = link_settings.get("affili_base_url", "").strip()
+    positions_raw = link_settings.get("affili_param_positions", "").strip()
+    formats_raw = link_settings.get("affili_param_formats", "").strip()
+
+    lines = ["【リンクルール】"]
+
+    # アフィリリンク
+    lines.append("■ アフィリリンク")
+    if base_url:
+        lines.append(f"- ベースURL: {base_url}")
+    lines.append("- パラメータ形式: ?{記事スラッグ}_{記事の場所}_{形式}")
+    if positions_raw:
+        pos_list = []
+        for p in positions_raw.split(","):
+            p = p.strip()
+            if p:
+                label = _POSITION_LABELS.get(p, "")
+                pos_list.append(f"{p}（{label}）" if label else p)
+        if pos_list:
+            lines.append(f"  - 記事の場所: {' / '.join(pos_list)}")
+    if formats_raw:
+        fmt_list = []
+        for f in formats_raw.split(","):
+            f = f.strip()
+            if f:
+                label = _FORMAT_LABELS.get(f, "")
+                fmt_list.append(f"{f}（{label}）" if label else f)
+        if fmt_list:
+            lines.append(f"  - 形式: {' / '.join(fmt_list)}")
+    lines.append('- 属性: target="_blank" rel="nofollow noopener noreferrer"')
+
+    # 外部リンク
+    lines.append("■ 外部リンク・参照リンク")
+    lines.append('- 属性: target="_blank" rel="noopener noreferrer"')
+
+    return "\n".join(lines)
 
 
 def format_site_parts(components: List[Dict[str, Any]]) -> str:

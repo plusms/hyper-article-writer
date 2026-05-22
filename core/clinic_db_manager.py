@@ -10,7 +10,7 @@ _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
-_HEADERS = ["name", "domain", "info", "updated_at"]
+_HEADERS = ["name", "domain", "info", "updated_at", "affili_filename"]
 _SYSTEM_TABS = {"clinic_db"}  # old single-tab name; skip when listing genre tabs
 
 
@@ -28,7 +28,7 @@ def _get_or_create_tab(spreadsheet, genre: str) -> gspread.Worksheet:
         return spreadsheet.worksheet(genre)
     except gspread.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(title=genre, rows=1000, cols=len(_HEADERS))
-        ws.update("A1:D1", [_HEADERS])
+        ws.update("A1:E1", [_HEADERS])
         return ws
 
 
@@ -38,9 +38,9 @@ def _parse_worksheet(ws: gspread.Worksheet) -> dict:
     for row in rows[1:]:
         if not row or not row[0]:
             continue
-        padded = row + [""] * (4 - len(row))
-        name, domain, info, updated_at = padded[:4]
-        result[name] = {"domain": domain, "info": info, "updated_at": updated_at}
+        padded = row + [""] * (5 - len(row))
+        name, domain, info, updated_at, affili_filename = padded[:5]
+        result[name] = {"domain": domain, "info": info, "updated_at": updated_at, "affili_filename": affili_filename}
     return result
 
 
@@ -84,27 +84,31 @@ def load_db(creds_data=None, sheet_url=None, genre: str = "") -> dict:
     return db
 
 
-def upsert_clinic(name: str, domain: str, genre: str, info: str, creds_data=None, sheet_url=None) -> bool:
-    """指定ジャンルのタブに1件upsert。"""
+def upsert_clinic(name: str, domain: str, genre: str, info: str, affili_filename: str = "", creds_data=None, sheet_url=None) -> bool:
+    """指定ジャンルのタブに1件upsert。affili_filename未指定（""）の場合は既存値を保持。"""
     today = str(date.today())
     if creds_data and sheet_url:
-        # Sheets設定がある場合はSheetsのみ。エラーは呼び出し元に伝播させる
         spreadsheet = _get_spreadsheet(creds_data, sheet_url)
         ws = _get_or_create_tab(spreadsheet, genre)
         all_values = ws.get_all_values()
         all_names = [r[0] for r in all_values[1:] if r]
-        row_data = [name, domain, info, today]
         if name in all_names:
             row_idx = all_names.index(name) + 2
-            ws.update(f"A{row_idx}:D{row_idx}", [row_data])
+            existing_row = all_values[row_idx - 1] if row_idx - 1 < len(all_values) else []
+            existing_affili = existing_row[4] if len(existing_row) > 4 else ""
+            row_data = [name, domain, info, today, affili_filename if affili_filename else existing_affili]
+            ws.update(f"A{row_idx}:E{row_idx}", [row_data])
         else:
-            ws.append_row(row_data)
+            ws.append_row([name, domain, info, today, affili_filename])
         return True
-    # Sheets未設定時のみローカルフォールバック
     db = _load_local()
     if genre not in db:
         db[genre] = {}
-    db[genre][name] = {"domain": domain, "info": info, "updated_at": today}
+    existing_affili = db.get(genre, {}).get(name, {}).get("affili_filename", "")
+    db[genre][name] = {
+        "domain": domain, "info": info, "updated_at": today,
+        "affili_filename": affili_filename if affili_filename else existing_affili,
+    }
     return _save_local(db)
 
 
