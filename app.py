@@ -1514,9 +1514,15 @@ with _safe_tab(tab_custom):
             _is_modified = _block.get("modified", False)
             _status_icon = "✅" if _is_confirmed else ("✏️" if _is_modified else "⬜")
             with st.expander(f"{_status_icon} {_block['title']}", expanded=not _is_confirmed):
-                st.code(_block["html"], language="html")
+                st.text_area(
+                    "HTML（直接編集可）",
+                    value=_block["html"],
+                    key=f"t2_h2_edit_{_bi}",
+                    height=220,
+                    label_visibility="collapsed",
+                )
 
-                _dl_col, _ = st.columns([2, 5])
+                _dl_col, _save_col, _ = st.columns([2, 2, 3])
                 with _dl_col:
                     st.download_button(
                         "📥 このH2をDL",
@@ -1525,6 +1531,15 @@ with _safe_tab(tab_custom):
                         mime="text/html",
                         key=f"t2_h2_dl_{_bi}",
                     )
+                with _save_col:
+                    if st.button("💾 手動編集を保存", key=f"t2_h2_save_{_bi}"):
+                        _edited_html = st.session_state.get(f"t2_h2_edit_{_bi}", _block["html"])
+                        if _edited_html != _block["html"]:
+                            _h2_blocks[_bi]["html"] = _edited_html
+                            _h2_blocks[_bi]["modified"] = True
+                            _h2_blocks[_bi]["confirmed"] = False
+                            st.session_state["t2_h2_blocks"] = _h2_blocks
+                            st.rerun()
 
                 st.text_area(
                     "修正指示",
