@@ -77,6 +77,7 @@ def generate_clinic_block(
     claude_api_key: str,
     site_parts: str = "",
     reference_html: str = "",
+    extra_instruction: str = "",
 ) -> str:
     is_top3 = rank <= 3
     heading_type = template.get("heading_type", 1)
@@ -192,6 +193,7 @@ def generate_clinic_block(
 {basic_info_section}
 {f"【サイト別HTMLパーツ】{chr(10)}{site_parts}" if site_parts else ""}
 {reference_section}
+{f"【追加指示】{chr(10)}{extra_instruction}{chr(10)}" if extra_instruction.strip() else ""}
 【共通ルール】
 - メインKW・サブKWで検索するユーザーに刺さる切り口で紹介文を書く
 - 選び方コンテンツの項目に自然に触れた内容にする（評価軸を露骨に列挙しない）
@@ -205,6 +207,26 @@ def generate_clinic_block(
 HTML本文のみを出力してください。説明文・コードフェンスは不要。
 """
 
+    client = anthropic.Anthropic(api_key=claude_api_key)
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=8192,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text.strip()
+
+
+def edit_clinic_block(html: str, instruction: str, claude_api_key: str) -> str:
+    """生成済みHTMLブロックに対して指示を適用して修正する。"""
+    prompt = f"""以下のクリニック紹介ブロックHTMLに対して、指示に従って修正してください。
+
+【修正指示】
+{instruction}
+
+【修正前HTML】
+{html}
+
+HTML本文のみを出力してください。説明文・コードフェンスは不要。"""
     client = anthropic.Anthropic(api_key=claude_api_key)
     msg = client.messages.create(
         model="claude-sonnet-4-6",

@@ -2426,6 +2426,12 @@ with _safe_tab(tab_rank):
                 )
 
         st.divider()
+        _cb_extra_instruction = st.text_area(
+            "追加指示（任意・全院共通）",
+            height=80,
+            placeholder="例：紹介文のトーンをもっとやわらかく／CTAボタンのテキストを「無料カウンセリングはこちら」に統一",
+            key="cb_extra_instruction",
+        )
         _cb_gen_all = st.button("🚀 全案件のブロックを生成", type="primary", use_container_width=True, key="cb_gen_all")
 
         if _cb_gen_all:
@@ -2474,6 +2480,7 @@ with _safe_tab(tab_rank):
                             _scraped_text = "（取得失敗）"
 
                         st.write(f"✍️ {_r}位: {_cbc['name']} のブロックを生成中...")
+                        _cb_instr_val = st.session_state.get("cb_extra_instruction", "").strip()
                         try:
                             _html = clinic_block_writer.generate_clinic_block(
                                 name=_cbc["name"],
@@ -2490,6 +2497,7 @@ with _safe_tab(tab_rank):
                                 claude_api_key=claude_key,
                                 site_parts=_cb_site_parts,
                                 reference_html=_cb_reference_html,
+                                extra_instruction=_cb_instr_val,
                             )
                             if not _cb_reference_html:
                                 _cb_reference_html = _html
@@ -2507,17 +2515,38 @@ with _safe_tab(tab_rank):
         st.subheader("生成結果")
         for _res in _cb_results:
             st.markdown(f"**{_res['rank']}位: {_res['name']}**")
-            st.code(_res["html"], language="html")
-            st.download_button(
-                f"📥 {_res['rank']}位HTMLをダウンロード",
-                _res["html"],
-                file_name=f"clinic_block_{_res['rank']}_{_res['name'].replace(' ', '_')}.html",
-                mime="text/html",
-                key=f"cb_dl_{_res['rank']}",
+            _edit_key = f"cb_res_edit_{_res['rank']}"
+            if _edit_key not in st.session_state:
+                st.session_state[_edit_key] = _res["html"]
+            _edited_html = st.text_area(
+                "HTML（直接編集可）",
+                value=st.session_state[_edit_key],
+                height=300,
+                key=_edit_key,
+                label_visibility="collapsed",
             )
+            _col_save, _col_dl = st.columns([1, 3])
+            with _col_save:
+                if st.button("💾 保存", key=f"cb_save_{_res['rank']}"):
+                    for _i, _r2 in enumerate(_cb_results):
+                        if _r2["rank"] == _res["rank"]:
+                            st.session_state["cb_results"][_i]["html"] = st.session_state[_edit_key]
+                            break
+                    st.success("保存しました")
+            with _col_dl:
+                st.download_button(
+                    f"📥 {_res['rank']}位HTMLをダウンロード",
+                    st.session_state[_edit_key],
+                    file_name=f"clinic_block_{_res['rank']}_{_res['name'].replace(' ', '_')}.html",
+                    mime="text/html",
+                    key=f"cb_dl_{_res['rank']}",
+                )
             st.divider()
 
-        _all_html = "\n\n".join(f"<!-- {r['rank']}位: {r['name']} -->\n{r['html']}" for r in _cb_results)
+        _all_html = "\n\n".join(
+            f"<!-- {r['rank']}位: {r['name']} -->\n{st.session_state.get(f'cb_res_edit_{r[\"rank\"]}', r['html'])}"
+            for r in _cb_results
+        )
         st.download_button(
             "📥 全件まとめてダウンロード",
             _all_html,
@@ -2525,6 +2554,36 @@ with _safe_tab(tab_rank):
             mime="text/html",
             key="cb_dl_all",
         )
+
+        st.divider()
+        st.subheader("全院一括編集")
+        _bulk_instr = st.text_area(
+            "修正指示（全院に適用）",
+            height=100,
+            placeholder="例：CTAボタンのテキストを「無料カウンセリングはこちら」に統一／紹介文の語尾を「です・ます」調に統一",
+            key="cb_bulk_edit_instruction",
+        )
+        if st.button("🔄 全院を一括修正", key="cb_bulk_edit_btn"):
+            if not _bulk_instr.strip():
+                st.warning("修正指示を入力してください")
+            elif not claude_key:
+                st.error("Claude API Key が未設定です")
+            else:
+                _updated_results = []
+                with st.status("一括修正中...", expanded=True) as _bulk_status:
+                    for _res in st.session_state["cb_results"]:
+                        _cur_html = st.session_state.get(f"cb_res_edit_{_res['rank']}", _res["html"])
+                        st.write(f"✍️ {_res['rank']}位: {_res['name']} を修正中...")
+                        try:
+                            _new_html = clinic_block_writer.edit_clinic_block(_cur_html, _bulk_instr, claude_key)
+                            _updated_results.append({"rank": _res["rank"], "name": _res["name"], "html": _new_html})
+                            st.session_state[f"cb_res_edit_{_res['rank']}"] = _new_html
+                        except Exception as _be:
+                            st.warning(f"{_res['rank']}位 ({_res['name']}) でエラー: {_be}")
+                            _updated_results.append(_res)
+                    st.session_state["cb_results"] = _updated_results
+                    _bulk_status.update(label="✅ 一括修正完了", state="complete")
+                st.rerun()
 
 
 # ════════════════════════════════════════════════════════
