@@ -1600,6 +1600,22 @@ with _safe_tab(tab_custom):
                 mime="text/html",
                 key="t2_dl_full",
             )
+        if _t2_last.get("clinics"):
+            _rb_clinic_lines = "\n".join(
+                f"{i+1}. {c['name']}::{(c['domain'] if c.get('domain','').startswith('http') else ('https://' + c['domain'].lstrip('/')) if c.get('domain') else '[要確認]')}"
+                for i, c in enumerate(_t2_last["clinics"])
+            )
+            _rb_export_text = (
+                f"【構成・選び方】\n{_t2_last.get('structure_text','')}\n\n"
+                f"【掲載院一覧】\n{_rb_clinic_lines}"
+            )
+            st.download_button(
+                "📋 ランキングブロック用データをダウンロード",
+                _rb_export_text.encode("utf-8"),
+                file_name=f"{_t2_last['main_kw'].replace(' ','_')}_ranking.txt",
+                mime="text/plain",
+                key="t2_dl_ranking",
+            )
         with _btm_col2:
             if output_tab_sel != "（書き込まない）" and article_sheet_url:
                 if st.button(
@@ -2303,6 +2319,23 @@ with _safe_tab(tab_rank):
         "件数（任意）", min_value=0, value=0, step=1, key="cb_clinic_count",
         help="生成するブロック数を指定。0で全件生成。記事の掲載件数と揃えてください。",
     ))
+    _rb_uploaded = st.file_uploader(
+        "📤 本文作成データをアップロード（任意）",
+        type=["txt"],
+        key="rb_data_upload",
+        help="本文作成タブの「ランキングブロック用データをダウンロード」で出力したファイルを読み込みます",
+    )
+    if _rb_uploaded is not None:
+        _rb_raw = _rb_uploaded.read().decode("utf-8")
+        if "【掲載院一覧】" in _rb_raw:
+            _rb_split = _rb_raw.split("【掲載院一覧】", 1)
+            st.session_state["cb_criteria"]    = _rb_split[0].replace("【構成・選び方】", "").strip()
+            st.session_state["cb_clinic_paste"] = _rb_split[1].strip()
+            st.session_state["cb_clinics"]      = clinic_block_writer.parse_clinic_list(_rb_split[1].strip())
+        else:
+            st.session_state["cb_criteria"] = _rb_raw.strip()
+        st.success("データを読み込みました")
+
     _cb_criteria = st.text_area(
         "記事内の「選び方」セクション（文章をそのまま貼り付け）",
         height=120, key="cb_criteria",
@@ -2311,7 +2344,7 @@ with _safe_tab(tab_rank):
 
     st.divider()
     st.subheader("掲載案件一覧")
-    st.caption("カスタム作成タブで記事生成後、スプシのP列（掲載案件一覧）の内容をコピーして貼り付けてください。")
+    st.caption("本文作成タブからダウンロードしたデータをアップロードするか、直接貼り付けてください。")
     _cb_clinic_paste = st.text_area(
         "",
         height=150, key="cb_clinic_paste",
