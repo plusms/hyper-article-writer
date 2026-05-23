@@ -106,6 +106,35 @@ def _draw_rounded_rect(draw, xy: tuple, radius: int, fill: tuple) -> None:
     draw.ellipse([x1 - 2 * r, y1 - 2 * r, x1, y1], fill=fill)
 
 
+def _measure_text_block(text: str, font, max_width: int, line_spacing: float = 1.4) -> int:
+    """テキストを折り返した時の合計高さを返す（描画なし）。"""
+    if not text or not font:
+        return 0
+    lines = []
+    current = ""
+    for ch in str(text):
+        test = current + ch
+        try:
+            w = font.getlength(test)
+        except Exception:
+            bbox = font.getbbox(test)
+            w = bbox[2] - bbox[0]
+        if w > max_width and current:
+            lines.append(current)
+            current = ch
+        else:
+            current = test
+    if current:
+        lines.append(current)
+    if not lines:
+        return 0
+    try:
+        _, _, _, line_h = font.getbbox("あ")
+    except Exception:
+        line_h = 20
+    return int(line_h * line_spacing * len(lines))
+
+
 def _draw_text_block(draw, text: str, font, x_center: int, y: int, color: tuple, max_width: int, line_spacing: float = 1.4) -> int:
     """テキストを折り返して中央揃えで描画。描画後の y 座標を返す。"""
     if not text or not font:
@@ -215,15 +244,15 @@ _3COL_ILLUST_SIZE = 90    # イラスト正方形サイズ
 _3COL_TEXT_ILLUST_GAP = 12  # テキスト下端〜イラスト上端の隙間
 
 
-def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str) -> None:
+def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str, text_area_h: int = None) -> None:
     n = max(len(items), 1)
     GAP = 10
     card_w = (W - PAD * 2 - GAP * (n - 1)) // n
     card_h = H - y0 - PAD
 
-    # テキスト・イラストの y 座標は固定（card_h に依存しない）
+    _text_h = text_area_h if text_area_h is not None else _3COL_TEXT_H
     text_y = y0 + _3COL_CARD_IPAD
-    illust_y = y0 + _3COL_CARD_IPAD + _3COL_TEXT_H + _3COL_TEXT_ILLUST_GAP
+    illust_y = y0 + _3COL_CARD_IPAD + _text_h + _3COL_TEXT_ILLUST_GAP
 
     for i, item in enumerate(items[:n]):
         x0 = PAD + i * (card_w + GAP)
@@ -322,15 +351,46 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
     PAD, R = 16, 8
     TITLE_H = 54
     content_y = PAD + TITLE_H + 14  # 84px
+    GAP = 10
+
+    # ── パス1: コンテンツ計測 → H 算出 ──────────────────────────
+    text_area_h = _3COL_TEXT_H  # fallback 用
 
     if layout_type == "3col_cards":
-        _card_h = _3COL_CARD_IPAD + _3COL_TEXT_H + _3COL_TEXT_ILLUST_GAP + _3COL_ILLUST_SIZE + _3COL_CARD_IPAD
-        H = content_y + _card_h + PAD  # 84 + 230 + 16 = 330
-    elif layout_type == "vertical_list_3":
-        H = max(460, content_y + n * 150 + PAD)
-    else:
-        H = max(400, content_y + n * 100 + PAD)
+        n_c = max(n, 1)
+        card_w = (W - PAD * 2 - GAP * (n_c - 1)) // n_c
+        b_font = _get_pil_font(24, bold=True)
+        measured = max(
+            (_measure_text_block(str(it.get("body", "")), b_font, card_w - _3COL_CARD_IPAD * 2) for it in items),
+            default=40,
+        )
+        text_area_h = max(measured, 40) + 8  # 実測 + 余白バッファ
+        card_h = _3COL_CARD_IPAD + text_area_h + _3COL_TEXT_ILLUST_GAP + _3COL_ILLUST_SIZE + _3COL_CARD_IPAD
+        H = content_y + card_h + PAD
 
+    elif layout_type == "vertical_list_3":
+        header_w = (W - PAD * 2) // 3
+        illust_w = 70
+        body_avail_w = max(W - PAD * 2 - header_w - illust_w - 24, 80)
+        hf = _get_pil_font(22, bold=True)
+        bf = _get_pil_font(20, bold=False)
+        max_row_h = 100
+        for item in items:
+            hdr_h = _measure_text_block(str(item.get("header") or item.get("body", "")), hf, header_w - 12)
+            body_h = _measure_text_block(str(item.get("body", "")), bf, body_avail_w)
+            row_h = max(_3COL_CARD_IPAD * 2 + hdr_h, _3COL_CARD_IPAD * 2 + illust_w, _3COL_CARD_IPAD * 2 + body_h, 100)
+            max_row_h = max(max_row_h, row_h)
+        H = content_y + n * max_row_h + GAP * max(n - 1, 0) + PAD
+
+    else:
+        item_font = _get_pil_font(24, bold=True)
+        max_item_h = 80
+        for item in items:
+            ih = max(_measure_text_block(str(item.get("body", "")), item_font, W - PAD * 4), 40) + _3COL_CARD_IPAD * 2
+            max_item_h = max(max_item_h, ih)
+        H = content_y + n * max_item_h + GAP * max(n - 1, 0) + PAD
+
+    # ── パス2: 描画 ──────────────────────────────────────────────
     img = _PIL_Image.new("RGB", (W, H), bg_rgb)
     draw = _PIL_Draw.Draw(img)
 
@@ -345,7 +405,7 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
         _draw_text_block(draw, t_text, t_font, W // 2, PAD + 10, t_color, W - PAD * 4)
 
     if layout_type == "3col_cards":
-        _render_3col_cards(img, draw, items, content_y, W, H, PAD, R, gemini_api_key)
+        _render_3col_cards(img, draw, items, content_y, W, H, PAD, R, gemini_api_key, text_area_h=text_area_h)
     elif layout_type == "vertical_list_3":
         _render_vertical_list(img, draw, items, content_y, W, H, PAD, R, gemini_api_key)
     else:
