@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CV Article Writer — 使用方法</title>
+<style>
+  :root {
+    --main: #49589B;
+    --accent: #6C7EC4;
+    --light: #F1F4FF;
+    --border: #D6DCF5;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --success: #16a34a;
+    --warn: #d97706;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Noto Sans JP", "Hiragino Sans", "Meiryo", sans-serif;
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--text);
+    background: #f8f9fc;
+  }
+
+  /* ── レイアウト ── */
+  .wrapper { display: flex; min-height: 100vh; }
+
+  /* サイドナビ */
+  nav {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--main);
+    color: #fff;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 28px 0 40px;
+  }
+  nav .logo {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    padding: 0 20px 20px;
+    border-bottom: 1px solid rgba(255,255,255,.2);
+    margin-bottom: 16px;
+    line-height: 1.4;
+  }
+  nav .logo span { display: block; font-size: 10px; font-weight: 400; opacity: .7; margin-top: 2px; }
+  nav ul { list-style: none; }
+  nav ul li a {
+    display: block;
+    padding: 7px 20px;
+    color: rgba(255,255,255,.85);
+    text-decoration: none;
+    font-size: 12.5px;
+    transition: background .15s;
+  }
+  nav ul li a:hover { background: rgba(255,255,255,.12); color: #fff; }
+  nav ul li.group {
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.5);
+    padding: 16px 20px 4px;
+    font-weight: 700;
+  }
+
+  /* メインコンテンツ */
+  main {
+    flex: 1;
+    max-width: 860px;
+    padding: 48px 52px 80px;
+  }
+
+  /* セクション */
+  section { margin-bottom: 56px; scroll-margin-top: 24px; }
+
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--main);
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  h2 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--main);
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--light);
+    border-left: 4px solid var(--main);
+    border-radius: 0 6px 6px 0;
+  }
+  h2 .badge {
+    display: inline-block;
+    background: var(--main);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 20px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 20px 0 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+
+  p { margin-bottom: 10px; }
+
+  /* テーブル */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+    font-size: 13px;
+  }
+  th {
+    background: var(--main);
+    color: #fff;
+    font-weight: 600;
+    padding: 9px 12px;
+    text-align: left;
+  }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: var(--light); }
+  tr:last-child td { border-bottom: none; }
+
+  /* コードブロック */
+  pre {
+    background: #1e1e3a;
+    color: #c8d3f5;
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 12.5px;
+    line-height: 1.65;
+    overflow-x: auto;
+    margin: 10px 0 16px;
+    font-family: "Consolas", "Monaco", monospace;
+  }
+  code {
+    background: #e8ecf8;
+    color: var(--main);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 12px;
+    font-family: "Consolas", "Monaco", monospace;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+  /* ステップ */
+  .steps { counter-reset: step; margin: 10px 0 16px; }
+  .step {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 12px;
+    align-items: flex-start;
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    background: var(--main);
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .step-body { flex: 1; }
+  .step-body strong { display: block; margin-bottom: 2px; }
+
+  /* ノート・警告 */
+  .note, .warn, .tip {
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin: 12px 0;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .note { background: var(--light); border-left: 3px solid var(--accent); }
+  .warn { background: #fffbeb; border-left: 3px solid var(--warn); }
+  .tip  { background: #f0fdf4; border-left: 3px solid var(--success); }
+  .note strong, .warn strong, .tip strong { display: block; margin-bottom: 4px; font-size: 12px; letter-spacing: .04em; }
+
+  /* チップ */
+  .chip {
+    display: inline-block;
+    background: var(--light);
+    color: var(--main);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    margin: 2px 3px;
+  }
+
+  /* フロー矢印 */
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin: 10px 0 14px;
+    font-size: 13px;
+  }
+  .flow-step {
+    background: var(--main);
+    color: #fff;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-weight: 600;
+    font-size: 12.5px;
+  }
+  .flow-arrow { color: var(--muted); font-size: 16px; }
+
+  ul.plain { list-style: none; padding-left: 0; }
+  ul.plain li { padding: 3px 0 3px 18px; position: relative; font-size: 13px; }
+  ul.plain li::before { content: "•"; color: var(--main); position: absolute; left: 4px; font-weight: 700; }
+
+  /* デバイダー */
+  hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+
+  @media (max-width: 720px) {
+    nav { display: none; }
+    main { padding: 24px 20px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+
+<!-- ── サイドナビ ── -->
+<nav>
+  <div class="logo">CV Article Writer<span>使用方法ガイド</span></div>
+  <ul>
+    <li class="group">はじめに</li>
+    <li><a href="#first-time">はじめての方へ</a></li>
+    <li><a href="#overview">画面構成</a></li>
+    <li class="group">コンテンツ作成</li>
+    <li><a href="#batch">一括作成</a></li>
+    <li><a href="#custom">カスタム作成</a></li>
+    <li><a href="#ranking">ランキングブロック</a></li>
+    <li><a href="#quality">品質チェック</a></li>
+    <li><a href="#writing-chat">執筆チャット</a></li>
+    <li class="group">データ・設定</li>
+    <li><a href="#db">商品データベース</a></li>
+    <li><a href="#settings">サイト設定</a></li>
+    <li class="group">画像生成</li>
+    <li><a href="#image-gen">画像生成タブ</a></li>
+    <li class="group">その他</li>
+    <li><a href="#help">ヘルプ</a></li>
+    <li><a href="#patterns">操作パターン</a></li>
+  </ul>
+</nav>
+
+<!-- ── メイン ── -->
+<main>
+
+  <h1>CV Article Writer</h1>
+  <p class="subtitle">SEO記事・クリニック紹介ブロックの自動生成ツール — 使用方法ガイド</p>
+
+  <!-- ───────────── はじめての方へ ───────────── -->
+  <section id="first-time">
+    <h2><span class="badge">▶</span>はじめての方へ — 初回セットアップの順番</h2>
+    <p>初めてこのツールを使う場合は、以下の順番でセットアップしてください。</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <strong>商品データベースにクリニックを登録する</strong>
+          記事に掲載するクリニックの情報（名前・公式URL）を事前に登録しておく。<br>
+          登録済みのクリニックは、記事生成時のクロールをスキップするため処理が速くなる。同ジャンルで複数記事を作る場合は特に重要。
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <strong>サイト設定でHTMLパーツ・テンプレートを登録する</strong>
+          そのサイト固有の見出しタグ・CTAボタン・クリニック紹介テンプレートを登録しておく。<br>
+          登録しておくことで、生成されるHTMLが自動的にそのサイトのデザインに合った形で出力される。
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <strong>カスタム作成 or 一括作成で記事を生成する</strong>
+          1本だけ丁寧に作る → カスタム作成。複数KWをまとめて流す → 一括作成。
+        </div>
+      </div>
+    </div>
+
+    <div class="note"><strong>設定なしでも使えますが</strong>商品DBとサイト設定を事前に済ませておくと、生成速度・HTML品質が大きく上がります。新しいサイト・新しいジャンルを始める前に必ず行ってください。</div>
+    <div class="note"><strong>地域記事・比較記事のクリニック紹介ブロックについて</strong>地域記事・比較記事はカスタム作成で本文を生成した後、別途「ランキングブロック」タブでクリニック紹介ブロックを生成する。本文生成とランキングブロック生成は別作業になる。</div>
+  </section>
+
+  <!-- ───────────── 画面構成 ───────────── -->
+  <section id="overview">
+    <h2><span class="badge">–</span>画面構成</h2>
+    <p>サイドバー上部のラジオボタンで4つのセクションを切り替える。</p>
+    <table>
+      <tr><th>セクション</th><th>タブ</th><th>使いどころ</th></tr>
+      <tr>
+        <td>📝 コンテンツ作成</td>
+        <td>一括作成 ／ カスタム作成 ／ ランキングブロック ／ 品質チェック ／ 執筆チャット</td>
+        <td>記事を作る・確認する・修正する</td>
+      </tr>
+      <tr>
+        <td>🗄️ データ・設定</td>
+        <td>商品データベース ／ サイト設定</td>
+        <td>初回セットアップ・クリニック情報の追加・更新</td>
+      </tr>
+      <tr>
+        <td>🖼️ 画像生成</td>
+        <td>（タブなし・単一画面）</td>
+        <td>記事HTMLを貼り付けてH2ごとに画像を一括生成・Drive アップロード</td>
+      </tr>
+      <tr>
+        <td>❓ ヘルプ</td>
+        <td>（タブなし・チャット形式）</td>
+        <td>操作方法の確認・疑問の解消</td>
+      </tr>
+    </table>
+    <div class="note"><strong>作業中は「コンテンツ作成」だけ使えばOK</strong>「データ・設定」は初回セットアップと情報更新時のみ使う。記事を作る作業中に設定を触る必要はない。</div>
+  </section>
+
+  <hr>
+
+  <!-- ───────────── 一括作成 ───────────── -->
+  <section id="batch">
+    <h2><span class="badge">1</span>一括作成タブ</h2>
+    <p>スプレッドシートに入力済みのKWリストからノウハウ記事をまとめて生成し、同じスプシへ自動書き込みする。<strong>ノウハウ記事の量産・新サイト立ち上げ時の一括仕込みに使う。</strong>地域・比較・商標記事は一括作成しない。それらはカスタム作成タブで1本ずつ対応する。</p>
+
+    <h3>スプレッドシートのタブ構成</h3>
+    <p>記事管理シートには以下のタブを用意する。生成時に処理するタブを選択する。</p>
+    <table>
+      <tr><th>タブ名</th><th>用途</th><th>列構成</th></tr>
+      <tr><td>ノウハウ</td><td>施術・症状の情報提供KW記事（クリニック掲載なし）</td><td>A〜J列（サイト名〜関連KW）共通</td></tr>
+      <tr><td>ノウハウ一括</td><td>サイト名・ジャンルを一括指定してノウハウ記事をまとめて流す</td><td>A〜J列（KWのみ。サイト名・ジャンルはUI側で指定）</td></tr>
+    </table>
+
+    <h3>スプレッドシートの列構成</h3>
+    <table>
+      <tr><th>列</th><th>項目</th><th>説明</th></tr>
+      <tr><td>A</td><td>サイト名</td><td>任意</td></tr>
+      <tr><td>B</td><td>ジャンル</td><td>クマ取り / AGA治療 など。案件DB検索に使う</td></tr>
+      <tr><td>C</td><td>記事タイプ</td><td>地域 / 比較 / 商標 / ノウハウ</td></tr>
+      <tr><td>D</td><td>メインKW ※必須</td><td>記事のメインキーワード</td></tr>
+      <tr><td>E</td><td>サブKW</td><td>カンマ区切りで複数入力</td></tr>
+      <tr><td>F</td><td>掲載案件</td><td><code>TCB::tcb.net, 湘南::s-b-c.net</code> 形式</td></tr>
+      <tr><td>G</td><td>競合URL</td><td>競合記事URLをカンマ区切りで入力</td></tr>
+      <tr><td>H</td><td>追加指示</td><td>禁止事項・特記事項</td></tr>
+      <tr><td>I</td><td>最訴求プラン</td><td>1位案件の推奨プラン</td></tr>
+      <tr><td>J</td><td>関連KW</td><td>共起語・長尾KW</td></tr>
+      <tr><td>K</td><td>ステータス</td><td>自動更新（処理中 / 完了）</td></tr>
+      <tr><td>L〜P</td><td>出力欄</td><td>タイトル / メタ / HTML / 要確認 / 掲載院一覧</td></tr>
+    </table>
+
+    <h3>操作手順</h3>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>処理するタブ名を選択</strong>ノウハウ一括 or ノウハウ から選ぶ</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        <strong>実行前オプション（任意）</strong><br>
+        <span class="chip">行を絞り込む</span> 特定の行だけ実行したい場合は行番号を入力（例: <code>3,5,8</code> または <code>3-10</code>）<br>
+        <span class="chip">ドライラン</span> 対象行のKWリストを確認・選択してから実行するモード。実行前に処理対象を絞り込める
+      </div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><strong>「🚀 実行開始」を押す</strong>ステータスが空欄の行（絞り込み指定がある場合はその行）を処理する</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>完了後、L列〜P列に結果が書き込まれる</strong></div></div>
+    </div>
+
+    <div class="tip"><strong>ドライランの使い方</strong>「ドライラン」をONにして実行すると、処理対象のKW一覧がチェックリスト形式で表示される。不要な行のチェックを外して「✅ 選択した行を実行」を押すと、選択した行だけ処理される。大量実行前に対象を確認したい場合に使う。</div>
+    <div class="warn"><strong>注意</strong>院数が多いほど処理時間がかかる。商品DBに登録済みの院はスクレイピングをスキップするため高速化できる。</div>
+    <div class="note"><strong>スプシのタブ初期化について</strong>「スプシのタブを初期化」ボタンでヘッダー行を作成・最新形式に更新できる。データ行には影響しないため、既存データを消す心配はない。</div>
+  </section>
+
+  <!-- ───────────── カスタム作成 ───────────── -->
+  <section id="custom">
+    <h2><span class="badge">2</span>カスタム作成タブ</h2>
+    <p>1記事ずつ手動で設定して生成する。<strong>細かい指示が必要な記事・1本だけ丁寧に仕込む場合に使う。</strong></p>
+
+    <h3>Step 1 — 基本情報</h3>
+    <table>
+      <tr><th>項目</th><th>説明</th></tr>
+      <tr><td>サイト設定</td><td>事前登録したサイトを選択するとHTMLパーツ・テンプレートが自動で読み込まれる。サイト名を入力する手間が省ける</td></tr>
+      <tr><td>ジャンル ※必須</td><td>AGA治療 / クマ取り など。商品DBの検索キーになる。DBにこのジャンルが登録されていればクロールをスキップできる</td></tr>
+      <tr><td>メインKW ※必須</td><td>記事の主要KW。前半H2に必ず含まれる</td></tr>
+      <tr><td>サブKW ※必須</td><td>カンマ区切りで複数入力。各サブKWが最低1つのH2に含まれる</td></tr>
+      <tr><td>関連KW</td><td>SERPsの上位ページ一覧からそのままコピペ。構成の網羅性チェックに使われる</td></tr>
+      <tr><td>記事タイプ</td><td>地域 / 比較 / 商標 / ノウハウ から選択。タイプによって構成ロジックが変わる</td></tr>
+    </table>
+
+    <h3>Step 2 — 追加指示（任意）</h3>
+    <p>禁止事項・特記事項を自由記述する。生成される本文全体に反映される。</p>
+    <pre><code>例：オンライン診療のクリニックは含めない
+例：処方上限量の記載は避ける
+例：2院目以降のH3見出しにクリニック名を入れない</code></pre>
+
+    <h3>Step 3 — 掲載院リスト</h3>
+    <p>「＋ 院を追加」ボタンで院を追加する。各院に以下を入力する。</p>
+    <table>
+      <tr><th>項目</th><th>説明</th></tr>
+      <tr><td>クリニック名</td><td>記事内で使用する表記（○○院まで含めて入力）</td></tr>
+      <tr><td>ドメイン（公式URL）</td><td>情報収集のクロール対象URL。商品DBに登録済みの場合はクロールをスキップする</td></tr>
+      <tr><td>最訴求プラン</td><td>LPが共有される場合はLPから取得。LPがない場合は公式HPで最も訴求されているプランを確認して入力する。1位院の強調表示に使われる</td></tr>
+      <tr><td>強み・比較優位性</td><td>任意。クロールで取れない情報（限定キャンペーン等）を補足する</td></tr>
+    </table>
+
+    <h3>Step 4 — 競合URL（任意）</h3>
+    <p>競合の上位記事URLを入力すると、構成・KWの参考に使われる。競合と差別化した構成にしたい場合や、上位記事の傾向を把握して網羅性を上げたい場合に入力する。</p>
+
+    <h3>Step 5 — スプシ書き込み先タブ</h3>
+    <p>生成後にスプシへ書き込むタブを選択する。「（書き込まない）」のままにすると書き込みはスキップされる。</p>
+    <div class="warn"><strong>デフォルトは「書き込まない」</strong>スプシに書き出したい場合は、地域・比較・商標・ノウハウのいずれかを選択してから実行すること。</div>
+
+    <h3>Step 6 — 生成モードの選択と実行</h3>
+    <p>地域・比較・商標記事は実行前に生成モードを選択できる。ノウハウ記事は常に一括生成。</p>
+    <table>
+      <tr><th>モード</th><th>動作</th></tr>
+      <tr><td>一括生成</td><td>構成確認なしで本文まで一気に生成する</td></tr>
+      <tr><td>見出し確認あり</td><td>まず構成（H2一覧）を出力し、確認・修正後に本文を生成する。構成を調整したい場合に選ぶ</td></tr>
+    </table>
+    <div class="flow">
+      <div class="flow-step">競合分析</div><div class="flow-arrow">→</div>
+      <div class="flow-step">クリニック情報収集</div><div class="flow-arrow">→</div>
+      <div class="flow-step">構成生成</div><div class="flow-arrow">→</div>
+      <div class="flow-step">本文生成（H2単位）</div><div class="flow-arrow">→</div>
+      <div class="flow-step">スプシ書き込み</div>
+    </div>
+    <div class="note"><strong>本文の出力とファクトチェックについて</strong>本文はH2単位で順次出力される。各H2ブロックに「🔄 このH2を再生成」ボタンが表示されるため、気になる箇所だけ個別に再生成できる。<br>商品データベースに登録済みのクリニックは情報が自動参照されるため、虚偽情報は基本的に入らない。DBに情報がない項目は「<strong>要確認</strong>」と出力されるので、公開前に必ず確認・修正すること。</div>
+
+    <h3>生成後にできること</h3>
+    <table>
+      <tr><th>機能</th><th>説明</th></tr>
+      <tr>
+        <td>掲載院一覧コピー</td>
+        <td>ランキングブロックタブにそのまま貼り付けられる形式で院リストをコピーできる</td>
+      </tr>
+      <tr>
+        <td>画像生成</td>
+        <td>スラッグ（ファイル名の接頭辞）を入力して実行。サイト設定の画像テンプレートを使用する。生成画像はGoogle Driveへ自動アップロードされる</td>
+      </tr>
+      <tr>
+        <td>履歴から復元</td>
+        <td>過去の生成結果をキャッシュから再表示・再書き込みできる。画像だけ追加生成したい場合もここから復元する</td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- ───────────── ランキングブロック ───────────── -->
+  <section id="ranking">
+    <h2><span class="badge">3</span>ランキングブロックタブ</h2>
+    <p>比較記事の「おすすめクリニック紹介」ブロックを院ごとに個別生成する。<strong>記事本文はそのままでクリニック紹介部分だけ作り直したい場合に特に便利。</strong></p>
+
+    <h3>操作手順</h3>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>サイト選択</strong>HTMLパーツ・テンプレート・リンク設定を読み込む</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><strong>テンプレート選択</strong>事前登録したクリニックブロックテンプレートを選択</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><strong>KW入力</strong>メインKW・サブKWを入力。クリニック紹介文のトーンに反映される</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>選び方コンテンツを貼り付け</strong>記事内の評価軸テキストを貼り付ける。紹介文との整合性チェックに使われる</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body">
+        <strong>掲載案件リストを入力</strong>
+        カスタム作成の「掲載院一覧コピー」をそのまま貼り付けられる
+        <pre><code>1. クリニック名A::https://example.com
+2. クリニック名B::https://example.com
+3. クリニック名C::https://example.com</code></pre>
+      </div></div>
+      <div class="step"><div class="step-num">6</div><div class="step-body">
+        <strong>各院の詳細を入力</strong>
+        院ごとに展開して公式URL・LP掲載プラン・料金データ・補足メモを入力。<br>
+        <strong>アフィリリンクについて：</strong>サイト設定でリンク設定が登録されている場合、商品DBに登録済みのアフィリファイル名から「アフィリURL候補」が自動表示される。確認して使う。
+      </div></div>
+      <div class="step"><div class="step-num">7</div><div class="step-body"><strong>「🚀 ランキングブロックを生成」を押す</strong></div></div>
+    </div>
+
+    <h3>生成仕様</h3>
+    <table>
+      <tr><th>順位</th><th>紹介文の量</th><th>リンク・CTA</th></tr>
+      <tr><td>1〜3位</td><td>4段落</td><td>CTAボタン付き・見出しリンクあり</td></tr>
+      <tr><td>4位以下</td><td>2〜3段落</td><td>リンク・CTAなし</td></tr>
+    </table>
+    <div class="tip"><strong>フォーマット統一</strong>1院目のHTMLを参照して後続院に渡すため、テーブル構造・小見出し位置・項目名が全院で自動的に揃う。</div>
+  </section>
+
+  <!-- ───────────── 品質チェック ───────────── -->
+  <section id="quality">
+    <h2><span class="badge">4</span>品質チェックタブ</h2>
+    <p>生成したHTMLが社内のライティングルールを守れているかを自動でチェックする。<strong>記事を入稿する前に必ず実行する。</strong></p>
+
+    <h3>操作手順</h3>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>記事タイプを選択</strong><span class="chip">地域</span><span class="chip">比較</span><span class="chip">商標</span><span class="chip">ノウハウ</span></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        <strong>チェックモードを選択</strong><br>
+        <span class="chip">標準チェック</span> フォーマット・ライティングルール遵守確認<br>
+        <span class="chip">読者視点チェック</span> 「1位を選ばない理由」を読者目線で探す
+      </div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><strong>メインKW・サブKWを入力</strong></div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>HTMLを貼り付けて「チェック実行」</strong></div></div>
+    </div>
+
+    <h3>主なチェック項目</h3>
+    <ul class="plain">
+      <li>こそあど言葉・記事内参照表現（上記・下記・先ほど・〜で紹介します 等）</li>
+      <li>「」（隅付き括弧）の使用</li>
+      <li>H2・H3の「徹底」「（）」「｜」使用</li>
+      <li>メインKW・サブKWのH2含有、H3のKW/共起語含有</li>
+      <li>テーブル・箇条書き前の小見出し設置</li>
+      <li>SoWhat（行動後の状態変化）の有無</li>
+      <li>1段落1トピック・3文以内</li>
+      <li>記事タイプ別の追加基準（地域固有情報・比較軸の明示等）</li>
+    </ul>
+  </section>
+
+  <!-- ───────────── 執筆チャット ───────────── -->
+  <section id="writing-chat">
+    <h2><span class="badge">5</span>執筆チャットタブ</h2>
+    <p>社内のライティングルールが前提として入った状態でAIと文章を壁打ちできる。<strong>生成した文章を直したい時・AIっぽい表現を自然にしたい時・医療広告的にOKか確認したい時に使う。</strong></p>
+
+    <div class="note"><strong>品質チェックとの違い</strong>品質チェックタブは「ルール違反の検出」、執筆チャットは「修正・書き直し・相談」。品質チェックで問題箇所が見つかった後、その修正を執筆チャットで依頼するという使い方が典型的。</div>
+
+    <h3>使い方</h3>
+    <p>チャット欄に「<strong>直したい意図 ＋ 文章</strong>」をセットで入力して送信する。文章だけ貼るのはNG。</p>
+    <pre><code>例）「AIっぽい表現を直してほしい」＋〔修正したい文章〕
+例）「PREP構造になってるか確認して」＋〔本文段落〕
+例）「この表現、医療広告的にOK？」＋〔チェックしたい文章〕</code></pre>
+
+    <h3>組み込まれているルール</h3>
+    <ul class="plain">
+      <li>禁止ワード（こそあど・記事参照表現・橋渡し文・推量形）</li>
+      <li>PREP構造・SoWhat</li>
+      <li>医療広告NG表現</li>
+      <li>AIっぽい抽象語・誇張表現・断定回避の修正基準</li>
+    </ul>
+    <p>HTMLタグが含まれている場合、タグ構造を保持したまま修正結果を返す。</p>
+
+    <h3>リセット</h3>
+    <p>サイドバーの「🗑️ 執筆チャットをリセット」ボタンで会話履歴を消去できる。別の記事の添削を始める際はリセットしてから使う。</p>
+  </section>
+
+  <hr>
+
+  <!-- ───────────── 商品DB ───────────── -->
+  <section id="db">
+    <h2><span class="badge">6</span>商品データベースタブ</h2>
+    <p>記事に繰り返し登場するクリニック情報を事前に蓄積しておくことで、生成時のクロールをスキップして処理を高速化する。<strong>同ジャンルで量産する場合は必ずここに登録してから始める。</strong></p>
+
+    <h3>登録方法</h3>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>ジャンルを選択または新規作成</strong>例：AGA治療、クマ取り</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        <strong>クリニック名・ドメイン・アフィリファイル名を入力</strong><br>
+        アフィリファイル名（任意）はアフィリリンクの <code>*.html</code> 部分。サイト設定のリンク設定に登録したベースURLと組み合わせてアフィリURLを自動構築する。<br>
+        例：ベースURL <code>https://example.jp/web/</code> ＋ アフィリファイル名 <code>diet-dmm.html</code> → <code>https://example.jp/web/diet-dmm.html</code>
+      </div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">
+        <strong>情報取得方法を選択</strong><br>
+        <span class="chip">クロールして情報取得&amp;保存</span> 公式サイトから自動取得（推奨）<br>
+        <span class="chip">手動で情報を入力して保存</span> クロールできない場合に直接入力
+      </div></div>
+    </div>
+
+    <h3>その他の操作</h3>
+    <table>
+      <tr><th>操作</th><th>説明</th></tr>
+      <tr><td>一括クロール</td><td>既存DBの全件を選択して一括再クロール。クリニック情報が古くなった時に使う</td></tr>
+      <tr><td>個別再クロール</td><td>院ごとに「🔄 再クロール」ボタンで最新情報に更新</td></tr>
+      <tr><td>削除</td><td>「🗑️ このジャンルから削除」でジャンル単位で削除</td></tr>
+    </table>
+
+    <div class="note"><strong>ジャンル名のマッチングについて</strong>記事生成時にジャンル名で完全一致検索 → 一致しない場合は全ジャンルを横断検索するフォールバックが働く。ジャンル名が多少異なっていてもヒットする。</div>
+  </section>
+
+  <!-- ───────────── サイト設定 ───────────── -->
+  <section id="settings">
+    <h2><span class="badge">7</span>サイト設定タブ</h2>
+    <p>サイトごとにHTMLパーツ・画像テンプレート・クリニックブロックテンプレートを登録する。<strong>登録しておくことで、そのサイトのデザインに合ったHTMLが自動的に出力されるようになる。</strong></p>
+
+    <h3>1. 画像テンプレート</h3>
+    <p>記事内に自動生成する画像のデザインパターンを登録する。複数テンプレートがあると、H2/H3ごとに最適なものをAIが自動選択する。</p>
+    <table>
+      <tr><th>追加方法</th><th>説明</th></tr>
+      <tr>
+        <td>mdファイルをアップ</td>
+        <td>画像生成プロンプトを記述した .md ファイルをアップすると自動登録される。複数ファイル同時アップ可</td>
+      </tr>
+      <tr>
+        <td>見本画像からカスタム生成（手動）</td>
+        <td>見本画像を複数枚アップロード。1枚ずつClaude Visionで解析し、変数付きのプロンプトテンプレートを自動生成する</td>
+      </tr>
+    </table>
+    <ul class="plain">
+      <li>追加保存 / 上書き保存をモード切替できる</li>
+      <li>登録済みテンプレートは一覧表示・個別削除が可能</li>
+    </ul>
+
+    <h3>2. HTMLパーツ</h3>
+    <p>サイトのパーツ置き場HTML（.html）をアップロードすると、パーツ一覧を自動取り込みする。取り込み後に各パーツのHTMLパターンを直接編集できる。</p>
+    <table>
+      <tr><th>パーツの主な用途</th><th>反映先</th></tr>
+      <tr><td>H2・H3見出し、小見出し</td><td>生成本文のHTML出力</td></tr>
+      <tr><td>マーカー、太文字</td><td>生成本文のHTML出力</td></tr>
+      <tr><td>CTAボタン</td><td>ランキングブロック（上位3院）</td></tr>
+    </table>
+    <div class="warn"><strong>注意</strong>HTMLパターンが未設定（空欄）のコンポーネントは自動的に除外される。登録後は必ずHTMLパターンが入力されていることを確認すること。</div>
+
+    <h3>4. リンク設定</h3>
+    <p>アフィリリンク・外部リンクのルールを登録する。登録するとランキングブロック生成時のプロンプトに自動反映される。</p>
+    <table>
+      <tr><th>設定項目</th><th>内容</th></tr>
+      <tr><td>アフィリリンク ベースURL</td><td>アフィリリンクのドメイン＋パス部分。例：<code>https://example.jp/obesity/web/</code></td></tr>
+      <tr><td>記事の場所コード</td><td>リンクを設置する記事内の位置をコンマ区切りで指定。<code>top</code>=冒頭 / <code>rank</code>=ランキング / <code>matome</code>=まとめ / <code>ryokin</code>=料金 / <code>kuchikomi</code>=口コミ</td></tr>
+      <tr><td>形式コード</td><td>リンク形式をコンマ区切りで指定。<code>bt</code>=ボタン / <code>bn</code>=バナー / <code>txt</code>=テキスト</td></tr>
+    </table>
+    <div class="note"><strong>パラメータの形式</strong>生成されるアフィリリンクのパラメータは <code>?{スラッグ}_{場所}_{形式}</code> 形式で自動構築される。例：<code>?diet-dmmrybelsus_rank_bn</code><br>リンクには固定で <code>target="_blank" rel="nofollow noopener noreferrer"</code> が付く。</div>
+
+    <h3>3. クリニックブロックテンプレート</h3>
+    <p>ランキングブロックタブで使うテンプレートをサイトごとに複数登録できる。</p>
+    <table>
+      <tr><th>設定項目</th><th>内容</th></tr>
+      <tr><td>見出し形式</td><td>H3（コメントなし）/ H3（コメント付き）/ 小見出しパーツ / 専用パーツ</td></tr>
+      <tr><td>コンポーネント構成</td><td>表示する要素と順序（スペック画像・紹介文・料金テーブル・口コミ・マップ・基本情報・CTAボタン）</td></tr>
+      <tr><td>基本情報テーブルの項目</td><td>住所・最寄り駅・診療時間・休診日・支払方法など</td></tr>
+      <tr><td>料金テーブルHTML</td><td>変数付きのHTMLテンプレートを複数パターン登録可能</td></tr>
+      <tr><td>上位3院のリンク配置</td><td>見出し・スペック画像・CTAボタンのどこにリンクを入れるか</td></tr>
+    </table>
+  </section>
+
+  <hr>
+
+  <!-- ───────────── 画像生成タブ ───────────── -->
+  <section id="image-gen">
+    <h2><span class="badge">8</span>画像生成タブ</h2>
+    <p>記事HTMLを貼り付けてH2ごとに画像を一括生成し、Google Driveへアップロードする。<strong>記事公開前に画像をまとめて作りたいときに使う。</strong>カスタム作成タブ内の画像生成と異なり、記事生成なしで画像だけ独立して実行できる。</p>
+
+    <h3>操作手順</h3>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>サイトを選択</strong>画像テンプレートが登録済みのサイトを選ぶ（未登録のサイトは実行不可）</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><strong>スラッグを入力</strong>ファイル名の接頭辞になる。例：<code>aga-treatment-tokyo</code></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><strong>記事HTMLを貼り付ける</strong>生成済みの記事HTML全文を貼り付ける。H2見出しを自動抽出してH2ごとに最適なプロンプトを選択する</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>「🖼️ 画像を生成」を押す</strong>プロンプト生成 → 画像生成の順で処理される</div></div>
+    </div>
+
+    <h3>生成後にできること</h3>
+    <table>
+      <tr><th>操作</th><th>説明</th></tr>
+      <tr><td>画像プレビュー</td><td>H2ごとに生成画像をプレビュー表示。ファイル名・altテキスト付き</td></tr>
+      <tr><td>プロンプト編集</td><td>各画像のプロンプトをその場で編集できる</td></tr>
+      <tr><td>修正指示＋再生成</td><td>「修正指示」欄にテキストで指示を入れて「🔄 再生成」で個別に作り直せる<br>例：「もっと明るいトーンで」「比較表レイアウトで」</td></tr>
+      <tr><td>個別アップロード</td><td>「⬆️ アップロード」で1枚ずつDriveにアップ</td></tr>
+      <tr><td>全件アップロード</td><td>「⬆️ 全件アップロード」で全画像を一括Driveアップ</td></tr>
+    </table>
+
+    <div class="note"><strong>カスタム作成タブ内の画像生成との違い</strong>カスタム作成タブの画像生成は記事生成直後に同一セッションで実行するもの。この画像生成タブは「すでに記事HTMLがある・別のタイミングで画像だけ作る」場面で使う。機能は同等。</div>
+  </section>
+
+  <hr>
+
+  <!-- ───────────── ヘルプ ───────────── -->
+  <section id="help">
+    <h2><span class="badge">–</span>ヘルプ（❓セクション）</h2>
+    <p>サイドバーで「❓ ヘルプ」を選択すると、このツールに詳しいAIアシスタントとチャットで会話できる。操作方法がわからない・入力内容が正しいか確認したい場合はここで聞く。</p>
+  </section>
+
+  <!-- ───────────── よくある操作パターン ───────────── -->
+  <section id="patterns">
+    <h2><span class="badge">–</span>よくある操作パターン</h2>
+
+    <h3>はじめて新規サイトを立ち上げる</h3>
+    <div class="flow">
+      <div class="flow-step">商品DBにクリニック登録</div><div class="flow-arrow">→</div>
+      <div class="flow-step">サイト設定を登録</div><div class="flow-arrow">→</div>
+      <div class="flow-step">カスタム or 一括作成</div>
+    </div>
+
+    <h3>新規記事を1本作る</h3>
+    <div class="flow">
+      <div class="flow-step">カスタム作成</div><div class="flow-arrow">→</div>
+      <div class="flow-step">入力・実行</div><div class="flow-arrow">→</div>
+      <div class="flow-step">品質チェック</div><div class="flow-arrow">→</div>
+      <div class="flow-step">執筆チャットで修正</div>
+    </div>
+
+    <h3>同ジャンルで量産する</h3>
+    <div class="flow">
+      <div class="flow-step">商品DBにクリニック登録</div><div class="flow-arrow">→</div>
+      <div class="flow-step">スプシにKWリストを入力</div><div class="flow-arrow">→</div>
+      <div class="flow-step">一括作成で流す</div>
+    </div>
+
+    <h3>クリニック紹介ブロックだけ作り直す</h3>
+    <div class="flow">
+      <div class="flow-step">ランキングブロック</div><div class="flow-arrow">→</div>
+      <div class="flow-step">院リストを貼り付け</div><div class="flow-arrow">→</div>
+      <div class="flow-step">各院の詳細入力</div><div class="flow-arrow">→</div>
+      <div class="flow-step">生成</div>
+    </div>
+
+    <h3>画像だけ生成する（既存記事・別タイミング）</h3>
+    <div class="flow">
+      <div class="flow-step">🖼️ 画像生成タブを開く</div><div class="flow-arrow">→</div>
+      <div class="flow-step">サイト・スラッグ・記事HTMLを入力</div><div class="flow-arrow">→</div>
+      <div class="flow-step">生成・確認・Drive アップロード</div>
+    </div>
+
+    <h3>AIっぽい文章を直す</h3>
+    <div class="flow">
+      <div class="flow-step">品質チェックで問題箇所を特定</div><div class="flow-arrow">→</div>
+      <div class="flow-step">執筆チャットに「意図＋文章」を投げる</div><div class="flow-arrow">→</div>
+      <div class="flow-step">修正案を受け取る</div>
+    </div>
+
+  </section>
+
+</main>
+</div>
+
+</body>
+</html>
