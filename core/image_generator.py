@@ -135,8 +135,8 @@ def _measure_text_block(text: str, font, max_width: int, line_spacing: float = 1
     return int(line_h * line_spacing * len(lines))
 
 
-def _draw_text_block(draw, text: str, font, x_center: int, y: int, color: tuple, max_width: int, line_spacing: float = 1.4) -> int:
-    """テキストを折り返して中央揃えで描画。描画後の y 座標を返す。"""
+def _draw_text_block(draw, text: str, font, x_ref: int, y: int, color: tuple, max_width: int, line_spacing: float = 1.4, align: str = "center") -> int:
+    """テキストを折り返して描画。align='center'は中央揃え、'left'は左揃え。"""
     if not text or not font:
         return y
     lines: list[str] = []
@@ -160,12 +160,15 @@ def _draw_text_block(draw, text: str, font, x_center: int, y: int, color: tuple,
     except Exception:
         line_h = 20
     for line in lines:
-        try:
-            lw = font.getlength(line)
-        except Exception:
-            bbox = font.getbbox(line)
-            lw = bbox[2] - bbox[0]
-        draw.text((x_center - int(lw) // 2, y), line, font=font, fill=color)
+        if align == "center":
+            try:
+                lw = font.getlength(line)
+            except Exception:
+                bbox = font.getbbox(line)
+                lw = bbox[2] - bbox[0]
+            draw.text((x_ref - int(lw) // 2, y), line, font=font, fill=color)
+        else:
+            draw.text((x_ref, y), line, font=font, fill=color)
         y += int(line_h * line_spacing)
     return y
 
@@ -238,13 +241,17 @@ def _gen_illust_small(illust_prompt: str, gemini_api_key: str) -> Optional[bytes
         return None
 
 
-def _draw_text_in_zone(draw, text: str, font, zone_x: int, zone_y: int, zone_w: int, zone_h: int, color: tuple) -> None:
-    """テキストをゾーン内で垂直中央揃えして描画する。"""
+def _draw_text_in_zone(draw, text: str, font, zone_x: int, zone_y: int, zone_w: int, zone_h: int, color: tuple, align: str = "center") -> None:
+    """テキストをゾーン内で垂直中央揃えして描画する。align='left'で左揃え。"""
     if not text or not font:
         return
-    measured_h = _measure_text_block(text, font, zone_w - 16)
+    pad = 8
+    measured_h = _measure_text_block(text, font, zone_w - pad * 2)
     start_y = zone_y + max(0, (zone_h - measured_h) // 2)
-    _draw_text_block(draw, text, font, zone_x + zone_w // 2, start_y, color, zone_w - 16)
+    if align == "center":
+        _draw_text_block(draw, text, font, zone_x + zone_w // 2, start_y, color, zone_w - pad * 2, align="center")
+    else:
+        _draw_text_block(draw, text, font, zone_x + pad, start_y, color, zone_w - pad * 2, align="left")
 
 
 def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str, **_) -> None:
@@ -313,11 +320,11 @@ def _render_vertical_list(img, draw, items: list, y0: int, W: int, H: int, PAD: 
         if header and h_font:
             _draw_text_in_zone(draw, header, h_font, ix0, iy, header_w, row_h, hdr_col)
 
-        # 説明文: 縦中央揃え
+        # 説明文: 縦中央揃え・左揃え
         body = str(item.get("body", ""))
         b_font = _get_pil_font(20, bold=False)
         if body and b_font:
-            _draw_text_in_zone(draw, body, b_font, body_x0, iy, body_w, row_h, body_col)
+            _draw_text_in_zone(draw, body, b_font, body_x0, iy, body_w, row_h, body_col, align="left")
 
         # イラスト: 縦中央配置
         if gemini_api_key and item.get("illustration_prompt"):
@@ -429,7 +436,10 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
         _render_generic_cards(img, draw, items, content_y, W, H, PAD, R, gemini_api_key)
 
     buf = _io_module.BytesIO()
-    img.save(buf, format="PNG")
+    try:
+        img.save(buf, format="WEBP", quality=90)
+    except Exception:
+        img.save(buf, format="PNG")
     return buf.getvalue()
 
 
