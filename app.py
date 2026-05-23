@@ -526,6 +526,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                                     gemini_api_key=gemini_key,
                                     openai_api_key=openai_key,
                                     provider=image_provider,
+                                    claude_api_key=claude_key,
                                 )
                                 if _bulk_bytes:
                                     drive_uploader.upload_image(
@@ -1752,6 +1753,7 @@ with _safe_tab(tab_custom):
                                     openai_api_key=openai_key,
                                     provider=image_provider,
                                     model_override=None,
+                                    claude_api_key=claude_key,
                                 )
                                 if img_bytes:
                                     drive_url = drive_uploader.upload_image(
@@ -3175,6 +3177,7 @@ if tab_image_gen:
                                 gemini_api_key=gemini_key,
                                 openai_api_key=openai_key,
                                 provider=image_provider,
+                                claude_api_key=claude_key,
                             )
                             _ig_new_images.append(_ig_nb)
                         except Exception as _ig_ge:
@@ -3232,6 +3235,7 @@ if tab_image_gen:
                                     gemini_api_key=gemini_key,
                                     openai_api_key=openai_key,
                                     provider=image_provider,
+                                    claude_api_key=claude_key,
                                 )
                                 st.session_state["ig_images"][_ig_di] = _ig_rb
                                 st.rerun()

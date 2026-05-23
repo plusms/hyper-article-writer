@@ -1,6 +1,9 @@
 import base64
+import io as _io_module
 import json
+import os as _os_module
 import re
+import tempfile as _tempfile_module
 import requests
 import anthropic
 from typing import Optional
@@ -18,6 +21,12 @@ try:
 except ImportError:
     _OPENAI_AVAILABLE = False
 
+try:
+    from PIL import Image as _PIL_Image, ImageDraw as _PIL_Draw, ImageFont as _PIL_Font
+    _PIL_AVAILABLE = True
+except ImportError:
+    _PIL_AVAILABLE = False
+
 _IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"   # backward compat alias
 _IMAGE_MODEL_GEMINI = "gemini-2.0-flash-preview-image-generation"
 _IMAGE_MODEL_GEMINI_PRESETS = [
@@ -30,6 +39,313 @@ _IMAGE_MODEL_GEMINI_PRESETS = [
 # API から自動検出した結果をキャッシュ（再起動まで保持）
 _detected_image_models: list = []
 _IMAGE_MODEL_DALLE  = "dall-e-3"
+
+# ── PIL ヘルパー ────────────────────────────────────────────────
+_FONT_CACHE: dict = {}
+
+
+def _find_or_download_font(bold: bool = True) -> Optional[str]:
+    """日本語対応フォントパスを返す。なければダウンロードしてキャッシュする。"""
+    weight = "Bold" if bold else "Regular"
+    candidates = [
+        f"/usr/share/fonts/opentype/noto/NotoSansCJKjp-{weight}.otf",
+        f"/usr/share/fonts/opentype/noto/NotoSansCJK-{weight}.ttc",
+        f"/usr/share/fonts/truetype/noto/NotoSansCJKjp-{weight}.otf",
+        "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+        "C:\\Windows\\Fonts\\meiryo.ttc",
+        "C:\\Windows\\Fonts\\msgothic.ttc",
+        "/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc",
+    ]
+    for p in candidates:
+        if _os_module.path.exists(p):
+            return p
+    cache_dir = _os_module.path.join(_tempfile_module.gettempdir(), "cv_article_fonts")
+    _os_module.makedirs(cache_dir, exist_ok=True)
+    local = _os_module.path.join(cache_dir, f"NotoSansJP-{weight}.otf")
+    if not _os_module.path.exists(local):
+        url = f"https://github.com/notofonts/noto-cjk/raw/main/Sans/SubsetOTF/JP/NotoSansJP-{weight}.otf"
+        try:
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            with open(local, "wb") as fh:
+                fh.write(resp.content)
+        except Exception:
+            return None
+    return local if _os_module.path.exists(local) else None
+
+
+def _get_pil_font(size: int, bold: bool = True):
+    """PIL ImageFont を返す（キャッシュ付き）。フォント取得失敗時は load_default。"""
+    if not _PIL_AVAILABLE:
+        return None
+    key = (size, bold)
+    if key not in _FONT_CACHE:
+        path = _find_or_download_font(bold)
+        try:
+            _FONT_CACHE[key] = _PIL_Font.truetype(path, size) if path else _PIL_Font.load_default()
+        except Exception:
+            _FONT_CACHE[key] = _PIL_Font.load_default()
+    return _FONT_CACHE[key]
+
+
+def _hex_to_rgb(hex_color: str) -> tuple:
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _draw_rounded_rect(draw, xy: tuple, radius: int, fill: tuple) -> None:
+    x0, y0, x1, y1 = xy
+    r = min(radius, (x1 - x0) // 2, (y1 - y0) // 2)
+    draw.rectangle([x0 + r, y0, x1 - r, y1], fill=fill)
+    draw.rectangle([x0, y0 + r, x1, y1 - r], fill=fill)
+    draw.ellipse([x0, y0, x0 + 2 * r, y0 + 2 * r], fill=fill)
+    draw.ellipse([x1 - 2 * r, y0, x1, y0 + 2 * r], fill=fill)
+    draw.ellipse([x0, y1 - 2 * r, x0 + 2 * r, y1], fill=fill)
+    draw.ellipse([x1 - 2 * r, y1 - 2 * r, x1, y1], fill=fill)
+
+
+def _draw_text_block(draw, text: str, font, x_center: int, y: int, color: tuple, max_width: int, line_spacing: float = 1.4) -> int:
+    """テキストを折り返して中央揃えで描画。描画後の y 座標を返す。"""
+    if not text or not font:
+        return y
+    lines: list[str] = []
+    current = ""
+    for ch in str(text):
+        test = current + ch
+        try:
+            w = font.getlength(test)
+        except Exception:
+            bbox = font.getbbox(test)
+            w = bbox[2] - bbox[0]
+        if w > max_width and current:
+            lines.append(current)
+            current = ch
+        else:
+            current = test
+    if current:
+        lines.append(current)
+    try:
+        _, _, _, line_h = font.getbbox("あ")
+    except Exception:
+        line_h = size if hasattr(font, "size") else 20
+    for line in lines:
+        try:
+            lw = font.getlength(line)
+        except Exception:
+            bbox = font.getbbox(line)
+            lw = bbox[2] - bbox[0]
+        draw.text((x_center - int(lw) // 2, y), line, font=font, fill=color)
+        y += int(line_h * line_spacing)
+    return y
+
+
+def _parse_template_to_layout(prompt: str, claude_api_key: str) -> dict:
+    """テンプレートプロンプトをPILレンダリング用JSONに変換する。"""
+    parse_prompt = f"""以下の画像テンプレートプロンプトを解析し、PILでレンダリングするためのJSONのみを出力してください。説明文・コードフェンス不要。
+
+## テンプレートプロンプト
+{prompt}
+
+## 出力JSON形式
+{{
+  "width": 800,
+  "bg_color": "#F1F4FF",
+  "layout": "3col_cards",
+  "title": {{
+    "text": "タイトルテキスト（実際の内容）",
+    "color": "#49589B",
+    "font_size": 32,
+    "bg_color": "#FFFFFF"
+  }},
+  "items": [
+    {{
+      "header": "見出し（ある場合のみ）",
+      "body": "カード本文テキスト（実際の内容）",
+      "illustration_prompt": "flat illustration of ... (English, 10 words max, no text in image)",
+      "card_bg_color": "#FFFFFF",
+      "header_bg_color": "#FFE9E3",
+      "header_color": "#49589B",
+      "body_color": "#49589B"
+    }}
+  ]
+}}
+
+layoutは以下のいずれか：
+- "3col_cards"（横並び3カード）
+- "vertical_list_3"（縦積み3項目）
+- "comparison_table"（比較表）
+- "generic"（その他）
+
+itemsはプロンプト内のカード・行・項目ごとに1エントリ。テキストは実際の内容（変数名ではなく）を入れること。"""
+
+    client = anthropic.Anthropic(api_key=claude_api_key)
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=2048,
+        messages=[{"role": "user", "content": parse_prompt}],
+    )
+    text = msg.content[0].text.strip()
+    if "```json" in text:
+        text = text.split("```json")[1].split("```")[0].strip()
+    elif "```" in text:
+        text = text.split("```")[1].split("```")[0].strip()
+    return json.loads(text)
+
+
+def _gen_illust_small(illust_prompt: str, gemini_api_key: str) -> Optional[bytes]:
+    """Gemini でイラスト小画像を生成して返す。失敗時は None。"""
+    if not gemini_api_key or not _GENAI_AVAILABLE:
+        return None
+    clean = (
+        "Simple flat design illustration, white background, absolutely no text no letters no numbers no symbols. "
+        f"{illust_prompt} "
+        "Square format, clean minimal icon style, dark blue #49589B as main color."
+    )
+    try:
+        return _generate_image_bytes_gemini(clean, gemini_api_key)
+    except Exception:
+        return None
+
+
+def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str) -> None:
+    n = max(len(items), 1)
+    GAP = 10
+    card_w = (W - PAD * 2 - GAP * (n - 1)) // n
+    card_h = H - y0 - PAD
+    illust_h = min(90, card_h // 3)
+
+    for i, item in enumerate(items[:n]):
+        x0 = PAD + i * (card_w + GAP)
+        x1 = x0 + card_w
+        card_bg = _hex_to_rgb(item.get("card_bg_color", "#FFFFFF"))
+        body_col = _hex_to_rgb(item.get("body_color", "#49589B"))
+
+        _draw_rounded_rect(draw, (x0, y0, x1, y0 + card_h), R, card_bg)
+
+        body = str(item.get("body", ""))
+        b_font = _get_pil_font(24, bold=True)
+        if body and b_font:
+            _draw_text_block(draw, body, b_font, (x0 + x1) // 2, y0 + 12, body_col, card_w - 16)
+
+        if gemini_api_key and item.get("illustration_prompt"):
+            illust_bytes = _gen_illust_small(item["illustration_prompt"], gemini_api_key)
+            if illust_bytes:
+                try:
+                    illust_img = _PIL_Image.open(_io_module.BytesIO(illust_bytes)).convert("RGB")
+                    illust_img = illust_img.resize((illust_h, illust_h), _PIL_Image.LANCZOS)
+                    paste_x = (x0 + x1) // 2 - illust_h // 2
+                    paste_y = y0 + card_h - illust_h - 8
+                    img.paste(illust_img, (paste_x, paste_y))
+                except Exception:
+                    pass
+
+
+def _render_vertical_list(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str) -> None:
+    n = max(len(items), 1)
+    GAP = 10
+    item_h = (H - y0 - PAD - GAP * (n - 1)) // n
+    illust_w = min(70, item_h - 16)
+    header_w = (W - PAD * 2) // 3
+
+    for i, item in enumerate(items[:n]):
+        iy = y0 + i * (item_h + GAP)
+        ix0, ix1 = PAD, W - PAD
+        card_bg = _hex_to_rgb(item.get("card_bg_color", "#FFFFFF"))
+        hdr_bg = _hex_to_rgb(item.get("header_bg_color", "#FFE9E3"))
+        hdr_col = _hex_to_rgb(item.get("header_color", "#49589B"))
+        body_col = _hex_to_rgb(item.get("body_color", "#333333"))
+
+        _draw_rounded_rect(draw, (ix0, iy, ix1, iy + item_h), R, card_bg)
+        _draw_rounded_rect(draw, (ix0, iy, ix0 + header_w, iy + item_h), R, hdr_bg)
+
+        header = str(item.get("header") or item.get("body", ""))
+        h_font = _get_pil_font(22, bold=True)
+        if header and h_font:
+            _draw_text_block(draw, header, h_font, ix0 + header_w // 2, iy + 10, hdr_col, header_w - 12)
+
+        body = str(item.get("body", ""))
+        b_font = _get_pil_font(20, bold=False)
+        if body and b_font:
+            body_x_start = ix0 + header_w + illust_w + 12
+            _draw_text_block(draw, body, b_font, (body_x_start + ix1) // 2, iy + 10, body_col, ix1 - body_x_start - 8)
+
+        if gemini_api_key and item.get("illustration_prompt"):
+            illust_bytes = _gen_illust_small(item["illustration_prompt"], gemini_api_key)
+            if illust_bytes:
+                try:
+                    illust_img = _PIL_Image.open(_io_module.BytesIO(illust_bytes)).convert("RGB")
+                    illust_img = illust_img.resize((illust_w, illust_w), _PIL_Image.LANCZOS)
+                    img.paste(illust_img, (ix0 + header_w + 6, iy + (item_h - illust_w) // 2))
+                except Exception:
+                    pass
+
+
+def _render_generic_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str) -> None:
+    n = max(len(items), 1)
+    GAP = 10
+    item_h = min(90, (H - y0 - PAD - GAP * (n - 1)) // n)
+
+    for i, item in enumerate(items[:n]):
+        iy = y0 + i * (item_h + GAP)
+        card_bg = _hex_to_rgb(item.get("card_bg_color", "#FFFFFF"))
+        body_col = _hex_to_rgb(item.get("body_color", "#49589B"))
+        _draw_rounded_rect(draw, (PAD, iy, W - PAD, iy + item_h), R, card_bg)
+        body = str(item.get("body", ""))
+        font = _get_pil_font(24, bold=True)
+        if body and font:
+            _draw_text_block(draw, body, font, W // 2, iy + 10, body_col, W - PAD * 4)
+
+
+def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "") -> Optional[bytes]:
+    """PIL でテキストをレンダリングし、Gemini でイラスト部分のみ生成するハイブリッド方式。"""
+    if not _PIL_AVAILABLE:
+        return None
+
+    layout = _parse_template_to_layout(prompt, claude_api_key)
+
+    W = int(layout.get("width", 800))
+    bg_rgb = _hex_to_rgb(layout.get("bg_color", "#F1F4FF"))
+    layout_type = layout.get("layout", "generic")
+    items = layout.get("items", [])
+    n = len(items)
+
+    if layout_type == "3col_cards":
+        H = 460
+    elif layout_type == "vertical_list_3":
+        H = max(460, 80 + n * 150 + 20)
+    else:
+        H = max(460, 80 + n * 100 + 20)
+
+    img = _PIL_Image.new("RGB", (W, H), bg_rgb)
+    draw = _PIL_Draw.Draw(img)
+
+    PAD, R = 16, 8
+
+    # タイトルバー
+    t = layout.get("title", {})
+    t_text = str(t.get("text", ""))
+    t_color = _hex_to_rgb(t.get("color", "#49589B"))
+    t_bg = _hex_to_rgb(t.get("bg_color", "#FFFFFF"))
+    t_font = _get_pil_font(min(int(t.get("font_size", 30)), 36), bold=True)
+    title_h = 54
+    _draw_rounded_rect(draw, (PAD, PAD, W - PAD, PAD + title_h), 10, t_bg)
+    if t_text and t_font:
+        _draw_text_block(draw, t_text, t_font, W // 2, PAD + 10, t_color, W - PAD * 4)
+
+    content_y = PAD + title_h + 14
+
+    if layout_type == "3col_cards":
+        _render_3col_cards(img, draw, items, content_y, W, H, PAD, R, gemini_api_key)
+    elif layout_type == "vertical_list_3":
+        _render_vertical_list(img, draw, items, content_y, W, H, PAD, R, gemini_api_key)
+    else:
+        _render_generic_cards(img, draw, items, content_y, W, H, PAD, R, gemini_api_key)
+
+    buf = _io_module.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 # ── 組み込みレイアウトテンプレート ───────────────────────────────
@@ -451,8 +767,18 @@ def generate_image_bytes(
     openai_api_key: str = "",
     provider: str = "gemini",
     model_override: Optional[str] = None,
+    claude_api_key: str = "",
 ) -> Optional[bytes]:
-    """指定プロバイダーで画像を生成して bytes を返す。"""
+    """指定プロバイダーで画像を生成して bytes を返す。
+    claude_api_key が渡された場合は PIL ハイブリッド方式を優先する（日本語文字化け対策）。
+    """
+    if claude_api_key and _PIL_AVAILABLE:
+        try:
+            result = generate_image_pil(prompt, claude_api_key, gemini_api_key)
+            if result:
+                return result
+        except Exception:
+            pass  # PIL 失敗時は Gemini/DALL-E にフォールバック
     if provider == "dalle":
         return _generate_image_bytes_dalle(prompt, openai_api_key)
     return _generate_image_bytes_gemini(prompt, gemini_api_key, model_override)
