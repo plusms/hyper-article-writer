@@ -88,6 +88,19 @@ def _get_pil_font(size: int, bold: bool = True):
     return _FONT_CACHE[key]
 
 
+def _get_line_height(font, fallback: int = 20) -> int:
+    """フォントの行高さを返す。getbbox の bottom だけでなく bottom-top を使う。"""
+    try:
+        return font.size  # FreeTypeFont は .size を持つ
+    except AttributeError:
+        pass
+    try:
+        bb = font.getbbox("あ")
+        return max(bb[3] - bb[1], fallback)
+    except Exception:
+        return fallback
+
+
 def _hex_to_rgb(hex_color: str) -> tuple:
     h = hex_color.lstrip("#")
     if len(h) == 3:
@@ -128,10 +141,7 @@ def _measure_text_block(text: str, font, max_width: int, line_spacing: float = 1
         lines.append(current)
     if not lines:
         return 0
-    try:
-        _, _, _, line_h = font.getbbox("あ")
-    except Exception:
-        line_h = 20
+    line_h = _get_line_height(font)
     return int(line_h * line_spacing * len(lines))
 
 
@@ -155,10 +165,7 @@ def _draw_text_block(draw, text: str, font, x_ref: int, y: int, color: tuple, ma
             current = test
     if current:
         lines.append(current)
-    try:
-        _, _, _, line_h = font.getbbox("あ")
-    except Exception:
-        line_h = 20
+    line_h = _get_line_height(font)
     for line in lines:
         if align == "center":
             try:
