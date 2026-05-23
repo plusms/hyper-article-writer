@@ -267,7 +267,7 @@ def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int
     card_w = (W - PAD * 2 - GAP * (n - 1)) // n
     card_h = H - y0 - PAD
     IPAD = 12
-    ILLUST_SIZE = 90
+    ILLUST_SIZE = min(int(card_w * 0.55), 160)  # カード幅の55%、最大160px
     # カード下部にイラストエリア固定、残りをテキストゾーンに
     text_zone_h = card_h - IPAD * 2 - ILLUST_SIZE - 10  # 10 = text-illust gap
     text_zone_h = max(text_zone_h, 40)
@@ -384,12 +384,12 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
     # ── パス1: コンテンツ計測 → H 算出 ──────────────────────────
     # _render_3col_cards と同じ定数
     _CARD_IPAD = 12
-    _ILLUST_SIZE = 90
     _TEXT_ILLUST_GAP = 10
 
     if layout_type == "3col_cards":
         n_c = max(n, 1)
         card_w = (W - PAD * 2 - GAP * (n_c - 1)) // n_c
+        _ILLUST_SIZE = min(int(card_w * 0.55), 160)  # レンダラーと同じ式
         b_font = _get_pil_font(24, bold=True)
         measured = max(
             (_measure_text_block(str(it.get("body", "")), b_font, card_w - _CARD_IPAD * 2) for it in items),
