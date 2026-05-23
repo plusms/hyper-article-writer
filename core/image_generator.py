@@ -101,6 +101,37 @@ def _get_line_height(font, fallback: int = 20) -> int:
         return fallback
 
 
+def _wrap_text(text: str, font, max_width: int) -> list:
+    """テキストを max_width で折り返してラインリストを返す。"""
+    lines, current = [], ""
+    for ch in str(text):
+        test = current + ch
+        try:
+            w = font.getlength(test)
+        except Exception:
+            bbox = font.getbbox(test)
+            w = bbox[2] - bbox[0]
+        if w > max_width and current:
+            lines.append(current)
+            current = ch
+        else:
+            current = test
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _fit_font_size(text: str, max_width: int, max_lines: int, bold: bool = True,
+                   min_size: int = 12, max_size: int = 36) -> tuple:
+    """max_lines 行以内に収まる最大フォントサイズとフォントを返す。"""
+    for size in range(max_size, min_size - 1, -1):
+        font = _get_pil_font(size, bold=bold)
+        if font and len(_wrap_text(text, font, max_width)) <= max_lines:
+            return size, font
+    font = _get_pil_font(min_size, bold=bold)
+    return min_size, font
+
+
 def _hex_to_rgb(hex_color: str) -> tuple:
     h = hex_color.lstrip("#")
     if len(h) == 3:
@@ -120,51 +151,17 @@ def _draw_rounded_rect(draw, xy: tuple, radius: int, fill: tuple) -> None:
 
 
 def _measure_text_block(text: str, font, max_width: int, line_spacing: float = 1.4) -> int:
-    """テキストを折り返した時の合計高さを返す（描画なし）。"""
     if not text or not font:
         return 0
-    lines = []
-    current = ""
-    for ch in str(text):
-        test = current + ch
-        try:
-            w = font.getlength(test)
-        except Exception:
-            bbox = font.getbbox(test)
-            w = bbox[2] - bbox[0]
-        if w > max_width and current:
-            lines.append(current)
-            current = ch
-        else:
-            current = test
-    if current:
-        lines.append(current)
-    if not lines:
-        return 0
-    line_h = _get_line_height(font)
-    return int(line_h * line_spacing * len(lines))
+    lines = _wrap_text(text, font, max_width)
+    return int(_get_line_height(font) * line_spacing * len(lines)) if lines else 0
 
 
-def _draw_text_block(draw, text: str, font, x_ref: int, y: int, color: tuple, max_width: int, line_spacing: float = 1.4, align: str = "center") -> int:
-    """テキストを折り返して描画。align='center'は中央揃え、'left'は左揃え。"""
+def _draw_text_block(draw, text: str, font, x_ref: int, y: int, color: tuple,
+                     max_width: int, line_spacing: float = 1.4, align: str = "center") -> int:
     if not text or not font:
         return y
-    lines: list[str] = []
-    current = ""
-    for ch in str(text):
-        test = current + ch
-        try:
-            w = font.getlength(test)
-        except Exception:
-            bbox = font.getbbox(test)
-            w = bbox[2] - bbox[0]
-        if w > max_width and current:
-            lines.append(current)
-            current = ch
-        else:
-            current = test
-    if current:
-        lines.append(current)
+    lines = _wrap_text(text, font, max_width)
     line_h = _get_line_height(font)
     for line in lines:
         if align == "center":
@@ -248,6 +245,78 @@ def _gen_illust_small(illust_prompt: str, gemini_api_key: str) -> Optional[bytes
         return None
 
 
+def _compute_3col_card_params(items: list, card_w: int) -> dict:
+    """3col_cards 用レイアウトパラメータをコンテンツから算出。H計算・レンダラー共用。"""
+    IPAD, GAP_ti = 12, 10
+    text_max_w = card_w - IPAD * 2
+    # 最長テキストが3行以内に収まる最大フォントサイズを全カードで統一
+    common_size = 36
+    for item in items:
+        body = str(item.get("body", ""))
+        if body:
+            size, _ = _fit_font_size(body, text_max_w, max_lines=3, bold=True, max_size=36)
+            common_size = min(common_size, size)
+    common_size = max(common_size, 12)
+    b_font = _get_pil_font(common_size, bold=True)
+    measured = max(
+        (_measure_text_block(str(it.get("body", "")), b_font, text_max_w) for it in items),
+        default=40,
+    )
+    text_area_h = max(measured, 40) + 8
+    # イラスト = テキストゾーンの1.4倍。カード幅60%・160px 上限、80px 下限
+    illust_size = max(min(int(text_area_h * 1.4), int(card_w * 0.6), 160), 80)
+    card_h = IPAD + text_area_h + GAP_ti + illust_size + IPAD
+    return {
+        "b_font": b_font, "font_size": common_size,
+        "text_area_h": text_area_h, "illust_size": illust_size,
+        "card_h": card_h, "IPAD": IPAD, "GAP_ti": GAP_ti,
+    }
+
+
+def _compute_vlist_row_params(items: list, W: int, PAD: int = 16) -> dict:
+    """vertical_list 用レイアウトパラメータをコンテンツから算出。H計算・レンダラー共用。"""
+    IPAD = 12
+    content_w = W - PAD * 2
+    header_w = content_w // 3
+    illust_w = max(min(int(content_w * 0.12), 100), 60)
+    body_x0 = PAD + header_w + illust_w + 16
+    body_w = max(W - PAD - body_x0 - IPAD, 80)
+    # ヘッダーフォント（2行以内）
+    h_common = 28
+    for item in items:
+        hdr = str(item.get("header") or item.get("body", ""))
+        if hdr:
+            size, _ = _fit_font_size(hdr, header_w - 16, max_lines=2, bold=True, max_size=28)
+            h_common = min(h_common, size)
+    h_common = max(h_common, 12)
+    h_font = _get_pil_font(h_common, bold=True)
+    # ボディフォント（3行以内、ヘッダー以下）
+    b_common = min(h_common, 22)
+    for item in items:
+        body = str(item.get("body", ""))
+        if body:
+            size, _ = _fit_font_size(body, body_w - 16, max_lines=3, bold=False, max_size=b_common)
+            b_common = min(b_common, size)
+    b_common = max(b_common, 12)
+    b_font = _get_pil_font(b_common, bold=False)
+    # 行高さ = 全アイテム中の最大値で統一
+    max_row_h = 80
+    for item in items:
+        hdr = str(item.get("header") or item.get("body", ""))
+        body = str(item.get("body", ""))
+        hdr_h = _measure_text_block(hdr, h_font, header_w - 16)
+        body_h = _measure_text_block(body, b_font, body_w - 16)
+        row_h = max(IPAD * 2 + hdr_h, IPAD * 2 + illust_w, IPAD * 2 + body_h, 80)
+        max_row_h = max(max_row_h, row_h)
+    return {
+        "h_font": h_font, "h_size": h_common,
+        "b_font": b_font, "b_size": b_common,
+        "header_w": header_w, "illust_w": illust_w,
+        "body_x0": body_x0, "body_w": body_w,
+        "row_h": max_row_h, "IPAD": IPAD,
+    }
+
+
 def _draw_text_in_zone(draw, text: str, font, zone_x: int, zone_y: int, zone_w: int, zone_h: int, color: tuple, align: str = "center") -> None:
     """テキストをゾーン内で垂直中央揃えして描画する。align='left'で左揃え。"""
     if not text or not font:
@@ -261,34 +330,27 @@ def _draw_text_in_zone(draw, text: str, font, zone_x: int, zone_y: int, zone_w: 
         _draw_text_block(draw, text, font, zone_x + pad, start_y, color, zone_w - pad * 2, align="left")
 
 
-def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str, illust_size: int = 0, **_) -> None:
+def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str, **_) -> None:
     n = max(len(items), 1)
     GAP = 10
     card_w = (W - PAD * 2 - GAP * (n - 1)) // n
+    p = _compute_3col_card_params(items, card_w)
+    IPAD, GAP_ti = p["IPAD"], p["GAP_ti"]
+    b_font = p["b_font"]
+    text_zone_h = p["text_area_h"]
+    ILLUST_SIZE = p["illust_size"]
     card_h = H - y0 - PAD
-    IPAD = 12
-    # pass1から渡された値を優先。なければcard_wから算出（fallback）
-    ILLUST_SIZE = illust_size if illust_size > 0 else max(min(int(card_w * 0.55), 160), 80)
-    # カード下部にイラストエリア固定、残りをテキストゾーンに
-    text_zone_h = card_h - IPAD * 2 - ILLUST_SIZE - 10  # 10 = text-illust gap
-    text_zone_h = max(text_zone_h, 40)
 
     for i, item in enumerate(items[:n]):
         cx0 = PAD + i * (card_w + GAP)
         cx1 = cx0 + card_w
         card_bg = _hex_to_rgb(item.get("card_bg_color", "#FFFFFF"))
         body_col = _hex_to_rgb(item.get("body_color", "#49589B"))
-
         _draw_rounded_rect(draw, (cx0, y0, cx1, y0 + card_h), R, card_bg)
-
-        # テキスト: ゾーン内垂直中央揃え
         body = str(item.get("body", ""))
-        b_font = _get_pil_font(24, bold=True)
         if body and b_font:
             _draw_text_in_zone(draw, body, b_font, cx0, y0 + IPAD, card_w, text_zone_h, body_col)
-
-        # イラスト: テキストゾーン直下に固定
-        illust_y = y0 + IPAD + text_zone_h + 10
+        illust_y = y0 + IPAD + text_zone_h + GAP_ti
         if gemini_api_key and item.get("illustration_prompt"):
             illust_bytes = _gen_illust_small(item["illustration_prompt"], gemini_api_key)
             if illust_bytes:
@@ -304,12 +366,15 @@ def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int
 def _render_vertical_list(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str) -> None:
     n = max(len(items), 1)
     GAP = 10
+    p = _compute_vlist_row_params(items, W, PAD)
     row_h = (H - y0 - PAD - GAP * (n - 1)) // n
-    IPAD = 12
-    header_w = (W - PAD * 2) // 3
-    ILLUST_W = min(80, row_h - IPAD * 2)
-    body_x0 = PAD + header_w + ILLUST_W + 16
-    body_w = W - PAD - body_x0 - IPAD
+    IPAD = p["IPAD"]
+    header_w = p["header_w"]
+    ILLUST_W = min(p["illust_w"], row_h - IPAD * 2)
+    body_x0 = p["body_x0"]
+    body_w = p["body_w"]
+    h_font = p["h_font"]
+    b_font = p["b_font"]
 
     for i, item in enumerate(items[:n]):
         iy = y0 + i * (row_h + GAP)
@@ -318,23 +383,14 @@ def _render_vertical_list(img, draw, items: list, y0: int, W: int, H: int, PAD: 
         hdr_bg = _hex_to_rgb(item.get("header_bg_color", "#FFE9E3"))
         hdr_col = _hex_to_rgb(item.get("header_color", "#49589B"))
         body_col = _hex_to_rgb(item.get("body_color", "#333333"))
-
         _draw_rounded_rect(draw, (ix0, iy, ix1, iy + row_h), R, card_bg)
         _draw_rounded_rect(draw, (ix0, iy, ix0 + header_w, iy + row_h), R, hdr_bg)
-
-        # 見出し: 縦中央揃え
         header = str(item.get("header") or item.get("body", ""))
-        h_font = _get_pil_font(22, bold=True)
         if header and h_font:
             _draw_text_in_zone(draw, header, h_font, ix0, iy, header_w, row_h, hdr_col)
-
-        # 説明文: 縦中央揃え・左揃え
         body = str(item.get("body", ""))
-        b_font = _get_pil_font(20, bold=False)
         if body and b_font:
             _draw_text_in_zone(draw, body, b_font, body_x0, iy, body_w, row_h, body_col, align="left")
-
-        # イラスト: 縦中央配置
         if gemini_api_key and item.get("illustration_prompt"):
             illust_bytes = _gen_illust_small(item["illustration_prompt"], gemini_api_key)
             if illust_bytes:
@@ -352,6 +408,16 @@ def _render_generic_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: 
     GAP = 10
     item_h = (H - y0 - PAD - GAP * (n - 1)) // n
     IPAD = 12
+    content_w = W - PAD * 2 - IPAD * 2
+    # フォントサイズをコンテンツから算出
+    common_size = 28
+    for item in items:
+        body = str(item.get("body", ""))
+        if body:
+            size, _ = _fit_font_size(body, content_w, max_lines=3, bold=True, max_size=28)
+            common_size = min(common_size, size)
+    common_size = max(common_size, 12)
+    font = _get_pil_font(common_size, bold=True)
 
     for i, item in enumerate(items[:n]):
         iy = y0 + i * (item_h + GAP)
@@ -359,7 +425,6 @@ def _render_generic_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: 
         body_col = _hex_to_rgb(item.get("body_color", "#49589B"))
         _draw_rounded_rect(draw, (PAD, iy, W - PAD, iy + item_h), R, card_bg)
         body = str(item.get("body", ""))
-        font = _get_pil_font(24, bold=True)
         if body and font:
             _draw_text_in_zone(draw, body, font, PAD, iy, W - PAD * 2, item_h, body_col)
 
@@ -378,48 +443,43 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
     n = len(items)
 
     PAD, R = 16, 8
-    TITLE_H = 54
-    content_y = PAD + TITLE_H + 14  # 84px
     GAP = 10
+    # タイトル高さをタイトルテキスト量から算出
+    t_raw = layout.get("title", {})
+    t_text_raw = str(t_raw.get("text", ""))
+    if t_text_raw:
+        _, t_font_tmp = _fit_font_size(t_text_raw, W - PAD * 4, max_lines=2, bold=True, max_size=36)
+        t_measured_h = _measure_text_block(t_text_raw, t_font_tmp, W - PAD * 4)
+    else:
+        t_measured_h = 30
+    TITLE_H = max(t_measured_h + 20, 44)
+    content_y = PAD + TITLE_H + 14
 
-    # ── パス1: コンテンツ計測 → H 算出 ──────────────────────────
-    # _render_3col_cards と同じ定数
-    _CARD_IPAD = 12
-    _TEXT_ILLUST_GAP = 10
-
+    # ── パス1: コンテンツ計測 → H 算出（レンダラーと同一ロジック）──
     if layout_type == "3col_cards":
         n_c = max(n, 1)
         card_w = (W - PAD * 2 - GAP * (n_c - 1)) // n_c
-        b_font = _get_pil_font(24, bold=True)
-        measured = max(
-            (_measure_text_block(str(it.get("body", "")), b_font, card_w - _CARD_IPAD * 2) for it in items),
-            default=40,
-        )
-        text_area_h = max(measured, 40) + 8
-        # テキスト量に比例したイラストサイズ（テキストゾーンの1.4倍、カード幅60%以内、80〜160px）
-        _ILLUST_SIZE = max(min(int(text_area_h * 1.4), int(card_w * 0.6), 160), 80)
-        card_h = _CARD_IPAD + text_area_h + _TEXT_ILLUST_GAP + _ILLUST_SIZE + _CARD_IPAD
-        H = content_y + card_h + PAD
+        cp = _compute_3col_card_params(items, card_w)
+        H = content_y + cp["card_h"] + PAD
 
     elif layout_type == "vertical_list_3":
-        header_w = (W - PAD * 2) // 3
-        illust_w = 70
-        body_avail_w = max(W - PAD * 2 - header_w - illust_w - 24, 80)
-        hf = _get_pil_font(22, bold=True)
-        bf = _get_pil_font(20, bold=False)
-        max_row_h = 100
-        for item in items:
-            hdr_h = _measure_text_block(str(item.get("header") or item.get("body", "")), hf, header_w - 12)
-            body_h = _measure_text_block(str(item.get("body", "")), bf, body_avail_w)
-            row_h = max(_CARD_IPAD * 2 + hdr_h, _CARD_IPAD * 2 + illust_w, _CARD_IPAD * 2 + body_h, 100)
-            max_row_h = max(max_row_h, row_h)
-        H = content_y + n * max_row_h + GAP * max(n - 1, 0) + PAD
+        vp = _compute_vlist_row_params(items, W, PAD)
+        H = content_y + n * vp["row_h"] + GAP * max(n - 1, 0) + PAD
 
     else:
-        item_font = _get_pil_font(24, bold=True)
-        max_item_h = 80
+        IPAD = 12
+        content_w = W - PAD * 2 - IPAD * 2
+        common_size = 28
         for item in items:
-            ih = max(_measure_text_block(str(item.get("body", "")), item_font, W - PAD * 4), 40) + _CARD_IPAD * 2
+            body = str(item.get("body", ""))
+            if body:
+                size, _ = _fit_font_size(body, content_w, max_lines=3, bold=True, max_size=28)
+                common_size = min(common_size, size)
+        common_size = max(common_size, 12)
+        g_font = _get_pil_font(common_size, bold=True)
+        max_item_h = 60
+        for item in items:
+            ih = max(_measure_text_block(str(item.get("body", "")), g_font, content_w), 40) + IPAD * 2
             max_item_h = max(max_item_h, ih)
         H = content_y + n * max_item_h + GAP * max(n - 1, 0) + PAD
 
@@ -427,15 +487,19 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
     img = _PIL_Image.new("RGB", (W, H), bg_rgb)
     draw = _PIL_Draw.Draw(img)
 
-    # タイトルバー
+    # タイトルバー（高さはコンテンツから算出済み）
     t = layout.get("title", {})
     t_text = str(t.get("text", ""))
     t_color = _hex_to_rgb(t.get("color", "#49589B"))
     t_bg = _hex_to_rgb(t.get("bg_color", "#FFFFFF"))
-    t_font = _get_pil_font(min(int(t.get("font_size", 30)), 36), bold=True)
+    if t_text:
+        _, t_font = _fit_font_size(t_text, W - PAD * 4, max_lines=2, bold=True, max_size=36)
+    else:
+        t_font = _get_pil_font(30, bold=True)
     _draw_rounded_rect(draw, (PAD, PAD, W - PAD, PAD + TITLE_H), 10, t_bg)
     if t_text and t_font:
-        _draw_text_block(draw, t_text, t_font, W // 2, PAD + 10, t_color, W - PAD * 4)
+        t_start_y = PAD + max((TITLE_H - _measure_text_block(t_text, t_font, W - PAD * 4)) // 2, 8)
+        _draw_text_block(draw, t_text, t_font, W // 2, t_start_y, t_color, W - PAD * 4)
 
     if layout_type == "3col_cards":
         _render_3col_cards(img, draw, items, content_y, W, H, PAD, R, gemini_api_key, illust_size=_ILLUST_SIZE)
