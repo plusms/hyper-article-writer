@@ -20,11 +20,15 @@ except ImportError:
 
 _IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"   # backward compat alias
 _IMAGE_MODEL_GEMINI = "gemini-2.0-flash-preview-image-generation"
-_IMAGE_MODEL_GEMINI_FALLBACKS = [
+_IMAGE_MODEL_GEMINI_PRESETS = [
+    "gemini-2.0-flash-preview-image-generation",
     "gemini-2.0-flash-exp-image-generation",
     "gemini-2.0-flash-exp",
     "gemini-2.0-flash",
 ]
+
+# API から自動検出した結果をキャッシュ（再起動まで保持）
+_detected_image_models: list = []
 _IMAGE_MODEL_DALLE  = "dall-e-3"
 
 
@@ -342,6 +346,28 @@ def generate_tone_from_image(
     return msg.content[0].text.strip()
 
 
+# ── 利用可能な画像生成モデルを API から自動検出 ──────────────
+def _auto_detect_image_models(client) -> list:
+    """models.list() で画像生成対応モデルを検出して返す。検出失敗時は空リスト。"""
+    try:
+        found = []
+        for m in client.models.list():
+            name = str(getattr(m, "name", "")).replace("models/", "")
+            methods = [str(x) for x in getattr(m, "supported_generation_methods", [])]
+            is_image = (
+                "image" in name.lower()
+                or "generateImages" in methods
+                or any("image" in x.lower() for x in methods)
+            )
+            if is_image:
+                found.append(name)
+        # 画像生成専用モデルを先頭に
+        found.sort(key=lambda n: (0 if "image" in n.lower() else 1, n))
+        return found if found else _IMAGE_MODEL_GEMINI_PRESETS
+    except Exception:
+        return _IMAGE_MODEL_GEMINI_PRESETS
+
+
 # ── 画像生成（Gemini）────────────────────────────────────────
 def _generate_image_bytes_gemini(
     prompt: str,
@@ -350,14 +376,17 @@ def _generate_image_bytes_gemini(
 ) -> Optional[bytes]:
     if not _GENAI_AVAILABLE:
         raise ImportError("google-genai がインストールされていません")
-    primary = model_override or _IMAGE_MODEL_GEMINI
-    models_to_try = [primary]
-    if not model_override:
-        for fb in _IMAGE_MODEL_GEMINI_FALLBACKS:
-            if fb != primary:
-                models_to_try.append(fb)
-
+    global _detected_image_models
     client = _google_genai.Client(api_key=gemini_api_key)
+
+    if model_override:
+        models_to_try = [model_override]
+    else:
+        # キャッシュがなければ API から利用可能モデルを自動検出
+        if not _detected_image_models:
+            _detected_image_models = _auto_detect_image_models(client)
+        models_to_try = _detected_image_models or _IMAGE_MODEL_GEMINI_PRESETS
+
     last_err = None
     for try_model in models_to_try:
         try:

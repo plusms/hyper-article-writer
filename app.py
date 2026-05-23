@@ -1700,12 +1700,7 @@ with _safe_tab(tab_custom):
         st.caption(f"対象記事: {_t2_last['main_kw']}")
         _img_site_config = _t2_last["site_config"]
 
-        st.caption(f"画像生成モデル（デフォルト）: `{image_generator._IMAGE_MODEL}`")
-        _img_model_override = st.text_input(
-            "モデルを変更する場合は入力（空欄でデフォルト使用）",
-            key="t2_model_override",
-            placeholder="例: gemini-2.0-flash-preview-image-generation",
-        )
+        _img_model_override = None  # 自動検出に任せる
 
         _img_slug = st.text_input(
             "スラッグ（ファイル名の接頭辞・英数字ハイフンのみ）",
@@ -1756,7 +1751,7 @@ with _safe_tab(tab_custom):
                                     gemini_api_key=gemini_key,
                                     openai_api_key=openai_key,
                                     provider=image_provider,
-                                    model_override=_img_model_override.strip() or None,
+                                    model_override=None,
                                 )
                                 if img_bytes:
                                     drive_url = drive_uploader.upload_image(
