@@ -21,9 +21,9 @@ except ImportError:
 _IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"   # backward compat alias
 _IMAGE_MODEL_GEMINI = "gemini-2.0-flash-preview-image-generation"
 _IMAGE_MODEL_GEMINI_FALLBACKS = [
+    "gemini-2.0-flash-exp-image-generation",
     "gemini-2.0-flash-exp",
-    "imagen-3.0-generate-001",
-    "imagen-3.0-fast-generate-001",
+    "gemini-2.0-flash",
 ]
 _IMAGE_MODEL_DALLE  = "dall-e-3"
 
@@ -369,17 +369,21 @@ def _generate_image_bytes_gemini(
                 )
                 if response.generated_images:
                     return response.generated_images[0].image.image_bytes
-                return None
+                last_err = ValueError(f"{try_model}: 画像が生成されませんでした")
+                continue
             else:
                 response = client.models.generate_content(
                     model=try_model,
                     contents=prompt,
-                    config=_google_genai_types.GenerateContentConfig(response_modalities=["IMAGE"]),
+                    config=_google_genai_types.GenerateContentConfig(
+                        response_modalities=["TEXT", "IMAGE"]
+                    ),
                 )
                 for part in response.candidates[0].content.parts:
                     if part.inline_data and part.inline_data.data:
                         return part.inline_data.data
-            return None
+                last_err = ValueError(f"{try_model}: レスポンスに画像が含まれていませんでした")
+                continue
         except Exception as e:
             err_str = str(e).lower()
             if "404" in err_str or "not found" in err_str or "not_found" in err_str:

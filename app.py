@@ -1704,7 +1704,7 @@ with _safe_tab(tab_custom):
         _img_model_override = st.text_input(
             "モデルを変更する場合は入力（空欄でデフォルト使用）",
             key="t2_model_override",
-            placeholder="例: imagen-3.0-generate-001",
+            placeholder="例: gemini-2.0-flash-preview-image-generation",
         )
 
         _img_slug = st.text_input(
