@@ -327,11 +327,21 @@ H2:
     raw = _llm_call(claude_api_key, prompt, gemini_api_key=gemini_api_key, provider=article_provider)
 
     title, meta, todo_list = "", "", ""
-    for line in raw.split("\n"):
-        if line.startswith("タイトル案①:"):
-            title = line.replace("タイトル案①:", "").strip()
-        if line.startswith("メタディスクリプション:"):
-            meta = line.replace("メタディスクリプション:", "").strip()
+    lines = raw.split("\n")
+    for idx, line in enumerate(lines):
+        # 半角・全角コロン両対応、markdown太字・先頭スペースも許容
+        clean = re.sub(r"\*+", "", line).strip()
+        if re.match(r"タイトル案[①1][：:]", clean):
+            val = re.split(r"[：:]", clean, maxsplit=1)[1].strip()
+            # タイトルが次行に来るケース（ラベル行が空値の場合）
+            if not val and idx + 1 < len(lines):
+                val = lines[idx + 1].strip()
+            title = val
+        elif re.match(r"メタディスクリプション[：:]", clean):
+            val = re.split(r"[：:]", clean, maxsplit=1)[1].strip()
+            if not val and idx + 1 < len(lines):
+                val = lines[idx + 1].strip()
+            meta = val
 
     if "[要確認]リスト:" in raw:
         todo_list = raw.split("[要確認]リスト:", 1)[1].strip()
