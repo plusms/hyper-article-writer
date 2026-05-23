@@ -129,7 +129,7 @@ def _draw_text_block(draw, text: str, font, x_center: int, y: int, color: tuple,
     try:
         _, _, _, line_h = font.getbbox("あ")
     except Exception:
-        line_h = size if hasattr(font, "size") else 20
+        line_h = 20
     for line in lines:
         try:
             lw = font.getlength(line)
@@ -209,12 +209,21 @@ def _gen_illust_small(illust_prompt: str, gemini_api_key: str) -> Optional[bytes
         return None
 
 
+_3COL_CARD_IPAD = 14      # カード内上下左右の余白
+_3COL_TEXT_H = 100        # テキストエリアの高さ予算（24px × 1.4spacing × 3行）
+_3COL_ILLUST_SIZE = 90    # イラスト正方形サイズ
+_3COL_TEXT_ILLUST_GAP = 12  # テキスト下端〜イラスト上端の隙間
+
+
 def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str) -> None:
     n = max(len(items), 1)
     GAP = 10
     card_w = (W - PAD * 2 - GAP * (n - 1)) // n
     card_h = H - y0 - PAD
-    illust_h = min(90, card_h // 3)
+
+    # テキスト・イラストの y 座標は固定（card_h に依存しない）
+    text_y = y0 + _3COL_CARD_IPAD
+    illust_y = y0 + _3COL_CARD_IPAD + _3COL_TEXT_H + _3COL_TEXT_ILLUST_GAP
 
     for i, item in enumerate(items[:n]):
         x0 = PAD + i * (card_w + GAP)
@@ -227,17 +236,16 @@ def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int
         body = str(item.get("body", ""))
         b_font = _get_pil_font(24, bold=True)
         if body and b_font:
-            _draw_text_block(draw, body, b_font, (x0 + x1) // 2, y0 + 12, body_col, card_w - 16)
+            _draw_text_block(draw, body, b_font, (x0 + x1) // 2, text_y, body_col, card_w - _3COL_CARD_IPAD * 2)
 
         if gemini_api_key and item.get("illustration_prompt"):
             illust_bytes = _gen_illust_small(item["illustration_prompt"], gemini_api_key)
             if illust_bytes:
                 try:
                     illust_img = _PIL_Image.open(_io_module.BytesIO(illust_bytes)).convert("RGB")
-                    illust_img = illust_img.resize((illust_h, illust_h), _PIL_Image.LANCZOS)
-                    paste_x = (x0 + x1) // 2 - illust_h // 2
-                    paste_y = y0 + card_h - illust_h - 8
-                    img.paste(illust_img, (paste_x, paste_y))
+                    illust_img = illust_img.resize((_3COL_ILLUST_SIZE, _3COL_ILLUST_SIZE), _PIL_Image.LANCZOS)
+                    paste_x = (x0 + x1) // 2 - _3COL_ILLUST_SIZE // 2
+                    img.paste(illust_img, (paste_x, illust_y))
                 except Exception:
                     pass
 
@@ -311,17 +319,20 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
     items = layout.get("items", [])
     n = len(items)
 
+    PAD, R = 16, 8
+    TITLE_H = 54
+    content_y = PAD + TITLE_H + 14  # 84px
+
     if layout_type == "3col_cards":
-        H = 460
+        _card_h = _3COL_CARD_IPAD + _3COL_TEXT_H + _3COL_TEXT_ILLUST_GAP + _3COL_ILLUST_SIZE + _3COL_CARD_IPAD
+        H = content_y + _card_h + PAD  # 84 + 230 + 16 = 330
     elif layout_type == "vertical_list_3":
-        H = max(460, 80 + n * 150 + 20)
+        H = max(460, content_y + n * 150 + PAD)
     else:
-        H = max(460, 80 + n * 100 + 20)
+        H = max(400, content_y + n * 100 + PAD)
 
     img = _PIL_Image.new("RGB", (W, H), bg_rgb)
     draw = _PIL_Draw.Draw(img)
-
-    PAD, R = 16, 8
 
     # タイトルバー
     t = layout.get("title", {})
@@ -329,12 +340,9 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
     t_color = _hex_to_rgb(t.get("color", "#49589B"))
     t_bg = _hex_to_rgb(t.get("bg_color", "#FFFFFF"))
     t_font = _get_pil_font(min(int(t.get("font_size", 30)), 36), bold=True)
-    title_h = 54
-    _draw_rounded_rect(draw, (PAD, PAD, W - PAD, PAD + title_h), 10, t_bg)
+    _draw_rounded_rect(draw, (PAD, PAD, W - PAD, PAD + TITLE_H), 10, t_bg)
     if t_text and t_font:
         _draw_text_block(draw, t_text, t_font, W // 2, PAD + 10, t_color, W - PAD * 4)
-
-    content_y = PAD + title_h + 14
 
     if layout_type == "3col_cards":
         _render_3col_cards(img, draw, items, content_y, W, H, PAD, R, gemini_api_key)
