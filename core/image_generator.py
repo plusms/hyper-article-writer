@@ -261,13 +261,14 @@ def _draw_text_in_zone(draw, text: str, font, zone_x: int, zone_y: int, zone_w: 
         _draw_text_block(draw, text, font, zone_x + pad, start_y, color, zone_w - pad * 2, align="left")
 
 
-def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str, **_) -> None:
+def _render_3col_cards(img, draw, items: list, y0: int, W: int, H: int, PAD: int, R: int, gemini_api_key: str, illust_size: int = 0, **_) -> None:
     n = max(len(items), 1)
     GAP = 10
     card_w = (W - PAD * 2 - GAP * (n - 1)) // n
     card_h = H - y0 - PAD
     IPAD = 12
-    ILLUST_SIZE = min(int(card_w * 0.55), 160)  # カード幅の55%、最大160px
+    # pass1から渡された値を優先。なければcard_wから算出（fallback）
+    ILLUST_SIZE = illust_size if illust_size > 0 else max(min(int(card_w * 0.55), 160), 80)
     # カード下部にイラストエリア固定、残りをテキストゾーンに
     text_zone_h = card_h - IPAD * 2 - ILLUST_SIZE - 10  # 10 = text-illust gap
     text_zone_h = max(text_zone_h, 40)
@@ -389,13 +390,14 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
     if layout_type == "3col_cards":
         n_c = max(n, 1)
         card_w = (W - PAD * 2 - GAP * (n_c - 1)) // n_c
-        _ILLUST_SIZE = min(int(card_w * 0.55), 160)  # レンダラーと同じ式
         b_font = _get_pil_font(24, bold=True)
         measured = max(
             (_measure_text_block(str(it.get("body", "")), b_font, card_w - _CARD_IPAD * 2) for it in items),
             default=40,
         )
         text_area_h = max(measured, 40) + 8
+        # テキスト量に比例したイラストサイズ（テキストゾーンの1.4倍、カード幅60%以内、80〜160px）
+        _ILLUST_SIZE = max(min(int(text_area_h * 1.4), int(card_w * 0.6), 160), 80)
         card_h = _CARD_IPAD + text_area_h + _TEXT_ILLUST_GAP + _ILLUST_SIZE + _CARD_IPAD
         H = content_y + card_h + PAD
 
@@ -436,7 +438,7 @@ def generate_image_pil(prompt: str, claude_api_key: str, gemini_api_key: str = "
         _draw_text_block(draw, t_text, t_font, W // 2, PAD + 10, t_color, W - PAD * 4)
 
     if layout_type == "3col_cards":
-        _render_3col_cards(img, draw, items, content_y, W, H, PAD, R, gemini_api_key, text_area_h=text_area_h)
+        _render_3col_cards(img, draw, items, content_y, W, H, PAD, R, gemini_api_key, illust_size=_ILLUST_SIZE)
     elif layout_type == "vertical_list_3":
         _render_vertical_list(img, draw, items, content_y, W, H, PAD, R, gemini_api_key)
     else:
