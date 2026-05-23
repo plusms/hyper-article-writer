@@ -651,7 +651,7 @@ with _safe_tab(tab_batch):
                 rows = read_input_rows_knowhow(ws)
             else:
                 rows = read_input_rows(ws, default_article_type=batch_tab_sel)
-            pending = [r for r in rows if not r.get("status")]
+            pending = [r for r in rows if not r.get("status") or r.get("status") == "処理中"]
             _row_filter = _parse_batch_row_filter(st.session_state.get("batch_row_filter", ""))
             if _row_filter is not None:
                 pending = [r for r in pending if r["row_index"] in _row_filter]
