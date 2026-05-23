@@ -182,7 +182,15 @@ _CSS_MARKERS = ("px", "em", "rem", "pt", "rgba", "rgb(", "Noto", "Sans", "Bold",
 
 
 def _is_css_spec(text: str) -> bool:
-    return any(m in text for m in _CSS_MARKERS) or bool(re.match(r"^#[0-9a-fA-F]{3,6}$", text.strip()))
+    if any(m in text for m in _CSS_MARKERS):
+        return True
+    # テキスト内に #XXXXXX カラーコードが含まれる場合もCSS仕様
+    if re.search(r"#[0-9A-Fa-f]{3,8}\b", text):
+        return True
+    # スタンドアロンの6桁16進数（7BA4CD など # なしカラーコード）
+    if re.search(r"\b[0-9A-Fa-f]{6}\b", text):
+        return True
+    return False
 
 
 def _clean_text(text: str) -> str:
