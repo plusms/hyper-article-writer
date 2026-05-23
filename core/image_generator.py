@@ -346,7 +346,7 @@ def _generate_image_bytes_gemini(
     if not _GENAI_AVAILABLE:
         raise ImportError("google-genai がインストールされていません")
     model = model_override or _IMAGE_MODEL_GEMINI
-    client = _google_genai.Client(api_key=gemini_api_key)
+    client = _google_genai.Client(api_key=gemini_api_key, http_options={"api_version": "v1"})
     if "imagen" in model.lower():
         response = client.models.generate_images(
             model=model,
