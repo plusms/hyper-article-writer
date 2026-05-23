@@ -269,7 +269,7 @@ def _extract_layout_by_regex(prompt: str) -> Optional[dict]:
         seen: set = set()
         for m in re.finditer(r"「([^」]{4,80})」", prompt):
             val = m.group(1).strip()
-            if val not in seen and not _is_css_spec(val):
+            if val not in seen and not _is_css_spec(val) and val != title_text:
                 seen.add(val)
                 items.append({**_item_defaults_card, "body": val})
 
@@ -325,10 +325,19 @@ items: カード・行・項目ごとに1エントリ"""
     result = json.loads(raw)
 
     # ── Step3: 後処理（CSSスペック混入を除去）────────────────────────
+    # タイトルも洗浄
+    if isinstance(result.get("title"), dict) and "text" in result["title"]:
+        result["title"]["text"] = _clean_text(result["title"]["text"])
+
+    # items の body/header を洗浄し、空になったものは除去
+    cleaned_items = []
     for item in result.get("items", []):
         for field in ("body", "header"):
             if field in item:
                 item[field] = _clean_text(item[field])
+        if item.get("body") or item.get("header"):
+            cleaned_items.append(item)
+    result["items"] = cleaned_items
 
     return result
 
