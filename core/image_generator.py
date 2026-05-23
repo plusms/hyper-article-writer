@@ -18,8 +18,13 @@ try:
 except ImportError:
     _OPENAI_AVAILABLE = False
 
-_IMAGE_MODEL = "imagen-3.0-generate-001"   # backward compat alias
-_IMAGE_MODEL_GEMINI = "imagen-3.0-generate-001"
+_IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"   # backward compat alias
+_IMAGE_MODEL_GEMINI = "gemini-2.0-flash-preview-image-generation"
+_IMAGE_MODEL_GEMINI_FALLBACKS = [
+    "gemini-2.0-flash-exp",
+    "imagen-3.0-generate-001",
+    "imagen-3.0-fast-generate-001",
+]
 _IMAGE_MODEL_DALLE  = "dall-e-3"
 
 
@@ -345,27 +350,43 @@ def _generate_image_bytes_gemini(
 ) -> Optional[bytes]:
     if not _GENAI_AVAILABLE:
         raise ImportError("google-genai がインストールされていません")
-    model = model_override or _IMAGE_MODEL_GEMINI
-    client = _google_genai.Client(api_key=gemini_api_key, http_options={"api_version": "v1"})
-    if "imagen" in model.lower():
-        response = client.models.generate_images(
-            model=model,
-            prompt=prompt,
-            config=_google_genai_types.GenerateImagesConfig(number_of_images=1),
-        )
-        if response.generated_images:
-            return response.generated_images[0].image.image_bytes
-        return None
-    else:
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=_google_genai_types.GenerateContentConfig(response_modalities=["IMAGE"]),
-        )
-        for part in response.candidates[0].content.parts:
-            if part.inline_data and part.inline_data.data:
-                return part.inline_data.data
-        return None
+    primary = model_override or _IMAGE_MODEL_GEMINI
+    models_to_try = [primary]
+    if not model_override:
+        for fb in _IMAGE_MODEL_GEMINI_FALLBACKS:
+            if fb != primary:
+                models_to_try.append(fb)
+
+    client = _google_genai.Client(api_key=gemini_api_key)
+    last_err = None
+    for try_model in models_to_try:
+        try:
+            if "imagen" in try_model.lower():
+                response = client.models.generate_images(
+                    model=try_model,
+                    prompt=prompt,
+                    config=_google_genai_types.GenerateImagesConfig(number_of_images=1),
+                )
+                if response.generated_images:
+                    return response.generated_images[0].image.image_bytes
+                return None
+            else:
+                response = client.models.generate_content(
+                    model=try_model,
+                    contents=prompt,
+                    config=_google_genai_types.GenerateContentConfig(response_modalities=["IMAGE"]),
+                )
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data and part.inline_data.data:
+                        return part.inline_data.data
+            return None
+        except Exception as e:
+            err_str = str(e).lower()
+            if "404" in err_str or "not found" in err_str or "not_found" in err_str:
+                last_err = e
+                continue
+            raise
+    raise last_err or RuntimeError("全モデルで画像生成に失敗しました")
 
 
 # ── 画像生成（DALL-E）────────────────────────────────────────
