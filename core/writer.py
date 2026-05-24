@@ -759,3 +759,63 @@ Q〇, Q〇, Q〇 …（問題なしの項目番号を列挙）
 """
 
     return _call_llm(prompt)
+
+
+_HEADING_CHECK_CRITERIA = """【見出し構成チェック基準】
+
+■ 文字数・明確さ
+QH1. H2が30文字以内、H3が25文字以内か（超過している見出しをすべて列挙すること）
+QH2. 見出しを読むだけで内容が具体的にわかるか（「〜について」「〜のこと」「〜に関して」で終わる抽象見出し、何が書かれているか読み取れない見出しはNG）
+
+■ 構造
+QH3. H2の総数が4〜8個の範囲か
+QH4. 各H2にH3が2〜4個あるか（H3が1個以下 or 5個以上のH2を指摘する）
+QH5. まとめ・CTA系H2が末尾（最後か最後から2番目以内）に配置されているか
+QH6. H2同士・H3同士で体言止め／文末が混在していないか
+
+■ KW・意図整合
+QH7. H2同士でテーマが重複していないか（メインKW・サブKWの観点から過不足がないか）
+QH8. 各H3がそのH2の下位トピックとして成立しているか（H2「選び方」の下に「〇〇とは」が来ていない等）
+
+■ 構成設計
+QH9. H2の並び順がユーザーの「知りたい順」になっているか（疑問→根拠→判断→行動の流れ。後半に来るべき結論・比較が冒頭に来ていないか）
+QH10. 記事全体の構成ゴールが明確か（H2の流れを読んで、読者が最終的に何をすべきかが導かれているか。情報提供だけで終わる構成になっていないか）
+"""
+
+
+def heading_structure_check(outline: str, article_type: str, main_kw: str, sub_kw: list, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude") -> str:
+    prompt = f"""以下の見出し構成（{article_type}記事）をチェックしてください。
+
+【メインKW】{main_kw}
+【サブKW】{', '.join(sub_kw)}
+
+{_HEADING_CHECK_CRITERIA}
+
+【見出し構成】
+{outline}
+
+チェック結果を以下の形式で出力してください。全項目ひとつずつ判定し、スキップしないこと。
+
+## 見出し構成チェック結果（{article_type}記事）
+
+### ❌ 要修正
+| 項目番号 | 問題箇所 | 修正指示 |
+|---------|---------|---------|
+| QH〇 | （該当見出し） | （どう直すか） |
+
+### ⚠️ 要確認
+| 項目番号 | 該当箇所 | 確認内容 |
+|---------|---------|---------|
+| QH〇 | （該当見出し） | （何を確認するか） |
+
+### ✅ 問題なし
+QH〇, QH〇 …（問題なしの項目番号を列挙）
+"""
+    if article_provider == "gemini" and gemini_api_key:
+        return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": prompt}])
+    client = anthropic.Anthropic(api_key=claude_api_key)
+    msg = client.messages.create(
+        model="claude-sonnet-4-6", max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text

@@ -18,7 +18,7 @@ from core.researcher import (
     DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE,
 )
 from core.planner import generate_structure
-from core.writer import generate_body, quality_check
+from core.writer import generate_body, quality_check, heading_structure_check
 from core.sheets import (
     read_input_rows, write_output_row, write_full_row, write_status, get_sheet,
     get_settings_sheet, read_defaults, ARTICLE_TABS,
@@ -1836,6 +1836,26 @@ with _safe_tab(tab_qual):
                     meta=check_meta,
                 )
                 st.markdown(result)
+
+    st.divider()
+    st.subheader("見出し構成チェック")
+    st.caption("H2・H3の見出し一覧をテキストで貼り付けてください（メインKW・サブKW・記事タイプは上の入力欄を共用）")
+    heading_outline = st.text_area("見出し構成を貼り付け", height=200, key="chk_outline", placeholder="## 東京でダイエットクリニックを選ぶ3つの基準\n### 保険適用の有無で費用が大きく変わる\n### 処方される薬の種類と副作用リスク\n...")
+    if st.button("見出し構成チェック実行", key="run_heading_check"):
+        if not claude_key:
+            st.error("Claude API Key が未設定です")
+        elif not heading_outline.strip():
+            st.error("見出し構成を貼り付けてください")
+        else:
+            with st.spinner("チェック中..."):
+                heading_result = heading_structure_check(
+                    heading_outline, check_type, check_main_kw,
+                    [k.strip() for k in check_sub_kw.split(",") if k.strip()],
+                    claude_key,
+                    gemini_api_key=gemini_key,
+                    article_provider=article_provider,
+                )
+                st.markdown(heading_result)
 
 
 # ════════════════════════════════════════════════════════
