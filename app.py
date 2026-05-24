@@ -800,6 +800,7 @@ with _safe_tab(tab_custom):
                                 st.session_state[f"tcd_{_rci2}"] = _rc2["domain"]
                                 st.session_state[f"tcr_{_rci2}"] = _rc2["recommended"]
                                 st.session_state[f"tca_{_rci2}"] = _rc2["appeal"]
+                                st.session_state[f"tcm_{_rci2}"] = _rc2.get("metarif_name", "")
                             for _rci in range(5):
                                 st.session_state[f"t_comp_{_rci}"] = _th_comps[_rci] if _rci < len(_th_comps) else ""
                             st.rerun()
@@ -874,6 +875,7 @@ with _safe_tab(tab_custom):
                                     st.session_state[f"tcd_{_sci2}"] = _sc2["domain"]
                                     st.session_state[f"tcr_{_sci2}"] = _sc2["recommended"]
                                     st.session_state[f"tca_{_sci2}"] = _sc2["appeal"]
+                                    st.session_state[f"tcm_{_sci2}"] = _sc2.get("metarif_name", "")
                                 _sr_comps = [u.strip() for u in _sr_data.get("competitor_urls_raw", "").split(",") if u.strip()]
                                 for _sci in range(5):
                                     st.session_state[f"t_comp_{_sci}"] = _sr_comps[_sci] if _sci < len(_sr_comps) else ""
@@ -1076,11 +1078,15 @@ with _safe_tab(tab_custom):
             rec_label = "最訴求プラン *" if is_first else "最訴求プラン（任意）"
             r = st.text_input(rec_label, value=c["recommended"], key=f"tcr_{i}", placeholder="例：セマグルチド0.5mgプラン")
             a = st.text_area("強み・比較優位性（任意）", value=c["appeal"], height=60, key=f"tca_{i}", placeholder="例：他社より処方量が1段階上から始められる")
-            st.session_state.test_clinics[i] = {"name": n, "domain": d, "recommended": r, "appeal": a}
+            if i < 3:
+                m = st.text_input("メタリフ名（任意）", value=c.get("metarif_name", ""), key=f"tcm_{i}", placeholder="例: diet-tcb.html")
+            else:
+                m = ""
+            st.session_state.test_clinics[i] = {"name": n, "domain": d, "recommended": r, "appeal": a, "metarif_name": m}
         for idx in reversed(to_remove):
             st.session_state.test_clinics.pop(idx)
         if st.button("＋ 案件を追加", key="t_add"):
-            st.session_state.test_clinics.append({"name": "", "domain": "", "recommended": "", "appeal": ""})
+            st.session_state.test_clinics.append({"name": "", "domain": "", "recommended": "", "appeal": "", "metarif_name": ""})
             st.rerun()
 
         st.subheader("競合URL")
@@ -1621,9 +1627,15 @@ with _safe_tab(tab_custom):
                 f"{i+1}. {c['name']}::{(c['domain'] if c.get('domain','').startswith('http') else ('https://' + c['domain'].lstrip('/')) if c.get('domain') else '[要確認]')}"
                 for i, c in enumerate(_t2_last["clinics"])
             )
+            _rb_detail_lines = []
+            for _di, _dc in enumerate(_t2_last.get("_inputs", {}).get("clinics", [])[:3]):
+                _rb_detail_lines.append(f"---{_di+1}位: {_dc['name']}---")
+                _rb_detail_lines.append(f"メタリフ名: {_dc.get('metarif_name', '')}")
+                _rb_detail_lines.append(f"LPプラン: {_dc.get('recommended', '')}")
             _rb_export_text = (
                 f"【構成・選び方】\n{_t2_last.get('structure_text','')}\n\n"
                 f"【掲載院一覧】\n{_rb_clinic_lines}"
+                + (f"\n\n【案件詳細】\n" + "\n".join(_rb_detail_lines) if _rb_detail_lines else "")
             )
             st.download_button(
                 "📋 ランキングブロック用データをダウンロード",
@@ -2388,12 +2400,29 @@ with _safe_tab(tab_rank):
         _rb_raw = _rb_uploaded.read().decode("utf-8")
         if "【掲載院一覧】" in _rb_raw:
             _rb_split = _rb_raw.split("【掲載院一覧】", 1)
-            st.session_state["cb_criteria"]    = _rb_split[0].replace("【構成・選び方】", "").strip()
-            st.session_state["cb_clinic_paste"] = _rb_split[1].strip()
-            st.session_state["cb_clinics"]      = clinic_block_writer.parse_clinic_list(_rb_split[1].strip())
+            st.session_state["cb_criteria"] = _rb_split[0].replace("【構成・選び方】", "").strip()
+            _rb_rest = _rb_split[1]
+            if "【案件詳細】" in _rb_rest:
+                _rb_clinic_part, _rb_detail_part = _rb_rest.split("【案件詳細】", 1)
+                st.session_state["cb_clinic_paste"] = _rb_clinic_part.strip()
+                st.session_state["cb_clinics"] = clinic_block_writer.parse_clinic_list(_rb_clinic_part.strip())
+                _rb_cur_rank = None
+                for _rb_line in _rb_detail_part.strip().split("\n"):
+                    _rb_line = _rb_line.strip()
+                    _rb_rm = re.match(r"---(\d+)位: .+---", _rb_line)
+                    if _rb_rm:
+                        _rb_cur_rank = int(_rb_rm.group(1))
+                    elif _rb_cur_rank and _rb_line.startswith("メタリフ名: "):
+                        st.session_state[f"cb_metarif_{_rb_cur_rank}"] = _rb_line[len("メタリフ名: "):].strip()
+                    elif _rb_cur_rank and _rb_line.startswith("LPプラン: "):
+                        st.session_state[f"cb_lp_{_rb_cur_rank}"] = _rb_line[len("LPプラン: "):].strip()
+            else:
+                st.session_state["cb_clinic_paste"] = _rb_rest.strip()
+                st.session_state["cb_clinics"] = clinic_block_writer.parse_clinic_list(_rb_rest.strip())
         else:
             st.session_state["cb_criteria"] = _rb_raw.strip()
         st.success("データを読み込みました")
+        st.rerun()
 
     _cb_criteria = st.text_area(
         "記事内の「選び方」セクション（文章をそのまま貼り付け）",
@@ -2437,24 +2466,16 @@ with _safe_tab(tab_rank):
                 )
 
                 if _is_top3:
-                    # アフィリファイル名（DBキャッシュから初期値を取得）
-                    _cb_affili_key = f"cb_affili_{_r}"
-                    if _cb_affili_key not in st.session_state:
-                        _cb_db_nested_tmp = st.session_state.get(f"_db_nested_cache_{st.session_state.get('cb_db_type', DB_TYPE_CLINIC)}", {})
-                        for _gv_tmp in _cb_db_nested_tmp.values():
-                            if isinstance(_gv_tmp, dict) and _cbc["name"] in _gv_tmp:
-                                st.session_state[_cb_affili_key] = _gv_tmp[_cbc["name"]].get("affili_filename", "")
-                                break
+                    _cb_metarif_key = f"cb_metarif_{_r}"
                     if _cb_affili_base:
-                        _cbc_affili_file = st.text_input(
-                            "アフィリファイル名",
-                            key=_cb_affili_key,
+                        _cbc_metarif = st.text_input(
+                            "メタリフ名",
+                            key=_cb_metarif_key,
                             placeholder="diet-dmm-ryb.html",
-                            help="DBに登録済みの場合は自動入力。ベースURLと合わせてリンクURLを構築します。",
                         )
-                        _auto_link = f"{_cb_affili_base}/{_cbc_affili_file}" if _cbc_affili_file else ""
+                        _auto_link = f"{_cb_affili_base}/{_cbc_metarif}" if _cbc_metarif else ""
                     else:
-                        _cbc_affili_file = ""
+                        _cbc_metarif = ""
                         _auto_link = ""
 
                     _default_link_val = st.session_state.get(f"cb_link_{_r}") or _auto_link or _cbc_url
@@ -2706,12 +2727,6 @@ with _safe_tab(tab_cases):
         _db_fa, _db_fb = st.columns([2, 2])
         _db_new_name   = _db_fa.text_input("案件名（クリニック名・商品名等）", placeholder="TCB東京中央美容外科")
         _db_new_domain = _db_fb.text_input("メインURL（任意・ドメイン or パス指定）", placeholder="tcb.net  または  tcb.net/osaka/umeda/")
-        _db_new_affili = st.text_input(
-            "アフィリファイル名（任意）",
-            placeholder="diet-dmm-ryb.html",
-            help="アフィリリンクの *.html 部分。サイト設定のベースURLと組み合わせてリンクURLを自動構築します。",
-            key="db_new_affili",
-        )
         _db_new_extra_urls = st.text_area(
             "追加クロールURL（任意・1行1URL）",
             placeholder="https://tcb.net/clinic/\nhttps://tcb.net/price/\n院一覧・料金ページなど。指定URLを起点に最大5ページたどります",
@@ -2779,12 +2794,11 @@ with _safe_tab(tab_cases):
                     _provider_label_db = "Gemini Flash" if research_provider == "gemini" else "Claude Sonnet"
                     st.write(f"🤖 「{_genre_new}」向けに情報抽出中（{_provider_label_db}）...")
                     _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider, extra_instruction=_db_new_extra_instruction.strip())
-                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, affili_filename=_db_new_affili.strip(), creds_data=_db_creds, sheet_url=_active_db_url)
+                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, creds_data=_db_creds, sheet_url=_active_db_url)
                     _add_status.update(label=f"✅ 「{_name_new}」を「{_genre_new}」に追加しました（{_mode_label}）", state="complete")
                     _ck = f"_db_nested_cache_{_db_type_sel}"
                     st.session_state.setdefault(_ck, {}).setdefault(_genre_new, {})[_name_new] = {
                         "domain": _domain_new, "info": _info_new, "updated_at": str(datetime.date.today()),
-                        "affili_filename": _db_new_affili.strip(),
                     }
                     st.rerun()
                 except Exception as _e_new:
@@ -2855,11 +2869,9 @@ with _safe_tab(tab_cases):
                         for _art_name in _target_names:
                             st.write(f"🤖 「{_art_name}」の情報を抽出中...")
                             _art_domain = ""
-                            _art_affili = ""
                             for _gv in _full_db_art.values():
                                 if isinstance(_gv, dict) and _art_name in _gv:
                                     _art_domain = _gv[_art_name].get("domain", "")
-                                    _art_affili = _gv[_art_name].get("affili_filename", "")
                                     break
                             _art_ci = extract_clinic_info_from_content(
                                 _art_article_content, _art_name, _art_genre, claude_key,
@@ -2867,12 +2879,10 @@ with _safe_tab(tab_cases):
                             )
                             clinic_db_manager.upsert_clinic(
                                 _art_name, _art_domain, _art_genre, _art_ci,
-                                affili_filename=_art_affili,
                                 creds_data=_db_creds, sheet_url=_active_db_url,
                             )
                             st.session_state.setdefault(_ck, {}).setdefault(_art_genre, {})[_art_name] = {
                                 "domain": _art_domain, "info": _art_ci, "updated_at": str(datetime.date.today()),
-                                "affili_filename": _art_affili,
                             }
                             st.write("　✅ 完了")
                         _art_status.update(label=f"✅ {len(_target_names)} 件の登録・更新が完了しました", state="complete")
