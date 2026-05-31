@@ -170,10 +170,14 @@ def delete_reference_image(
     file_id: str,
     credentials_dict: dict,
 ) -> tuple[bool, str]:
-    """参照画像をDriveから削除。Returns: (success, error_message)"""
+    """参照画像をDriveのゴミ箱に移動（永久削除はOrganizer権限が必要なためtrashを使用）。Returns: (success, error_message)"""
     try:
         service = _get_service(credentials_dict)
-        service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+        service.files().update(
+            fileId=file_id,
+            body={"trashed": True},
+            supportsAllDrives=True,
+        ).execute()
         return True, ""
     except Exception as e:
         return False, str(e)
