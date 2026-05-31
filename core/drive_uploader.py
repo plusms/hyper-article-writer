@@ -1,10 +1,13 @@
 import io
 import json as _json_lib
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from google.oauth2.service_account import Credentials
+from PIL import Image
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
+
+REF_IMAGE_FOLDER = "参照画像"
 
 
 def _get_service(credentials_dict: dict):
@@ -70,6 +73,110 @@ def _find_or_create_folder_path(service, path: list, root_id: str) -> str:
     for name in path:
         current = _find_or_create_folder(service, name, current)
     return current
+
+
+def upload_reference_image(
+    image_bytes: bytes,
+    filename: str,
+    site_id: str,
+    credentials_dict: dict,
+    parent_folder_id: str,
+) -> str:
+    """参照画像をDriveにアップロード: parent / 参照画像 / site_id / filename
+    Returns: webViewLink
+    """
+    service = _get_service(credentials_dict)
+    ref_folder_id = _find_or_create_folder(service, REF_IMAGE_FOLDER, parent_folder_id)
+    site_folder_id = _find_or_create_folder(service, site_id, ref_folder_id)
+    mimetype = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
+    media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype=mimetype)
+    metadata = {"name": filename, "parents": [site_folder_id]}
+    file = service.files().create(
+        body=metadata,
+        media_body=media,
+        fields="id, webViewLink",
+        supportsAllDrives=True,
+    ).execute()
+    return file.get("webViewLink", "")
+
+
+def list_reference_images(
+    site_id: str,
+    credentials_dict: dict,
+    parent_folder_id: str,
+) -> list[dict]:
+    """サイトの参照画像一覧を返す（id・name・mimeType）"""
+    service = _get_service(credentials_dict)
+    # 参照画像フォルダを探す（なければ空リスト）
+    query = (
+        f"name='{REF_IMAGE_FOLDER}' and mimeType='application/vnd.google-apps.folder' "
+        f"and '{parent_folder_id}' in parents and trashed=false"
+    )
+    res = service.files().list(
+        q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True,
+    ).execute()
+    if not res.get("files"):
+        return []
+    ref_folder_id = res["files"][0]["id"]
+
+    query = (
+        f"name='{site_id}' and mimeType='application/vnd.google-apps.folder' "
+        f"and '{ref_folder_id}' in parents and trashed=false"
+    )
+    res = service.files().list(
+        q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True,
+    ).execute()
+    if not res.get("files"):
+        return []
+    site_folder_id = res["files"][0]["id"]
+
+    res = service.files().list(
+        q=f"'{site_folder_id}' in parents and trashed=false",
+        fields="files(id, name, mimeType)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+    ).execute()
+    return res.get("files", [])
+
+
+def download_reference_images(
+    site_id: str,
+    credentials_dict: dict,
+    parent_folder_id: str,
+    max_images: int = 5,
+) -> list[Image.Image]:
+    """サイトの参照画像をDriveからDLしてPIL Imageのリストで返す（最大max_images枚）"""
+    service = _get_service(credentials_dict)
+    files = list_reference_images(site_id, credentials_dict, parent_folder_id)
+    images = []
+    for f in files[:max_images]:
+        try:
+            request = service.files().get_media(
+                fileId=f["id"], supportsAllDrives=True,
+            )
+            buf = io.BytesIO()
+            downloader = MediaIoBaseDownload(buf, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+            buf.seek(0)
+            images.append(Image.open(buf).convert("RGB"))
+        except Exception:
+            continue
+    return images
+
+
+def delete_reference_image(
+    file_id: str,
+    credentials_dict: dict,
+) -> bool:
+    """参照画像をDriveから削除"""
+    try:
+        service = _get_service(credentials_dict)
+        service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+        return True
+    except Exception:
+        return False
 
 
 def upload_json(

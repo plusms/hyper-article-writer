@@ -502,7 +502,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             if is_bulk:
                 write_output_row_knowhow_bulk(ws, row_num, _out)
                 write_status_knowhow_bulk(ws, row_num, "完了")
-                # ── 画像生成（スラッグ指定 & サイト設定に画像テンプレートがある場合のみ）──
+                # ── 画像生成（design_system が登録されているサイトのみ）──
                 _bulk_slug = row.get("slug", "").strip()
                 if not _bulk_slug:
                     st.caption(f"　⏭️ 画像スキップ（スラッグ未設定）: {kw}")
@@ -510,31 +510,39 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                     st.caption(f"　⏭️ 画像スキップ（サイト名未設定）: {kw}")
                 else:
                     _bulk_sc = site_config_manager.load_site_config(_batch_site_name, _site_cfg_creds, _site_cfg_parent_folder)
-                    if not _bulk_sc.get("image_templates"):
-                        st.caption(f"　⏭️ 画像スキップ（{_batch_site_name} に画像テンプレート未登録）: {kw}")
+                    if not _bulk_sc.get("design_system"):
+                        st.caption(f"　⏭️ 画像スキップ（{_batch_site_name} にデザインシステム未登録）: {kw}")
                     else:
                         try:
                             st.write(f"　🖼️ 画像生成中: {kw} ...")
-                            _bulk_prompts = image_generator.generate_image_prompts(
-                                structure["structure_text"], _bulk_sc, claude_key, _bulk_slug,
-                            )
                             _bulk_img_creds = _get_gcp_creds(sheets_creds_file)
                             _bulk_drive_folder = _drive_folder_id
-                            for _bp in _bulk_prompts:
-                                _bulk_bytes = image_generator.generate_image_bytes(
-                                    _bp["prompt"],
-                                    gemini_api_key=gemini_key,
-                                    openai_api_key=openai_key,
-                                    provider=image_provider,
-                                    claude_api_key=claude_key,
-                                )
-                                if _bulk_bytes:
+                            # 参照画像をセッションキャッシュから取得（なければDL）
+                            _bulk_ref_key = f"ref_images_{_batch_site_name}"
+                            if _bulk_ref_key not in st.session_state:
+                                st.session_state[_bulk_ref_key] = image_generator.load_reference_images_from_drive(
+                                    _batch_site_name, _bulk_img_creds, _bulk_drive_folder,
+                                ) if _bulk_img_creds else []
+                            _bulk_ref_imgs = st.session_state[_bulk_ref_key]
+                            _bulk_results = image_generator.generate_images_for_article(
+                                article_text=output["html"],
+                                site_config=_bulk_sc,
+                                reference_images=_bulk_ref_imgs,
+                                provider=image_provider,
+                                gemini_api_key=gemini_key,
+                                openai_api_key=openai_key,
+                            )
+                            _bulk_uploaded = 0
+                            for _bi, _br in enumerate(_bulk_results):
+                                if _br["bytes"] and _bulk_img_creds:
+                                    _bulk_fname = f"{_bulk_slug}-img{_bi+1}.png"
                                     drive_uploader.upload_image(
-                                        _bulk_bytes, _bp["filename"],
+                                        _br["bytes"], _bulk_fname,
                                         _batch_site_name, _bulk_slug,
                                         _bulk_img_creds, _bulk_drive_folder,
                                     )
-                            st.write(f"　　→ {len(_bulk_prompts)} 枚アップロード完了")
+                                    _bulk_uploaded += 1
+                            st.write(f"　　→ {_bulk_uploaded} 枚アップロード完了")
                         except Exception as _img_e:
                             st.warning(f"　　→ 画像生成エラー ({kw}): {_img_e}")
             elif tab_name == "ノウハウ":
@@ -1706,89 +1714,78 @@ with _safe_tab(tab_custom):
             key="t2_clinic_list_dl",
         )
 
-    # ── 画像生成セクション（サイト設定に画像テンプレートが登録されている場合のみ表示）──
-    if _t2_last and _t2_last.get("site_config", {}).get("image_templates"):
+    # ── 画像生成セクション（design_system が登録されているサイトのみ表示）──
+    if _t2_last and _t2_last.get("site_config", {}).get("design_system"):
         st.divider()
         st.subheader("🖼️ 画像生成")
         st.caption(f"対象記事: {_t2_last['main_kw']}")
         _img_site_config = _t2_last["site_config"]
-
-        _img_model_override = None  # 自動検出に任せる
+        _img_site_name = _t2_last.get("site_name", "default") or "default"
 
         _img_slug = st.text_input(
-            "スラッグ（ファイル名の接頭辞・英数字ハイフンのみ）",
+            "スラッグ（Drive保存先フォルダ名・英数字ハイフンのみ）",
             key="t2_img_slug",
             placeholder="例: aga-treatment-tokyo",
-            help="画像ファイル名: スラッグ-英単語.webp",
         )
 
         if st.button("🖼️ 画像を生成してDriveにアップロード", key="t2_img_gen", type="primary"):
             errs_img = []
             if image_provider == "dalle" and not openai_key:
-                errs_img.append("DALL-E を使うには OpenAI API Key が必要です（サイドバーから入力してください）")
+                errs_img.append("DALL-E を使うには OpenAI API Key が必要です")
             elif image_provider == "gemini" and not gemini_key:
-                errs_img.append("Gemini API Key が未設定です（サイドバーから入力してください）")
+                errs_img.append("Gemini API Key が未設定です")
             if not _img_slug.strip():
                 errs_img.append("スラッグを入力してください")
-            if not claude_key:
-                errs_img.append("Claude API Key が未設定です")
             for e in errs_img:
                 st.error(e)
 
             if not errs_img:
                 _creds_img = _get_gcp_creds(sheets_creds_file)
                 if not _creds_img:
-                    st.error("Google Sheets 認証情報が未設定です（Drive アップロードにも使用）")
+                    st.error("Google Sheets 認証情報が未設定です")
                 else:
                     with st.status("画像生成中...", expanded=True) as img_status:
                         try:
-                            st.write("💡 画像プロンプト生成中（Claude）...")
-                            prompts = image_generator.generate_image_prompts(
-                                _t2_last["structure_text"],
-                                _img_site_config,
-                                claude_key,
-                                _img_slug.strip(),
-                            )
-                            st.write(f"　→ {len(prompts)} 枚分のプロンプトを生成しました")
-
-                            _img_results = []
-                            for i, p in enumerate(prompts):
-                                st.write(f"🎨 画像生成中 ({i+1}/{len(prompts)}): {p['filename']}...")
-                                if p.get("_unresolved_vars"):
-                                    st.warning(
-                                        f"⚠️ 変数置換漏れ: {', '.join(p['_unresolved_vars'])} が未置換のままです。"
-                                        "テンプレートの変数名を見直すか、再生成してください。"
-                                    )
-                                img_bytes = image_generator.generate_image_bytes(
-                                    p["prompt"],
-                                    gemini_api_key=gemini_key,
-                                    openai_api_key=openai_key,
-                                    provider=image_provider,
-                                    model_override=None,
-                                    claude_api_key=claude_key,
+                            # 参照画像をキャッシュから取得
+                            _ref_key = f"ref_images_{_img_site_name}"
+                            if _ref_key not in st.session_state:
+                                st.write("☁️ 参照画像をDriveから読み込み中...")
+                                st.session_state[_ref_key] = image_generator.load_reference_images_from_drive(
+                                    _img_site_name, _creds_img, _drive_folder_id,
                                 )
-                                if img_bytes:
+                            _ref_imgs = st.session_state[_ref_key]
+                            st.write(f"　→ 参照画像: {len(_ref_imgs)} 枚")
+
+                            st.write("💡 画像案を生成中（Gemini）...")
+                            _img_results_t2 = image_generator.generate_images_for_article(
+                                article_text=_t2_last["html"],
+                                site_config=_img_site_config,
+                                reference_images=_ref_imgs,
+                                provider=image_provider,
+                                gemini_api_key=gemini_key,
+                                openai_api_key=openai_key,
+                            )
+                            st.write(f"　→ {len(_img_results_t2)} 案を生成")
+
+                            _uploaded_t2 = []
+                            for i, _ir in enumerate(_img_results_t2):
+                                if _ir["bytes"]:
+                                    _ir_fname = f"{_img_slug.strip()}-img{i+1}.png"
+                                    st.write(f"🎨 アップロード中 ({i+1}/{len(_img_results_t2)}): {_ir_fname}...")
                                     drive_url = drive_uploader.upload_image(
-                                        img_bytes,
-                                        p["filename"],
-                                        _t2_last["site_name"] or "default",
-                                        _img_slug.strip(),
-                                        _creds_img,
-                                        _drive_folder_id,
+                                        _ir["bytes"], _ir_fname,
+                                        _img_site_name, _img_slug.strip(),
+                                        _creds_img, _drive_folder_id,
                                     )
-                                    _img_results.append({**p, "drive_url": drive_url})
-                                    st.write(f"　→ アップロード完了")
+                                    _uploaded_t2.append({"fname": _ir_fname, "drive_url": drive_url, "proposal": _ir["proposal"]})
                                 else:
-                                    st.warning(f"　→ {p['filename']} の画像生成に失敗しました")
+                                    st.warning(f"案{i+1} の画像生成に失敗しました")
 
-                            img_status.update(label=f"✅ {len(_img_results)} 枚アップロード完了", state="complete")
-
-                            st.markdown("### アップロード結果")
-                            for r in _img_results:
+                            img_status.update(label=f"✅ {len(_uploaded_t2)} 枚アップロード完了", state="complete")
+                            for r in _uploaded_t2:
                                 st.markdown(
-                                    f"**{r['position']}**  \n"
-                                    f"ファイル名: `{r['filename']}`  \n"
-                                    f"alt: {r['alt']}  \n"
+                                    f"**{r['proposal'].get('placement', '')}**  \n"
+                                    f"ファイル名: `{r['fname']}`  \n"
                                     f"[Driveで開く]({r['drive_url']})"
                                 )
                                 st.divider()
@@ -2026,106 +2023,114 @@ with _safe_tab(tab_settings):
         else:
             st.subheader(f"「{_current_site4}」の設定")
 
-            # ── 1. 画像テンプレート ──────────────────────────────────
-            st.markdown("### 🖼️ 1. 画像テンプレート")
-            _existing_tmpls = _config4.get("image_templates", [])
+            # ── 1. デザインシステム ──────────────────────────────────
+            st.markdown("### 🎨 1. デザインシステム")
+            _ds = _config4.get("design_system", {})
+            _dr_colors = _config4.get("design_rules", {}).get("colors", {})
 
-            # 登録済みテンプレート一覧
-            if _existing_tmpls:
-                st.caption(f"登録済みテンプレート: {len(_existing_tmpls)} 件")
-                for _ei, _et in enumerate(_existing_tmpls):
-                    _et_label = _et.get("name") or _et.get("layout_type") or f"テンプレート{_ei+1}"
-                    with st.expander(f"📋 {_et_label}"):
-                        _et_prompt = image_generator._resolve_template_prompt(_et)
-                        st.code(_et_prompt[:500] + ("..." if len(_et_prompt) > 500 else ""), language="")
-                        if st.button(f"🗑️ 削除", key=f"del_tmpl_{_current_site4}_{_ei}"):
-                            _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
-                            _cfg_now["image_templates"] = [t for j, t in enumerate(_cfg_now.get("image_templates", [])) if j != _ei]
-                            site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder)
-                            st.rerun()
-            else:
-                st.caption("テンプレート未登録")
+            with st.form(key=f"ds_form_{_current_site4}"):
+                st.caption("カラーパレット")
+                _ds_col1, _ds_col2 = st.columns(2)
+                with _ds_col1:
+                    _ds_primary   = st.text_input("メインカラー",   value=_ds.get("primary_color") or _dr_colors.get("main", ""), key=f"ds_primary_{_current_site4}")
+                    _ds_accent    = st.text_input("アクセントカラー", value=_ds.get("accent_color") or _dr_colors.get("accent_red", ""), key=f"ds_accent_{_current_site4}")
+                    _ds_bg        = st.text_input("背景色",         value=_ds.get("background_color") or _dr_colors.get("bg_white", "#FFFFFF"), key=f"ds_bg_{_current_site4}")
+                with _ds_col2:
+                    _ds_text      = st.text_input("テキスト色",     value=_ds.get("text_color") or _dr_colors.get("text", "#333333"), key=f"ds_text_{_current_site4}")
+                    _ds_secondary = st.text_input("サブカラー",     value=_ds.get("secondary_color", ""), key=f"ds_secondary_{_current_site4}")
+                    _ds_danger    = st.text_input("警告色",         value=_ds.get("danger_color", ""), key=f"ds_danger_{_current_site4}")
+                st.caption("イラストスタイル")
+                _ds_style   = st.text_input("スタイル",   value=_ds.get("illustration_style", "flat minimal"), key=f"ds_style_{_current_site4}")
+                _ds_prohibit = st.text_area("禁止事項",  value=_ds.get("prohibited_elements", ""), height=80, key=f"ds_prohibit_{_current_site4}")
+                _ds_notes   = st.text_area("追加ノート", value=_ds.get("additional_notes", ""), height=60, key=f"ds_notes_{_current_site4}")
+                if st.form_submit_button("💾 デザインシステムを保存", type="primary"):
+                    _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
+                    _cfg_now.setdefault("design_system", {}).update({
+                        "primary_color": _ds_primary, "accent_color": _ds_accent,
+                        "background_color": _ds_bg, "text_color": _ds_text,
+                        "secondary_color": _ds_secondary, "danger_color": _ds_danger,
+                        "illustration_style": _ds_style,
+                        "prohibited_elements": _ds_prohibit, "additional_notes": _ds_notes,
+                    })
+                    if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
+                        st.success("✅ 保存しました。")
+                        st.rerun()
+                    else:
+                        st.error("保存に失敗しました。")
 
-            st.markdown("**テンプレートを追加**")
-            _img_mode = st.radio(
-                "追加方法",
-                ["md", "upload"],
-                format_func=lambda x: {"md": "mdファイルをアップ", "upload": "見本画像からカスタム生成（手動）"}[x],
-                horizontal=True,
-                key=f"img_mode_{_current_site4}",
-            )
+            st.markdown("---")
 
-            if _img_mode == "md":
-                st.caption("プロンプトを記述した .md ファイルをアップすると、ファイル名をテンプレート名として自動登録します。複数ファイル同時アップ可。")
-                _md_uploads = st.file_uploader(
-                    "mdファイルをアップ（複数選択可）",
-                    type=["md", "txt"],
-                    accept_multiple_files=True,
-                    key=f"t4_md_upload_{_current_site4}",
-                )
-                if _md_uploads:
-                    _md_add_mode = st.radio("保存方式", ["追加（既存を保持）", "上書き（既存を置き換え）"], horizontal=True, key=f"md_add_mode_{_current_site4}")
-                    if st.button(f"💾 {len(_md_uploads)}件を登録", key=f"btn_save_md_{_current_site4}", type="primary"):
-                        _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
-                        _new_md_tmpls = []
-                        for _mf in _md_uploads:
-                            _mf.seek(0)
-                            _md_body = _mf.read().decode("utf-8", errors="replace").strip()
-                            _md_name = pathlib.Path(_mf.name).stem
-                            if _md_body:
-                                _new_md_tmpls.append({"base_prompt": _md_body, "name": _md_name})
-                        if _new_md_tmpls:
-                            if _md_add_mode.startswith("追加"):
-                                _cfg_now["image_templates"] = _cfg_now.get("image_templates", []) + _new_md_tmpls
-                            else:
-                                _cfg_now["image_templates"] = _new_md_tmpls
-                            if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
-                                st.success(f"✅ {len(_new_md_tmpls)}件を保存しました。")
-                                st.rerun()
-                            else:
-                                st.error("保存に失敗しました。")
+            # ── 1b. 参照画像 ────────────────────────────────────────
+            st.markdown("### 🖼️ 参照画像（最大5枚）")
+            st.caption("サイトのデザインに近い既存画像をアップすると、そのスタイルを模倣して画像生成します。")
 
-            elif _img_mode == "upload":
-                st.caption("見本画像をアップすると、Claude Visionで構造を解析してプロンプトテンプレートを自動生成します。複数枚同時アップ可。")
-                _t4_img_uploads = st.file_uploader(
-                    "画像をアップ（jpg / png / webp・複数選択可）",
-                    type=["jpg", "jpeg", "png", "webp"],
-                    accept_multiple_files=True,
-                    key=f"t4_img_upload_{_current_site4}",
-                )
-                if _t4_img_uploads:
-                    for _uf in _t4_img_uploads:
-                        st.image(_uf, width=300, caption=_uf.name)
-                    _upload_add_mode = st.radio("保存方式", ["追加（既存を保持）", "上書き（既存を置き換え）"], horizontal=True, key=f"upload_add_mode_{_current_site4}")
-                    if st.button(f"✨ {len(_t4_img_uploads)}枚からテンプレートを生成して保存", key=f"btn_gen_tmpl_{_current_site4}", type="primary"):
-                        if not claude_key:
-                            st.error("Claude API Key が未設定です（サイドバーから入力してください）")
-                        else:
-                            _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
-                            _generated_tmpls = []
-                            with st.spinner(f"画像を解析中（{len(_t4_img_uploads)}枚）..."):
-                                for _uf in _t4_img_uploads:
-                                    try:
-                                        _uf.seek(0)
-                                        _t4_mime = _uf.type or "image/png"
-                                        _t4_img_bytes = _uf.read()
-                                        _t4_generated = image_generator.generate_template_from_image(
-                                            _t4_img_bytes, _t4_mime, _cfg_now, claude_key
-                                        )
-                                        _generated_tmpls.append({"base_prompt": _t4_generated, "name": pathlib.Path(_uf.name).stem})
-                                        st.write(f"✅ {_uf.name} 完了")
-                                    except Exception as _t4_e:
-                                        st.error(f"{_uf.name} 生成エラー: {_t4_e}")
-                            if _generated_tmpls:
-                                if _upload_add_mode.startswith("追加"):
-                                    _cfg_now["image_templates"] = _cfg_now.get("image_templates", []) + _generated_tmpls
-                                else:
-                                    _cfg_now["image_templates"] = _generated_tmpls
-                                if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
-                                    st.success(f"✅ {len(_generated_tmpls)}件のテンプレートを保存しました。")
+            # 登録済み一覧
+            if _site_cfg_creds and _site_cfg_parent_folder:
+                try:
+                    _ref_files = image_generator.list_reference_images_in_drive(
+                        _current_site4, _site_cfg_creds, _site_cfg_parent_folder
+                    )
+                    if _ref_files:
+                        st.caption(f"登録済み: {len(_ref_files)} 枚")
+                        for _rf in _ref_files:
+                            _rf_col1, _rf_col2 = st.columns([4, 1])
+                            with _rf_col1:
+                                st.text(_rf["name"])
+                            with _rf_col2:
+                                if st.button("🗑️", key=f"del_ref_{_rf['id']}"):
+                                    image_generator.delete_reference_image_from_drive(_rf["id"], _site_cfg_creds)
+                                    # キャッシュクリア
+                                    st.session_state.pop(f"ref_images_{_current_site4}", None)
                                     st.rerun()
-                                else:
-                                    st.error("保存に失敗しました。")
+                    else:
+                        st.caption("参照画像未登録")
+                except Exception as _ref_list_e:
+                    st.caption(f"一覧取得エラー: {_ref_list_e}")
+
+            # アップロード
+            _ref_uploads = st.file_uploader(
+                "参照画像をアップ（jpg / png / webp・複数選択可）",
+                type=["jpg", "jpeg", "png", "webp"],
+                accept_multiple_files=True,
+                key=f"ref_img_upload_{_current_site4}",
+            )
+            if _ref_uploads:
+                for _ru in _ref_uploads:
+                    st.image(_ru, width=200, caption=_ru.name)
+                if st.button(f"☁️ {len(_ref_uploads)}枚をDriveに保存してスタイル分析", key=f"btn_upload_ref_{_current_site4}", type="primary"):
+                    if not _site_cfg_creds:
+                        st.error("Google認証が未設定です")
+                    elif not gemini_key:
+                        st.error("Gemini API Key が未設定です")
+                    else:
+                        _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
+                        _pil_images = []
+                        with st.spinner("Driveにアップロード中..."):
+                            for _ru in _ref_uploads:
+                                try:
+                                    _ru.seek(0)
+                                    _ru_bytes = _ru.read()
+                                    image_generator.upload_reference_image_to_drive(
+                                        _ru_bytes, _ru.name, _current_site4,
+                                        _site_cfg_creds, _site_cfg_parent_folder,
+                                    )
+                                    from PIL import Image as _PILImg
+                                    import io as _io
+                                    _pil_images.append(_PILImg.open(_io.BytesIO(_ru_bytes)).convert("RGB"))
+                                    st.write(f"✅ {_ru.name} アップ完了")
+                                except Exception as _ru_e:
+                                    st.error(f"{_ru.name} エラー: {_ru_e}")
+                        if _pil_images:
+                            with st.spinner("スタイルを分析中..."):
+                                _ref_analysis = image_generator.analyze_reference_images(
+                                    _pil_images, _cfg_now, gemini_key
+                                )
+                                _cfg_now.setdefault("design_system", {})["ref_image_analysis"] = _ref_analysis
+                                site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder)
+                            # キャッシュクリア（次の生成で新しい画像を使う）
+                            st.session_state.pop(f"ref_images_{_current_site4}", None)
+                            st.success("✅ 参照画像を保存してスタイル分析を完了しました。")
+                            st.rerun()
 
             st.markdown("---")
 
@@ -3156,8 +3161,6 @@ with _safe_tab(tab_cases):
 #  画像生成セクション
 # ════════════════════════════════════════════════════════
 if tab_image_gen:
-    from bs4 import BeautifulSoup as _ig_bs
-
     st.title("🖼️ 画像生成")
     st.caption("記事HTMLを貼り付けてH2ごとに画像を生成し、Driveにアップロードします。")
 
@@ -3176,112 +3179,111 @@ if tab_image_gen:
             _ig_errs.append("スラッグを入力してください")
         if not _ig_html.strip():
             _ig_errs.append("記事HTMLを入力してください")
-        if not claude_key:
-            _ig_errs.append("Claude API Key が未設定です")
+        if not gemini_key:
+            _ig_errs.append("Gemini API Key が未設定です（画像案の生成に使用）")
         for _ig_e in _ig_errs:
             st.error(_ig_e)
 
         if not _ig_errs:
             _ig_sc = site_config_manager.load_site_config(_ig_site, _site_cfg_creds, _site_cfg_parent_folder)
-            if not _ig_sc.get("image_templates"):
-                st.error(f"「{_ig_site}」に画像テンプレートが未登録です。サイト設定で登録してください。")
+            if not _ig_sc.get("design_system"):
+                st.error(f"「{_ig_site}」にデザインシステムが未登録です。サイト設定で登録してください。")
             else:
-                _ig_soup_obj = _ig_bs(_ig_html, "html.parser")
-                _ig_headings = [f"H2: {h.get_text(strip=True)}" for h in _ig_soup_obj.find_all("h2")]
-                _ig_body_text = _ig_soup_obj.get_text(separator="\n", strip=True)[:5000]
-                _ig_structure_text = "【見出し構成】\n" + "\n".join(_ig_headings) + "\n\n【本文抜粋】\n" + _ig_body_text
-
+                _ig_creds = _get_gcp_creds(sheets_creds_file)
                 with st.status("画像を生成中...", expanded=True) as _ig_status:
-                    st.write("📋 プロンプトを生成中...")
-                    _ig_new_prompts = image_generator.generate_image_prompts(
-                        _ig_structure_text, _ig_sc, claude_key, _ig_slug.strip()
-                    )
-                    st.write(f"✅ {len(_ig_new_prompts)} 件のプロンプト生成完了")
+                    try:
+                        # 参照画像をキャッシュから取得
+                        _ig_ref_key = f"ref_images_{_ig_site}"
+                        if _ig_ref_key not in st.session_state:
+                            st.write("☁️ 参照画像をDriveから読み込み中...")
+                            st.session_state[_ig_ref_key] = image_generator.load_reference_images_from_drive(
+                                _ig_site, _ig_creds, _drive_folder_id,
+                            ) if _ig_creds else []
+                        _ig_ref_imgs = st.session_state[_ig_ref_key]
+                        st.write(f"　→ 参照画像: {len(_ig_ref_imgs)} 枚")
 
-                    _ig_new_images = []
-                    for _ig_np in _ig_new_prompts:
-                        st.write(f"🖼️ 生成中: {_ig_np['filename']} ...")
-                        try:
-                            _ig_nb = image_generator.generate_image_bytes(
-                                _ig_np["prompt"],
-                                gemini_api_key=gemini_key,
-                                openai_api_key=openai_key,
-                                provider=image_provider,
-                                claude_api_key=claude_key,
-                            )
-                            _ig_new_images.append(_ig_nb)
-                        except Exception as _ig_ge:
-                            st.warning(f"生成エラー ({_ig_np['filename']}): {_ig_ge}")
-                            _ig_new_images.append(None)
+                        st.write("💡 画像案を生成中（Gemini）...")
+                        _ig_results = image_generator.generate_images_for_article(
+                            article_text=_ig_html,
+                            site_config=_ig_sc,
+                            reference_images=_ig_ref_imgs,
+                            provider=image_provider,
+                            gemini_api_key=gemini_key,
+                            openai_api_key=openai_key,
+                        )
+                        st.write(f"　→ {len(_ig_results)} 案を生成")
 
-                    st.session_state["ig_prompts"] = _ig_new_prompts
-                    st.session_state["ig_images"] = _ig_new_images
-                    for _ig_pi, _ig_pp in enumerate(_ig_new_prompts):
-                        st.session_state[f"ig_edit_prompt_{_ig_pi}"] = _ig_pp["prompt"]
-                    _ig_status.update(label="✅ 生成完了", state="complete")
+                        st.session_state["ig_results"] = _ig_results
+                        _ig_status.update(label="✅ 生成完了", state="complete")
+                    except Exception as _ig_ge:
+                        _ig_status.update(label="❌ エラー", state="error")
+                        st.error(str(_ig_ge))
 
     # ── 生成結果表示 ──────────────────────────────────────────
-    if st.session_state.get("ig_prompts"):
+    if st.session_state.get("ig_results"):
         st.divider()
         st.subheader("生成結果")
-        st.caption("各画像を確認・修正してアップロードしてください。")
+        _ig_disp = st.session_state["ig_results"]
 
-        _ig_disp_prompts = st.session_state["ig_prompts"]
-        _ig_disp_images  = st.session_state.get("ig_images", [None] * len(_ig_disp_prompts))
-
-        for _ig_di, (_ig_dp, _ig_dimg) in enumerate(zip(_ig_disp_prompts, _ig_disp_images)):
+        for _ig_di, _ig_dr in enumerate(_ig_disp):
+            _ig_proposal = _ig_dr["proposal"]
+            _ig_img_bytes = _ig_dr["bytes"]
             with st.expander(
-                f"📷 {_ig_di + 1}. {_ig_dp.get('position', '不明')} — {_ig_dp['filename']}",
+                f"📷 {_ig_di + 1}. {_ig_proposal.get('placement', '不明')}",
                 expanded=True,
             ):
                 _ig_rc1, _ig_rc2 = st.columns([1, 1])
-
                 with _ig_rc1:
-                    if _ig_dimg:
-                        st.image(_ig_dimg, caption=_ig_dp.get("alt", ""))
+                    if _ig_img_bytes:
+                        st.image(_ig_img_bytes)
                     else:
                         st.info("画像の生成に失敗しました")
-
                 with _ig_rc2:
-                    _ig_epkey = f"ig_edit_prompt_{_ig_di}"
-                    if _ig_epkey not in st.session_state:
-                        st.session_state[_ig_epkey] = _ig_dp["prompt"]
-                    st.text_area("プロンプト（編集可）", key=_ig_epkey, height=150)
-                    _ig_instr_val = st.text_input(
+                    st.caption(f"**目的**: {_ig_proposal.get('purpose', '')}")
+                    st.caption(f"**構図**: {_ig_proposal.get('layout_type', '')}")
+                    _ig_instr = st.text_input(
                         "修正指示（任意）", key=f"ig_instr_{_ig_di}",
                         placeholder="もっと明るいトーンで / 比較表レイアウトで",
                     )
                     _ig_bc1, _ig_bc2 = st.columns(2)
 
                     if _ig_bc1.button("🔄 再生成", key=f"ig_regen_{_ig_di}", use_container_width=True):
-                        _ig_rp = st.session_state[_ig_epkey]
-                        _ig_ri = st.session_state.get(f"ig_instr_{_ig_di}", "").strip()
-                        if _ig_ri:
-                            _ig_rp = _ig_rp + f"\n\n修正指示: {_ig_ri}"
+                        _ig_sc_regen = site_config_manager.load_site_config(_ig_site, _site_cfg_creds, _site_cfg_parent_folder)
+                        _ig_ds_regen = image_generator.build_design_system(_ig_sc_regen)
+                        _ig_ref_regen = st.session_state.get(f"ref_images_{_ig_site}", [])
+                        _regen_proposal = dict(_ig_proposal)
+                        if _ig_instr.strip():
+                            _regen_proposal["additional_instruction"] = _ig_instr.strip()
+                        _regen_prompt = image_generator.build_generation_prompt(
+                            _ig_ds_regen, _regen_proposal, "16:9", bool(_ig_ref_regen)
+                        )
+                        if _ig_instr.strip():
+                            _regen_prompt += f"\n\n修正指示: {_ig_instr.strip()}"
                         with st.spinner("再生成中..."):
                             try:
-                                _ig_rb = image_generator.generate_image_bytes(
-                                    _ig_rp,
+                                _regen_bytes = image_generator.generate_image_bytes(
+                                    _regen_prompt,
+                                    reference_images=_ig_ref_regen or None,
+                                    provider=image_provider,
                                     gemini_api_key=gemini_key,
                                     openai_api_key=openai_key,
-                                    provider=image_provider,
-                                    claude_api_key=claude_key,
                                 )
-                                st.session_state["ig_images"][_ig_di] = _ig_rb
+                                st.session_state["ig_results"][_ig_di]["bytes"] = _regen_bytes
                                 st.rerun()
-                            except Exception as _ig_re:
-                                st.error(f"再生成エラー: {_ig_re}")
+                            except Exception as _regen_e:
+                                st.error(f"再生成エラー: {_regen_e}")
 
-                    if _ig_dimg:
+                    if _ig_img_bytes:
                         if _ig_bc2.button("⬆️ アップロード", key=f"ig_upload_{_ig_di}", use_container_width=True):
                             try:
                                 _ig_uc = _get_gcp_creds(sheets_creds_file)
+                                _ig_fname = f"{_ig_slug.strip()}-img{_ig_di+1}.png"
                                 drive_uploader.upload_image(
-                                    _ig_dimg, _ig_dp["filename"],
+                                    _ig_img_bytes, _ig_fname,
                                     _ig_site, _ig_slug.strip(),
                                     _ig_uc, _drive_folder_id,
                                 )
-                                st.success(f"✅ {_ig_dp['filename']} をアップロードしました")
+                                st.success(f"✅ {_ig_fname} をアップロードしました")
                             except Exception as _ig_ue:
                                 st.error(f"アップロードエラー: {_ig_ue}")
 
@@ -3289,19 +3291,18 @@ if tab_image_gen:
         if st.button("⬆️ 全件アップロード", key="ig_upload_all", type="primary", use_container_width=True):
             _ig_all_creds = _get_gcp_creds(sheets_creds_file)
             _ig_all_ok = 0
-            for _ig_ai, (_ig_apm, _ig_aim) in enumerate(
-                zip(st.session_state["ig_prompts"], st.session_state.get("ig_images", []))
-            ):
-                if _ig_aim:
+            for _ig_ai, _ig_ar in enumerate(st.session_state.get("ig_results", [])):
+                if _ig_ar["bytes"]:
                     try:
+                        _ig_all_fname = f"{_ig_slug.strip()}-img{_ig_ai+1}.png"
                         drive_uploader.upload_image(
-                            _ig_aim, _ig_apm["filename"],
+                            _ig_ar["bytes"], _ig_all_fname,
                             _ig_site, _ig_slug.strip(),
                             _ig_all_creds, _drive_folder_id,
                         )
                         _ig_all_ok += 1
                     except Exception as _ig_ae:
-                        st.warning(f"エラー ({_ig_apm['filename']}): {_ig_ae}")
+                        st.warning(f"エラー (img{_ig_ai+1}): {_ig_ae}")
             st.success(f"✅ {_ig_all_ok} 件アップロード完了")
 
 
