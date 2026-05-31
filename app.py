@@ -2028,6 +2028,15 @@ with _safe_tab(tab_settings):
             _ds = _config4.get("design_system", {})
             _dr_colors = _config4.get("design_rules", {}).get("colors", {})
 
+            # 登録状況バッジ
+            _ds_filled = [k for k in ("illustration_style", "ref_image_analysis", "primary_color") if _ds.get(k)]
+            if len(_ds_filled) >= 2:
+                st.success("✅ デザインシステム登録済み（参照画像からの自動入力を含む）")
+            elif _ds:
+                st.warning("⚠️ デザインシステム未完全（参照画像をアップしてスタイルを自動入力することを推奨）")
+            else:
+                st.info("ℹ️ デザインシステム未登録 — 下の参照画像をアップすると自動で入力されます")
+
             with st.form(key=f"ds_form_{_current_site4}"):
                 st.caption("カラーパレット")
                 _ds_col1, _ds_col2 = st.columns(2)
@@ -2121,21 +2130,49 @@ with _safe_tab(tab_settings):
                                 except Exception as _ru_e:
                                     st.error(f"{_ru.name} エラー: {_ru_e}")
                         if _pil_images:
-                            with st.spinner("スタイルを分析中...（Geminiがデザインシステムを自動入力します）"):
+                            with st.spinner("Geminiがスタイルを分析中..."):
                                 _ds_from_ref = image_generator.analyze_reference_images(
                                     _pil_images, _cfg_now, gemini_key
                                 )
-                                # 既存のdesign_systemにマージ（色など手動設定済みのフィールドは上書きしない）
-                                _existing_ds = _cfg_now.get("design_system", {})
-                                for _k, _v in _ds_from_ref.items():
-                                    if _v:  # 空文字は上書きしない
-                                        _existing_ds[_k] = _v
-                                _cfg_now["design_system"] = _existing_ds
-                                site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder)
-                            # キャッシュクリア（次の生成で新しい画像を使う）
-                            st.session_state.pop(f"ref_images_{_current_site4}", None)
-                            st.success("✅ 参照画像を保存してスタイル分析を完了しました。")
-                            st.rerun()
+                            # 分析結果をsession_stateに保存して確認画面へ
+                            st.session_state[f"ds_analysis_{_current_site4}"] = _ds_from_ref
+
+            # ── 分析結果の確認・保存 ──────────────────────────────
+            _ds_analysis_key = f"ds_analysis_{_current_site4}"
+            if st.session_state.get(_ds_analysis_key):
+                _analysis = st.session_state[_ds_analysis_key]
+                st.success("✅ Geminiがデザインシステムを分析しました。内容を確認して保存してください。")
+                _label_map = {
+                    "illustration_style": "イラストスタイル",
+                    "line_weight":        "線の太さ・質感",
+                    "character_style":    "人物の描き方",
+                    "fill_style":         "塗りスタイル",
+                    "card_style":         "カード形状",
+                    "spacing":            "余白感",
+                    "prohibited_elements":"禁止事項",
+                    "additional_notes":   "追加ノート",
+                    "ref_image_analysis": "総合スタイル説明",
+                }
+                for _fk, _flabel in _label_map.items():
+                    if _analysis.get(_fk):
+                        st.markdown(f"**{_flabel}**")
+                        st.caption(_analysis[_fk])
+                _rc1, _rc2 = st.columns(2)
+                if _rc1.button("✅ この内容でデザインシステムに適用", key=f"apply_ds_{_current_site4}", type="primary"):
+                    _cfg_apply = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
+                    _existing_ds = _cfg_apply.get("design_system", {})
+                    for _k, _v in _analysis.items():
+                        if _v:
+                            _existing_ds[_k] = _v
+                    _cfg_apply["design_system"] = _existing_ds
+                    site_config_manager.save_site_config(_current_site4, _cfg_apply, _site_cfg_creds, _site_cfg_parent_folder)
+                    st.session_state.pop(_ds_analysis_key, None)
+                    st.session_state.pop(f"ref_images_{_current_site4}", None)
+                    st.success("✅ 保存しました。")
+                    st.rerun()
+                if _rc2.button("✕ 破棄", key=f"discard_ds_{_current_site4}"):
+                    st.session_state.pop(_ds_analysis_key, None)
+                    st.rerun()
 
             st.markdown("---")
 
