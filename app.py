@@ -2143,6 +2143,10 @@ with _safe_tab(tab_settings):
                 _analysis = st.session_state[_ds_analysis_key]
                 st.success("✅ Geminiがデザインシステムを分析しました。内容を確認して保存してください。")
                 _label_map = {
+                    "primary_color":      "メインカラー",
+                    "accent_color":       "アクセントカラー",
+                    "background_color":   "背景色",
+                    "text_color":         "テキスト色",
                     "illustration_style": "イラストスタイル",
                     "line_weight":        "線の太さ・質感",
                     "character_style":    "人物の描き方",
