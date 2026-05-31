@@ -145,8 +145,8 @@ def list_reference_images_in_drive(
 def delete_reference_image_from_drive(
     file_id: str,
     credentials_dict: dict,
-) -> bool:
-    """DriveのサイトID参照画像を削除"""
+) -> tuple[bool, str]:
+    """DriveのサイトID参照画像を削除。Returns: (success, error_message)"""
     from core.drive_uploader import delete_reference_image
     return delete_reference_image(file_id, credentials_dict)
 

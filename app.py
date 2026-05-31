@@ -2087,10 +2087,12 @@ with _safe_tab(tab_settings):
                                 st.text(_rf["name"])
                             with _rf_col2:
                                 if st.button("🗑️", key=f"del_ref_{_rf['id']}"):
-                                    image_generator.delete_reference_image_from_drive(_rf["id"], _site_cfg_creds)
-                                    # キャッシュクリア
-                                    st.session_state.pop(f"ref_images_{_current_site4}", None)
-                                    st.rerun()
+                                    _del_ok, _del_err = image_generator.delete_reference_image_from_drive(_rf["id"], _site_cfg_creds)
+                                    if _del_ok:
+                                        st.session_state.pop(f"ref_images_{_current_site4}", None)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"削除失敗: {_del_err}")
                     else:
                         st.caption("参照画像未登録")
                 except Exception as _ref_list_e:

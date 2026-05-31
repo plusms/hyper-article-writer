@@ -169,14 +169,14 @@ def download_reference_images(
 def delete_reference_image(
     file_id: str,
     credentials_dict: dict,
-) -> bool:
-    """参照画像をDriveから削除"""
+) -> tuple[bool, str]:
+    """参照画像をDriveから削除。Returns: (success, error_message)"""
     try:
         service = _get_service(credentials_dict)
         service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
-        return True
-    except Exception:
-        return False
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 
 def upload_json(
