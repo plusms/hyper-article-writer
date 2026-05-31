@@ -2121,11 +2121,16 @@ with _safe_tab(tab_settings):
                                 except Exception as _ru_e:
                                     st.error(f"{_ru.name} エラー: {_ru_e}")
                         if _pil_images:
-                            with st.spinner("スタイルを分析中..."):
-                                _ref_analysis = image_generator.analyze_reference_images(
+                            with st.spinner("スタイルを分析中...（Geminiがデザインシステムを自動入力します）"):
+                                _ds_from_ref = image_generator.analyze_reference_images(
                                     _pil_images, _cfg_now, gemini_key
                                 )
-                                _cfg_now.setdefault("design_system", {})["ref_image_analysis"] = _ref_analysis
+                                # 既存のdesign_systemにマージ（色など手動設定済みのフィールドは上書きしない）
+                                _existing_ds = _cfg_now.get("design_system", {})
+                                for _k, _v in _ds_from_ref.items():
+                                    if _v:  # 空文字は上書きしない
+                                        _existing_ds[_k] = _v
+                                _cfg_now["design_system"] = _existing_ds
                                 site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder)
                             # キャッシュクリア（次の生成で新しい画像を使う）
                             st.session_state.pop(f"ref_images_{_current_site4}", None)

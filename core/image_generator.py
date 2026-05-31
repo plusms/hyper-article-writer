@@ -155,31 +155,64 @@ def analyze_reference_images(
     images: list[Image.Image],
     site_config: dict,
     gemini_api_key: str,
-) -> str:
+) -> dict:
     """
-    参照画像をGeminiで分析してデザイン特徴テキストを返す。
-    結果は site_config["design_system"]["ref_image_analysis"] に保存する。
+    参照画像をGeminiで分析してデザインシステム全フィールドをdictで返す。
+    呼び出し側でそのまま design_system にマージして保存する。
+
+    Returns: {
+        "illustration_style": str,
+        "line_weight": str,
+        "character_style": str,
+        "fill_style": str,
+        "card_style": str,
+        "spacing": str,
+        "prohibited_elements": str,
+        "additional_notes": str,
+        "ref_image_analysis": str,
+    }
     """
     if not images or not gemini_api_key:
-        return ""
+        return {}
 
     client = GeminiImageClient(api_key=gemini_api_key)
     ds = site_config.get("design_system", {})
-    color_hints = ""
+    color_hint = ""
     if ds.get("primary_color"):
-        color_hints = (
-            f"\nサイトのメインカラーは {ds['primary_color']} です。"
-            "参照画像のスタイルを分析する際にこの配色を基準として言及してください。"
-        )
+        color_hint = f"\nサイトのメインカラーは {ds['primary_color']} です。色の記述ではこれを基準にしてください。"
 
     prompt = (
-        "添付された参照画像のビジュアルデザイン特徴を日本語で簡潔に記述してください。"
-        "以下の観点を含めること：イラストのタッチ・線の太さ・塗りスタイル・"
-        "人物の描き方・カードの形状・余白感・全体的な雰囲気。"
-        "AI画像生成への指示として使えるよう、具体的かつ簡潔に200字以内でまとめること。"
-        + color_hints
+        "添付された参照画像を分析して、以下のJSON形式で出力してください。"
+        "AI画像生成プロンプトとして直接使える日本語・具体的な記述にすること。"
+        "JSONのみ出力（コードブロック・説明文不要）。" + color_hint + """
+
+{
+  "illustration_style": "イラストの様式（例: フラットデザイン・手描き風・アイコン系など）",
+  "line_weight": "線の太さ・質感（例: 均一な細線2px・太めのアウトライン・線なしなど）",
+  "character_style": "人物の描き方（例: 4頭身・記号的表現・写実的・なしなど）",
+  "fill_style": "塗りスタイル（例: フラット塗り・グラデーションあり・影ありなど）",
+  "card_style": "カード・ボックスの形状（例: 白背景+角丸8px・枠線あり・影ありなど）",
+  "spacing": "余白感（例: 広めに均等・コンパクトなど）",
+  "prohibited_elements": "このスタイルに合わない要素（例: 3D・手書き・写真・過剰な装飾など）",
+  "additional_notes": "その他の特徴（例: 全体的にクリーン・カラフルな配色・医療系の清潔感など）",
+  "ref_image_analysis": "上記をまとめた総合スタイル説明（200字以内・画像生成プロンプトとして使う）"
+}"""
     )
-    return client.analyze_with_images(prompt, images)
+
+    raw = client.analyze_with_images(prompt, images)
+
+    # JSONを抽出
+    if "```json" in raw:
+        raw = raw.split("```json")[1].split("```")[0].strip()
+    elif "```" in raw:
+        raw = raw.split("```")[1].split("```")[0].strip()
+
+    try:
+        result = json.loads(raw)
+        return {k: str(v) for k, v in result.items()}
+    except Exception:
+        # パース失敗時はref_image_analysisだけ返す
+        return {"ref_image_analysis": raw[:500]}
 
 
 # ── 一括生成ヘルパー（記事作成フローから呼ぶ） ───────────────
