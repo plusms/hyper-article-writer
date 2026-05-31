@@ -26,7 +26,7 @@ DESIGN_SYSTEM_TEMPLATE = """あなたはプロのUIデザイナーです。
 == イラストレーション・タッチ ==
 - スタイル: {illustration_style}
 - 線の太さ・質感: {line_weight}
-- 人物造形: {character_style}
+- 人物造形（人物が登場する場合のみ適用）: {character_style}
 - 塗り: {fill_style}
 - 背景描写: 人物の背景（部屋、家具、床の線）は一切描かない
 
@@ -42,7 +42,7 @@ DESIGN_SYSTEM_TEMPLATE = """あなたはプロのUIデザイナーです。
 == 追加スタイルノート ==
 {additional_notes}
 
-== 参照画像から抽出したデザイン特徴（最重要・厳守） ==
+== 参照画像のビジュアルスタイル（参考） ==
 {ref_image_analysis}
 """
 
