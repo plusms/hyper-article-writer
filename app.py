@@ -2174,6 +2174,13 @@ with _safe_tab(tab_settings):
                     site_config_manager.save_site_config(_current_site4, _cfg_apply, _site_cfg_creds, _site_cfg_parent_folder)
                     st.session_state.pop(_ds_analysis_key, None)
                     st.session_state.pop(f"ref_images_{_current_site4}", None)
+                    # フォームwidgetのセッションステートをクリアして新値で再描画させる
+                    for _fk in [f"ds_primary_{_current_site4}", f"ds_accent_{_current_site4}",
+                                 f"ds_bg_{_current_site4}", f"ds_text_{_current_site4}",
+                                 f"ds_secondary_{_current_site4}", f"ds_danger_{_current_site4}",
+                                 f"ds_style_{_current_site4}", f"ds_prohibit_{_current_site4}",
+                                 f"ds_notes_{_current_site4}"]:
+                        st.session_state.pop(_fk, None)
                     st.success("✅ 保存しました。")
                     st.rerun()
                 if _rc2.button("✕ 破棄", key=f"discard_ds_{_current_site4}"):
