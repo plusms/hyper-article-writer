@@ -149,6 +149,7 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
         f"\n【クリニック紹介の制約】\n"
         f"{_count_rule}\n"
         f"{_list_rule}\n"
+        "掲載順序は必ずリストの記載順通りにすること。リストの最初のクリニックが1位（最上位）として紹介されること。順番を入れ替えない。\n"
         "クリニックが0件の場合、クリニック紹介H2自体を設けない。"
     ) if inputs["clinics"] else "\nクリニック指定なし：クリニック紹介H2は設けない。"
 

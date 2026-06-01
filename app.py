@@ -18,7 +18,7 @@ from core.researcher import (
     DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE,
 )
 from core.planner import generate_structure
-from core.writer import generate_body, quality_check, heading_structure_check
+from core.writer import generate_body, quality_check, heading_structure_check, extract_criteria_summary
 from core.sheets import (
     read_input_rows, write_output_row, write_full_row, write_status, get_sheet,
     get_settings_sheet, read_defaults, ARTICLE_TABS,
@@ -1054,6 +1054,8 @@ with _safe_tab(tab_custom):
         st.caption("※ここに入力した案件は必ず記事に掲載されます。空欄のままでも自動探索で補完されます。")
         to_remove = []
         for i, c in enumerate(st.session_state.test_clinics):
+            if f"tcd_pending_{i}" in st.session_state:
+                st.session_state[f"tcd_{i}"] = st.session_state.pop(f"tcd_pending_{i}")
             is_first = (i == 0)
             st.caption("案件 1（最上位）" if is_first else f"案件 {i + 1}")
             tc0, tc1, tc2, tc3 = st.columns([3, 3, 1.2, 0.8])
@@ -1068,8 +1070,9 @@ with _safe_tab(tab_custom):
                     if n.strip() in _ca_db_data:
                         _ca_entry = _ca_db_data[n.strip()]
                         if _ca_entry.get("domain"):
-                            st.session_state[f"tcd_{i}"] = _ca_entry["domain"]
+                            st.session_state[f"tcd_pending_{i}"] = _ca_entry["domain"]
                         st.session_state[f"t_ca_db_info_{i}"] = _ca_entry.get("info", "")
+                        st.rerun()
                     else:
                         st.session_state[f"t_ca_db_info_{i}"] = ""
                         st.info(f"「{n}」はDBに未登録です（スクレイピングで取得）")
@@ -1241,6 +1244,8 @@ with _safe_tab(tab_custom):
                             n_discover = max(0, clinic_count - len(valid_clinics))
                             discovered = discovered[:n_discover]
                         all_clinics = valid_clinics + discovered
+                        if clinic_count > 0:
+                            all_clinics = all_clinics[:clinic_count]
                         if discovered:
                             st.write(f"　→ {len(discovered)} 件を自動追加: {', '.join(c['name'] for c in discovered)}")
                         # 院数不足の場合：auto_discoverで補完 → それでも足りなければ指定数を実際の数に下げる
@@ -1286,12 +1291,15 @@ with _safe_tab(tab_custom):
                         st.write(f"✍️ 本文生成中（{_provider_label}）...")
                         output = generate_body(inputs, structure, clinics, claude_key, comp,
                                               site_parts=_single_site_parts, gemini_api_key=gemini_key, article_provider=article_provider)
+                        st.write("📝 選び方コンテンツ抽出中...")
+                        _criteria_summary = extract_criteria_summary(output["html"], claude_key)
                         st.session_state["t2_last"] = {
-                            "html":           output["html"],
-                            "title":          structure["title"],
-                            "meta":           structure["meta"],
-                            "todo_list":      output["todo_list"],
-                            "structure_text": structure["structure_text"],
+                            "html":             output["html"],
+                            "title":            structure["title"],
+                            "meta":             structure["meta"],
+                            "todo_list":        output["todo_list"],
+                            "structure_text":   structure["structure_text"],
+                            "criteria_summary": _criteria_summary,
                             "site_config":    _single_site_config,
                             "site_name":      site_name or (selected_site_for_parts if selected_site_for_parts != "（なし）" else ""),
                             "main_kw":        main_kw,
@@ -1641,7 +1649,11 @@ with _safe_tab(tab_custom):
                 _rb_detail_lines.append(f"メタリフ名: {_dc.get('metarif_name', '')}")
                 _rb_detail_lines.append(f"LPプラン: {_dc.get('recommended', '')}")
             _rb_export_text = (
-                f"【構成・選び方】\n{_t2_last.get('structure_text','')}\n\n"
+                f"【メインKW】\n{_t2_last.get('main_kw', '')}\n\n"
+                f"【サブKW】\n{_t2_last.get('_inputs', {}).get('sub_kw', '')}\n\n"
+                f"【記事構成】\n{_t2_last.get('structure_text', '')}\n\n"
+                f"【選び方コンテンツ】\n{_t2_last.get('criteria_summary', '')}\n\n"
+                f"【件数】\n{len(_t2_last.get('clinics', []))}\n\n"
                 f"【掲載院一覧】\n{_rb_clinic_lines}"
                 + (f"\n\n【案件詳細】\n" + "\n".join(_rb_detail_lines) if _rb_detail_lines else "")
             )
@@ -2461,6 +2473,10 @@ with _safe_tab(tab_rank):
 
     st.divider()
 
+    for _pk, _wk in [("cb_main_kw_pending", "cb_main_kw"), ("cb_sub_kw_pending", "cb_sub_kw"), ("cb_clinic_count_pending", "cb_clinic_count")]:
+        if _pk in st.session_state:
+            st.session_state[_wk] = st.session_state.pop(_pk)
+
     _cb_kw_col1, _cb_kw_col2 = st.columns(2)
     _cb_main_kw = _cb_kw_col1.text_input("メインKW", key="cb_main_kw")
     _cb_sub_kw  = _cb_kw_col2.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
@@ -2480,8 +2496,33 @@ with _safe_tab(tab_rank):
         _rb_raw = _rb_uploaded.read().decode("utf-8")
         if "【掲載院一覧】" in _rb_raw:
             _rb_split = _rb_raw.split("【掲載院一覧】", 1)
-            st.session_state["cb_criteria"] = _rb_split[0].replace("【構成・選び方】", "").strip()
-            _rb_rest = _rb_split[1]
+            _rb_header = _rb_split[0]
+            _rb_rest   = _rb_split[1]
+
+            def _rb_extract(text, tag):
+                import re as _re
+                m = _re.search(rf"【{tag}】\n(.*?)(?=\n【|\Z)", text, _re.DOTALL)
+                return m.group(1).strip() if m else ""
+
+            _rb_main_kw  = _rb_extract(_rb_header, "メインKW")
+            _rb_sub_kw   = _rb_extract(_rb_header, "サブKW")
+            _rb_criteria = _rb_extract(_rb_header, "選び方コンテンツ")
+            _rb_count    = _rb_extract(_rb_header, "件数")
+
+            if _rb_main_kw:
+                st.session_state["cb_main_kw_pending"] = _rb_main_kw
+            if _rb_sub_kw:
+                st.session_state["cb_sub_kw_pending"] = _rb_sub_kw
+            if _rb_criteria:
+                st.session_state["cb_criteria"] = _rb_criteria
+            else:
+                st.session_state["cb_criteria"] = _rb_header.replace("【構成・選び方】", "").strip()
+            if _rb_count:
+                try:
+                    st.session_state["cb_clinic_count_pending"] = int(_rb_count)
+                except ValueError:
+                    pass
+
             if "【案件詳細】" in _rb_rest:
                 _rb_clinic_part, _rb_detail_part = _rb_rest.split("【案件詳細】", 1)
                 st.session_state["cb_clinic_paste"] = _rb_clinic_part.strip()

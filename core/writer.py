@@ -858,3 +858,25 @@ QH〇, QH〇 …（問題なしの項目番号を列挙）
         messages=[{"role": "user", "content": prompt}],
     )
     return msg.content[0].text
+
+
+def extract_criteria_summary(html: str, claude_api_key: str) -> str:
+    """記事HTMLからランキングブロック生成用の選び方コンテンツを抽出する"""
+    try:
+        client = anthropic.Anthropic(api_key=claude_api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=800,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "以下の記事HTMLを読んで、クリニック・サービスを選ぶ際の「選び方・比較ポイント」として記事が伝えている内容を抽出してください。\n"
+                    "選び方セクションに限らず、記事全体のH2/H3本文のニュアンスから「この記事はどのような基準でクリニックを選ぶことを読者に伝えているか」を読み取り、\n"
+                    "ランキングブロック生成の参考情報として使える形で、自然文で500文字以内にまとめてください。\n\n"
+                    f"【記事HTML】\n{html[:10000]}"
+                ),
+            }],
+        )
+        return msg.content[0].text
+    except Exception:
+        return ""
