@@ -100,6 +100,11 @@ def get_default_site_config() -> Dict[str, Any]:
             "affili_param_positions": "top,rank,matome,ryokin,kuchikomi",
             "affili_param_formats": "bt,bn,txt",
         },
+        "image_settings": {
+            "base_url": "",
+            "ext": "webp",
+            "template": '<div class="full_img">\n  <img decoding="async" src="{src}" alt="{alt}">\n</div>',
+        },
     }
 
 

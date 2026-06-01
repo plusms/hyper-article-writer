@@ -427,3 +427,24 @@ def write_full_row_knowhow(ws: gspread.Worksheet, row_index: int, input_data: di
         ]]
     )
     _reset_row_height(ws, row_index)
+
+
+def read_notation_rules(sheet_url: str, creds_data: dict, site_name: str) -> list:
+    """表記ゆれルールシートからサイト名でフィルタして返す。"""
+    try:
+        ws = get_sheet(sheet_url, creds_data, tab_name="表記ゆれルール")
+        rows = ws.get_all_values()
+        if len(rows) < 2:
+            return []
+        rules = []
+        for row in rows[1:]:
+            row_site = row[0].strip() if len(row) > 0 else ""
+            if row_site == site_name:
+                rules.append({
+                    "ng": row[1].strip() if len(row) > 1 else "",
+                    "ok": row[2].strip() if len(row) > 2 else "",
+                    "note": row[3].strip() if len(row) > 3 else "",
+                })
+        return [r for r in rules if r["ng"]]
+    except Exception:
+        return []

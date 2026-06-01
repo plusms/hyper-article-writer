@@ -18,7 +18,7 @@ from core.researcher import (
     DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE,
 )
 from core.planner import generate_structure
-from core.writer import generate_body, quality_check, heading_structure_check, extract_criteria_summary
+from core.writer import generate_body, quality_check, heading_structure_check, extract_criteria_summary, inject_images_into_html
 from core.sheets import (
     read_input_rows, write_output_row, write_full_row, write_status, get_sheet,
     get_settings_sheet, read_defaults, ARTICLE_TABS,
@@ -26,7 +26,7 @@ from core.sheets import (
     read_input_rows_knowhow, read_recent_input_rows_knowhow,
     write_status_knowhow, write_output_row_knowhow, write_full_row_knowhow,
     read_input_rows_knowhow_bulk, write_status_knowhow_bulk, write_output_row_knowhow_bulk,
-    COL_TITLE, COL_TITLE_KNOWHOW,
+    COL_TITLE, COL_TITLE_KNOWHOW, read_notation_rules,
 )
 from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
 
@@ -72,9 +72,10 @@ _site_cfg_parent_folder   = _drive_folder_id
 _site_cfg_direct_id       = _secret("SITE_CONFIG_FOLDER_ID", "")
 if _site_cfg_direct_id:
     site_config_manager.SITE_CONFIG_FOLDER_ID_OVERRIDE = _site_cfg_direct_id
-_article_sheet_url_default    = _secret("ARTICLE_SHEET_URL")
-_db_sheet_url_default         = _secret("CLINIC_DB_SHEET_URL")
-_lifestyle_sheet_url_default  = _secret("LIFESTYLE_DB_SHEET_URL")
+_article_sheet_url_default         = _secret("ARTICLE_SHEET_URL")
+_db_sheet_url_default              = _secret("CLINIC_DB_SHEET_URL")
+_lifestyle_sheet_url_default       = _secret("LIFESTYLE_DB_SHEET_URL")
+_notation_rules_sheet_url_default  = _secret("NOTATION_RULES_SHEET_URL", "1h6BBETAdRTfGsOFBCxSlS9M6gzQ30KlBx53wRUAjB84")
 
 # ── サイドバー：設定 ──────────────────────────────────────
 with st.sidebar:
@@ -543,6 +544,12 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                                     )
                                     _bulk_uploaded += 1
                             st.write(f"　　→ {_bulk_uploaded} 枚アップロード完了")
+                            # 画像タグを記事HTMLに注入してシート書き込み用HTMLを更新
+                            _bulk_img_settings = _bulk_sc.get("image_settings", {})
+                            if _bulk_img_settings.get("base_url") and _bulk_slug:
+                                _out["html"] = inject_images_into_html(
+                                    _out["html"], _bulk_results, _bulk_img_settings, _bulk_slug
+                                )
                         except Exception as _img_e:
                             st.warning(f"　　→ 画像生成エラー ({kw}): {_img_e}")
             elif tab_name == "ノウハウ":
@@ -1289,8 +1296,19 @@ with _safe_tab(tab_custom):
                     else:
                         _provider_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
                         st.write(f"✍️ 本文生成中（{_provider_label}）...")
+                        _t2_notation_rules = []
+                        if _batch_site_name and _notation_rules_sheet_url_default:
+                            try:
+                                _nr_creds = _get_gcp_creds(sheets_creds_file)
+                                if _nr_creds:
+                                    _t2_notation_rules = read_notation_rules(
+                                        _notation_rules_sheet_url_default, _nr_creds, _batch_site_name
+                                    )
+                            except Exception:
+                                pass
                         output = generate_body(inputs, structure, clinics, claude_key, comp,
-                                              site_parts=_single_site_parts, gemini_api_key=gemini_key, article_provider=article_provider)
+                                              site_parts=_single_site_parts, gemini_api_key=gemini_key,
+                                              article_provider=article_provider, notation_rules=_t2_notation_rules)
                         st.write("📝 選び方コンテンツ抽出中...")
                         _criteria_summary = extract_criteria_summary(output["html"], claude_key)
                         st.session_state["t2_last"] = {
@@ -1794,6 +1812,21 @@ with _safe_tab(tab_custom):
                                     st.warning(f"案{i+1} の画像生成に失敗しました")
 
                             img_status.update(label=f"✅ {len(_uploaded_t2)} 枚アップロード完了", state="complete")
+
+                            # 画像タグを記事HTMLに注入
+                            _img_settings_t2 = _img_site_config.get("image_settings", {})
+                            if _img_settings_t2.get("base_url") and _img_slug.strip():
+                                _updated_html = inject_images_into_html(
+                                    _t2_last["html"],
+                                    _img_results_t2,
+                                    _img_settings_t2,
+                                    _img_slug.strip(),
+                                )
+                                _t2_last["html"] = _updated_html
+                                st.session_state["t2_last"] = _t2_last
+                                st.session_state.pop("t2_h2_blocks_hash", None)
+                                st.caption("✅ 画像タグを記事に挿入しました")
+
                             for r in _uploaded_t2:
                                 st.markdown(
                                     f"**{r['proposal'].get('placement', '')}**  \n"
@@ -2198,6 +2231,44 @@ with _safe_tab(tab_settings):
                 if _rc2.button("✕ 破棄", key=f"discard_ds_{_current_site4}"):
                     st.session_state.pop(_ds_analysis_key, None)
                     st.rerun()
+
+            st.markdown("---")
+
+            # ── 1c. 画像テンプレート設定 ─────────────────────────────
+            st.markdown("### 🖼️ 画像テンプレート設定")
+            st.caption("記事に挿入される画像タグのHTMLテンプレートとベースURLを登録します。{src} と {alt} がプレースホルダーです。")
+            _imgs = _config4.get("image_settings", {})
+            with st.form(key=f"img_settings_form_{_current_site4}"):
+                _imgs_base_url = st.text_input(
+                    "画像ベースURL（末尾 / まで）",
+                    value=_imgs.get("base_url", ""),
+                    key=f"imgs_base_url_{_current_site4}",
+                    placeholder="https://example.com/wp-content/uploads/",
+                )
+                _imgs_ext = st.selectbox(
+                    "拡張子",
+                    ["webp", "png", "jpg"],
+                    index=["webp", "png", "jpg"].index(_imgs.get("ext", "webp")) if _imgs.get("ext", "webp") in ["webp", "png", "jpg"] else 0,
+                    key=f"imgs_ext_{_current_site4}",
+                )
+                _imgs_template = st.text_area(
+                    "HTMLテンプレート",
+                    value=_imgs.get("template", '<div class="full_img">\n  <img decoding="async" src="{src}" alt="{alt}">\n</div>'),
+                    height=100,
+                    key=f"imgs_template_{_current_site4}",
+                )
+                if st.form_submit_button("💾 画像テンプレートを保存"):
+                    _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
+                    _cfg_now["image_settings"] = {
+                        "base_url": _imgs_base_url.strip(),
+                        "ext": _imgs_ext,
+                        "template": _imgs_template,
+                    }
+                    if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
+                        st.success("✅ 保存しました。")
+                        st.rerun()
+                    else:
+                        st.error("保存に失敗しました。")
 
             st.markdown("---")
 

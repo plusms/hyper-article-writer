@@ -380,6 +380,7 @@ def _build_body_prompt(
     use_clinic_placeholder: bool = False,
     site_parts: str = "",
     is_final_section: bool = True,
+    notation_rules: list | None = None,
 ) -> str:
     article_type = inputs["article_type"]
     clinic_names = list(clinic_info.keys()) if clinic_info else []
@@ -560,6 +561,7 @@ def _build_body_prompt(
 {clinic_info_text[:12000] if clinic_info_text else "（情報なし）"}
 
 {WRITING_RULES}
+{build_notation_rules_note(notation_rules or [])}
 {type_instruction}
 {site_parts_block}
 【HTML出力ルール】
@@ -609,6 +611,41 @@ def _build_body_prompt(
 {"㉑ 【ノウハウ記事・最終セクション限定】まとめのH2が配置されているか。ない場合は必ず末尾に追加する。見出しに「まとめ」という名称は使わない" if (article_type == "ノウハウ" and is_final_section) else ""}"""
 
 
+def build_notation_rules_note(notation_rules: list) -> str:
+    """表記ゆれルールをプロンプト用テキストに変換する。"""
+    if not notation_rules:
+        return ""
+    lines = ["【表記ゆれルール（厳守）】"]
+    for r in notation_rules:
+        ok_str = f"→ {r['ok']}" if r["ok"] else "→ 使用禁止"
+        note_str = f"（{r['note']}）" if r["note"] else ""
+        lines.append(f"- NG: {r['ng']} {ok_str}{note_str}")
+    return "\n".join(lines) + "\n"
+
+
+def inject_images_into_html(html: str, image_results: list, image_settings: dict, slug: str) -> str:
+    """生成画像を article HTML の各H2直後に挿入する。"""
+    import re
+    base_url = image_settings.get("base_url", "").rstrip("/") + "/"
+    ext = image_settings.get("ext", "webp")
+    template = image_settings.get("template", '<img src="{src}" alt="{alt}">')
+    if not base_url.strip("/"):
+        return html
+    parts = re.split(r'(?=<h2[\s>])', html)
+    if len(parts) <= 1:
+        return html
+    result = [parts[0]]
+    for idx, part in enumerate(parts[1:]):
+        if idx < len(image_results) and image_results[idx].get("bytes"):
+            h2_m = re.search(r'<h2[^>]*>(.*?)</h2>', part, re.DOTALL)
+            alt = re.sub(r'<[^>]+>', '', h2_m.group(1)).strip() if h2_m else ""
+            src = f"{base_url}{slug}-img{idx + 1}.{ext}"
+            img_html = template.replace("{src}", src).replace("{alt}", alt)
+            part = re.sub(r'(</h2>)', r'\1\n' + img_html, part, count=1)
+        result.append(part)
+    return "".join(result)
+
+
 def generate_body(
     inputs: dict,
     structure: dict,
@@ -618,6 +655,7 @@ def generate_body(
     site_parts: str = "",
     gemini_api_key: str = "",
     article_provider: str = "claude",
+    notation_rules: list | None = None,
 ) -> dict:
     use_clinic_placeholder = inputs.get("article_type") in ("地域", "比較")
 
@@ -671,6 +709,7 @@ def generate_body(
             use_clinic_placeholder=use_clinic_placeholder,
             site_parts=site_parts,
             is_final_section=True,
+            notation_rules=notation_rules,
         )
         return _finish(_call([{"role": "user", "content": fallback_prompt}]),
                        debug="H2パース失敗: フォールバック使用")
@@ -686,7 +725,8 @@ def generate_body(
         include_h1=True,
         use_clinic_placeholder=use_clinic_placeholder,
         site_parts=site_parts,
-        is_final_section=not second_half,  # 2ターン目がない場合は最終セクション
+        is_final_section=not second_half,
+        notation_rules=notation_rules,
     )
     messages = [{"role": "user", "content": prompt1}]
     part1 = _call(messages)
@@ -703,6 +743,7 @@ def generate_body(
         use_clinic_placeholder=use_clinic_placeholder,
         site_parts=site_parts,
         is_final_section=True,
+        notation_rules=notation_rules,
     )
     messages.append({"role": "user", "content": prompt2})
     part2 = _call(messages)
