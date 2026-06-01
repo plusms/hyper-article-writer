@@ -10,7 +10,7 @@ _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
-_HEADERS = ["name", "domain", "info", "updated_at", "affili_filename"]
+_HEADERS = ["name", "domain", "info", "updated_at", "affili_filename", "lp_info"]
 _SYSTEM_TABS = {"clinic_db"}  # old single-tab name; skip when listing genre tabs
 
 
@@ -25,10 +25,15 @@ def _get_spreadsheet(creds_data: dict, sheet_url: str):
 
 def _get_or_create_tab(spreadsheet, genre: str) -> gspread.Worksheet:
     try:
-        return spreadsheet.worksheet(genre)
+        ws = spreadsheet.worksheet(genre)
+        # 既存タブにlp_info列がなければF1に追記（マイグレーション）
+        headers = ws.row_values(1)
+        if "lp_info" not in headers:
+            ws.update_cell(1, 6, "lp_info")
+        return ws
     except gspread.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(title=genre, rows=1000, cols=len(_HEADERS))
-        ws.update("A1:E1", [_HEADERS])
+        ws.update("A1:F1", [_HEADERS])
         return ws
 
 
@@ -38,9 +43,10 @@ def _parse_worksheet(ws: gspread.Worksheet) -> dict:
     for row in rows[1:]:
         if not row or not row[0]:
             continue
-        padded = row + [""] * (5 - len(row))
-        name, domain, info, updated_at, affili_filename = padded[:5]
-        result[name] = {"domain": domain, "info": info, "updated_at": updated_at, "affili_filename": affili_filename}
+        padded = row + [""] * (6 - len(row))
+        name, domain, info, updated_at, affili_filename, lp_info = padded[:6]
+        result[name] = {"domain": domain, "info": info, "updated_at": updated_at,
+                        "affili_filename": affili_filename, "lp_info": lp_info}
     return result
 
 
@@ -84,8 +90,8 @@ def load_db(creds_data=None, sheet_url=None, genre: str = "") -> dict:
     return db
 
 
-def upsert_clinic(name: str, domain: str, genre: str, info: str, affili_filename: str = "", creds_data=None, sheet_url=None) -> bool:
-    """指定ジャンルのタブに1件upsert。affili_filename未指定（""）の場合は既存値を保持。"""
+def upsert_clinic(name: str, domain: str, genre: str, info: str, affili_filename: str = "", lp_info: str = "", creds_data=None, sheet_url=None) -> bool:
+    """指定ジャンルのタブに1件upsert。affili_filename・lp_info未指定（""）の場合は既存値を保持。"""
     today = str(date.today())
     if creds_data and sheet_url:
         spreadsheet = _get_spreadsheet(creds_data, sheet_url)
@@ -95,19 +101,24 @@ def upsert_clinic(name: str, domain: str, genre: str, info: str, affili_filename
         if name in all_names:
             row_idx = all_names.index(name) + 2
             existing_row = all_values[row_idx - 1] if row_idx - 1 < len(all_values) else []
-            existing_affili = existing_row[4] if len(existing_row) > 4 else ""
-            row_data = [name, domain, info, today, affili_filename if affili_filename else existing_affili]
-            ws.update(f"A{row_idx}:E{row_idx}", [row_data])
+            existing_affili  = existing_row[4] if len(existing_row) > 4 else ""
+            existing_lp_info = existing_row[5] if len(existing_row) > 5 else ""
+            row_data = [name, domain, info, today,
+                        affili_filename if affili_filename else existing_affili,
+                        lp_info if lp_info else existing_lp_info]
+            ws.update(f"A{row_idx}:F{row_idx}", [row_data])
         else:
-            ws.append_row([name, domain, info, today, affili_filename])
+            ws.append_row([name, domain, info, today, affili_filename, lp_info])
         return True
     db = _load_local()
     if genre not in db:
         db[genre] = {}
-    existing_affili = db.get(genre, {}).get(name, {}).get("affili_filename", "")
+    existing_affili  = db.get(genre, {}).get(name, {}).get("affili_filename", "")
+    existing_lp_info = db.get(genre, {}).get(name, {}).get("lp_info", "")
     db[genre][name] = {
         "domain": domain, "info": info, "updated_at": today,
         "affili_filename": affili_filename if affili_filename else existing_affili,
+        "lp_info": lp_info if lp_info else existing_lp_info,
     }
     return _save_local(db)
 

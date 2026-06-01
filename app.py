@@ -2986,7 +2986,7 @@ with _safe_tab(tab_cases):
                     _provider_label_db = "Gemini Flash" if research_provider == "gemini" else "Claude Sonnet"
                     st.write(f"🤖 「{_genre_new}」向けに情報抽出中（{_provider_label_db}）...")
                     _info_new = extract_clinic_info_from_content(_content_new, _name_new, _genre_new, claude_key, db_type=_db_type_sel, gemini_api_key=gemini_key, research_provider=research_provider, extra_instruction=_db_new_extra_instruction.strip())
-                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, creds_data=_db_creds, sheet_url=_active_db_url)
+                    clinic_db_manager.upsert_clinic(_name_new, _domain_new, _genre_new, _info_new, lp_info=_lp_text, creds_data=_db_creds, sheet_url=_active_db_url)
                     _add_status.update(label=f"✅ 「{_name_new}」を「{_genre_new}」に追加しました（{_mode_label}）", state="complete")
                     _ck = f"_db_nested_cache_{_db_type_sel}"
                     st.session_state.setdefault(_ck, {}).setdefault(_genre_new, {})[_name_new] = {
