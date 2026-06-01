@@ -2558,19 +2558,14 @@ with _safe_tab(tab_rank):
 
     st.divider()
 
-    for _pk, _wk in [("cb_main_kw_pending", "cb_main_kw"), ("cb_sub_kw_pending", "cb_sub_kw"), ("cb_clinic_count_pending", "cb_clinic_count")]:
+    for _pk, _wk in [("cb_main_kw_pending", "cb_main_kw"), ("cb_sub_kw_pending", "cb_sub_kw")]:
         if _pk in st.session_state:
             st.session_state[_wk] = st.session_state.pop(_pk)
 
     _cb_kw_col1, _cb_kw_col2 = st.columns(2)
     _cb_main_kw = _cb_kw_col1.text_input("メインKW", key="cb_main_kw")
     _cb_sub_kw  = _cb_kw_col2.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
-    _cb_opt_col1, _cb_opt_col2 = st.columns([3, 1])
-    _cb_db_type = _cb_opt_col1.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
-    _cb_clinic_count = int(_cb_opt_col2.number_input(
-        "件数（任意）", min_value=0, value=0, step=1, key="cb_clinic_count",
-        help="生成するブロック数を指定。0で全件生成。記事の掲載件数と揃えてください。",
-    ))
+    _cb_db_type = st.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
     _rb_uploaded = st.file_uploader(
         "📤 本文作成データをアップロード（任意）",
         type=["txt"],
@@ -2592,7 +2587,6 @@ with _safe_tab(tab_rank):
             _rb_main_kw  = _rb_extract(_rb_header, "メインKW")
             _rb_sub_kw   = _rb_extract(_rb_header, "サブKW")
             _rb_criteria = _rb_extract(_rb_header, "選び方コンテンツ")
-            _rb_count    = _rb_extract(_rb_header, "件数")
 
             if _rb_main_kw:
                 st.session_state["cb_main_kw_pending"] = _rb_main_kw
@@ -2602,11 +2596,6 @@ with _safe_tab(tab_rank):
                 st.session_state["cb_criteria"] = _rb_criteria
             else:
                 st.session_state["cb_criteria"] = _rb_header.replace("【構成・選び方】", "").strip()
-            if _rb_count:
-                try:
-                    st.session_state["cb_clinic_count_pending"] = int(_rb_count)
-                except ValueError:
-                    pass
 
             if "【案件詳細】" in _rb_rest:
                 _rb_clinic_part, _rb_detail_part = _rb_rest.split("【案件詳細】", 1)
@@ -2747,7 +2736,7 @@ with _safe_tab(tab_rank):
 
                 _cb_results = []
                 _cb_reference_html = ""  # 1院目のHTMLをフォーマット参照として後続院に渡す
-                _cb_clinics_to_gen = _cb_clinics[:_cb_clinic_count] if _cb_clinic_count > 0 else _cb_clinics
+                _cb_clinics_to_gen = _cb_clinics
                 # link_settings をサイトパーツに追記
                 _cb_link_rule_str = site_config_manager.format_link_settings(_cb_link_settings)
                 if _cb_link_rule_str:
@@ -2768,6 +2757,12 @@ with _safe_tab(tab_rank):
                             _t5_db_cache = clinic_db_manager.build_db_cache([_cbc["name"]], genre="", creds_data=_t5_db_creds, sheet_url=_t5_active_db_url)
                             if _t5_db_cache:
                                 st.write(f"　→ DB参照")
+                            # lp_plan が未入力ならDBのlp_infoをフォールバックとして使う
+                            if not _lp_plan:
+                                _db_lp_plan, _ = clinic_db_manager.get_clinic_lp_info(_cbc["name"], _t5_db_creds, _t5_active_db_url)
+                                if _db_lp_plan:
+                                    _lp_plan = _db_lp_plan
+                                    st.write(f"　→ lp_info を最訴求プランに使用")
                             _scraped = collect_clinic_info(
                                 [{"name": _cbc["name"], "domain": _clinic_url or _cbc["name"]}],
                                 "", claude_key, db_cache=_t5_db_cache, db_type=_cb_db_type,

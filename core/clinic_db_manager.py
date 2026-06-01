@@ -148,6 +148,18 @@ def delete_clinic(name: str, genre: str = "", creds_data=None, sheet_url=None) -
     return _save_local(db)
 
 
+def get_clinic_lp_info(name: str, creds_data=None, sheet_url=None) -> tuple:
+    """1院のlp_infoを (lp_plan, appeal) に分割して返す。見つからなければ ('', '')。"""
+    all_data = load_db(creds_data, sheet_url)
+    for genre_entries in all_data.values():
+        if isinstance(genre_entries, dict) and name in genre_entries:
+            raw = genre_entries[name].get("lp_info", "")
+            if raw:
+                parts = raw.split("---", 1)
+                return parts[0].strip(), (parts[1].strip() if len(parts) > 1 else "")
+    return "", ""
+
+
 def build_db_cache(clinic_names: list, genre: str = "", creds_data=None, sheet_url=None) -> dict:
     """指定ジャンルのDBから案件名リストに一致するものだけ {name: info_str} で返す。
     ジャンル指定があれば先にそのタブを検索し、ヒットしなかった院は全ジャンル横断で再検索する。
