@@ -10,7 +10,7 @@ _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
-_HEADERS = ["name", "domain", "info", "updated_at", "affili_filename", "lp_info"]
+_HEADERS = ["name", "domain", "info", "lp_info", "affili_filename", "updated_at"]
 _SYSTEM_TABS = {"clinic_db"}  # old single-tab name; skip when listing genre tabs
 
 
@@ -26,10 +26,6 @@ def _get_spreadsheet(creds_data: dict, sheet_url: str):
 def _get_or_create_tab(spreadsheet, genre: str) -> gspread.Worksheet:
     try:
         ws = spreadsheet.worksheet(genre)
-        # 既存タブにlp_info列がなければF1に追記（マイグレーション）
-        headers = ws.row_values(1)
-        if "lp_info" not in headers:
-            ws.update_cell(1, 6, "lp_info")
         return ws
     except gspread.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(title=genre, rows=1000, cols=len(_HEADERS))
@@ -44,7 +40,7 @@ def _parse_worksheet(ws: gspread.Worksheet) -> dict:
         if not row or not row[0]:
             continue
         padded = row + [""] * (6 - len(row))
-        name, domain, info, updated_at, affili_filename, lp_info = padded[:6]
+        name, domain, info, lp_info, affili_filename, updated_at = padded[:6]
         result[name] = {"domain": domain, "info": info, "updated_at": updated_at,
                         "affili_filename": affili_filename, "lp_info": lp_info}
     return result
@@ -101,14 +97,15 @@ def upsert_clinic(name: str, domain: str, genre: str, info: str, affili_filename
         if name in all_names:
             row_idx = all_names.index(name) + 2
             existing_row = all_values[row_idx - 1] if row_idx - 1 < len(all_values) else []
+            existing_lp_info = existing_row[3] if len(existing_row) > 3 else ""
             existing_affili  = existing_row[4] if len(existing_row) > 4 else ""
-            existing_lp_info = existing_row[5] if len(existing_row) > 5 else ""
-            row_data = [name, domain, info, today,
+            row_data = [name, domain, info,
+                        lp_info if lp_info else existing_lp_info,
                         affili_filename if affili_filename else existing_affili,
-                        lp_info if lp_info else existing_lp_info]
+                        today]
             ws.update(f"A{row_idx}:F{row_idx}", [row_data])
         else:
-            ws.append_row([name, domain, info, today, affili_filename, lp_info])
+            ws.append_row([name, domain, info, lp_info, affili_filename, today])
         return True
     db = _load_local()
     if genre not in db:

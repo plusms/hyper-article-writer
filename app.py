@@ -1061,8 +1061,13 @@ with _safe_tab(tab_custom):
         st.caption("※ここに入力した案件は必ず記事に掲載されます。空欄のままでも自動探索で補完されます。")
         to_remove = []
         for i, c in enumerate(st.session_state.test_clinics):
-            if f"tcd_pending_{i}" in st.session_state:
-                st.session_state[f"tcd_{i}"] = st.session_state.pop(f"tcd_pending_{i}")
+            for _pk, _wk in [
+                (f"tcd_pending_{i}", f"tcd_{i}"),
+                (f"tcr_pending_{i}", f"tcr_{i}"),
+                (f"tca_pending_{i}", f"tca_{i}"),
+            ]:
+                if _pk in st.session_state:
+                    st.session_state[_wk] = st.session_state.pop(_pk)
             is_first = (i == 0)
             st.caption("案件 1（最上位）" if is_first else f"案件 {i + 1}")
             tc0, tc1, tc2, tc3 = st.columns([3, 3, 1.2, 0.8])
@@ -1079,6 +1084,15 @@ with _safe_tab(tab_custom):
                         if _ca_entry.get("domain"):
                             st.session_state[f"tcd_pending_{i}"] = _ca_entry["domain"]
                         st.session_state[f"t_ca_db_info_{i}"] = _ca_entry.get("info", "")
+                        _lp_raw = _ca_entry.get("lp_info", "")
+                        if _lp_raw:
+                            _lp_parts = _lp_raw.split("---", 1)
+                            _lp_plan   = _lp_parts[0].strip()
+                            _lp_appeal = _lp_parts[1].strip() if len(_lp_parts) > 1 else ""
+                            if _lp_plan:
+                                st.session_state[f"tcr_pending_{i}"] = _lp_plan
+                            if _lp_appeal:
+                                st.session_state[f"tca_pending_{i}"] = _lp_appeal
                         st.rerun()
                     else:
                         st.session_state[f"t_ca_db_info_{i}"] = ""
