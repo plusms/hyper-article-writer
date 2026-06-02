@@ -1154,13 +1154,14 @@ with _safe_tab(tab_custom):
                         st.session_state[f"t_ca_db_info_name_{i}"] = n.strip()
                         _lp_raw = _ca_entry.get("lp_info", "")
                         if _lp_raw:
-                            _lp_parts = _lp_raw.split("---", 1)
-                            _lp_plan   = _lp_parts[0].strip()
-                            _lp_appeal = _lp_parts[1].strip() if len(_lp_parts) > 1 else ""
-                            if _lp_plan:
-                                st.session_state[f"tcr_pending_{i}"] = _lp_plan
-                            if _lp_appeal:
-                                st.session_state[f"tca_pending_{i}"] = _lp_appeal
+                            # ★マーク付きの行のみを最訴求プランとして使用
+                            _star_lines = [
+                                line.lstrip("★").strip()
+                                for line in _lp_raw.split("\n")
+                                if line.strip().startswith("★")
+                            ]
+                            if _star_lines:
+                                st.session_state[f"tcr_pending_{i}"] = _star_lines[0]
                         st.rerun()
                     else:
                         st.session_state[f"t_ca_db_info_{i}"] = ""
