@@ -2526,13 +2526,7 @@ with _safe_tab(tab_settings):
                                 key=f"cbt_bi_{_current_site4}_{_cbi}_{_bfk}",
                             ):
                                 _cbt_bi_fields.append(_bfk)
-                        _cbt_bi_sample = st.text_area(
-                            "基本情報テーブル HTMLサンプル（行名・形式の参考。内容はAIが埋める）",
-                            value=_cbt.get("basic_info_html_sample", ""),
-                            height=150,
-                            key=f"cbt_bi_sample_{_current_site4}_{_cbi}",
-                            placeholder="<table>...</table> の形式で貼り付け。行名と構造のみ参照されます。",
-                        )
+                        _cbt_bi_sample = _cbt.get("basic_info_html_sample", "")
 
                         st.caption("上位3件のリンク設置箇所")
                         _cbt_existing_links = _cbt.get("top3_link_placements", [])
@@ -2872,6 +2866,13 @@ with _safe_tab(tab_rank):
             st.session_state.cb_extra_blocks.append({"text": "", "intent": ""})
             st.rerun()
 
+        _cb_bi_sample = st.text_area(
+            "基本情報テーブル HTMLサンプル（任意・行名・形式の参考）",
+            height=120,
+            key="cb_bi_html_sample",
+            placeholder="1記事目を生成後、出てきた基本情報テーブルのHTMLをここに貼り付けると2院目以降で行名・形式を統一できます。",
+        )
+
         _cb_gen_all = st.button("🚀 全案件のブロックを生成", type="primary", use_container_width=True, key="cb_gen_all")
 
         if _cb_gen_all:
@@ -2942,7 +2943,7 @@ with _safe_tab(tab_rank):
                                 extra_notes=_extra_notes,
                                 link_url=_link_url,
                                 lp_plan=_lp_plan,
-                                template=_cb_sel_tmpl,
+                                template={**_cb_sel_tmpl, "basic_info_html_sample": _cb_bi_sample.strip() or _cb_sel_tmpl.get("basic_info_html_sample", "")},
                                 main_kw=_cb_main_kw,
                                 sub_kw=_cb_sub_kw_list,
                                 criteria_text=_cb_criteria,
