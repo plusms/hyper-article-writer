@@ -1408,6 +1408,8 @@ with _safe_tab(tab_custom):
         with st.expander("タイトル案・見出し一覧", expanded=True):
             st.code(_t2_draft["structure"]["structure_text"], language=None)
 
+        if st.session_state.pop("_t2_revision_clear", False):
+            st.session_state["t2_revision_input"] = ""
         _rev_note = st.text_area(
             "修正指示（任意）",
             key="t2_revision_input",
@@ -1425,7 +1427,7 @@ with _safe_tab(tab_custom):
                         claude_key, gemini_api_key=gemini_key, article_provider=article_provider,
                     )
                     st.session_state["t2_draft"] = {**_t2_draft, "structure": _new_struct}
-                    st.session_state["t2_revision_input"] = ""
+                    st.session_state["_t2_revision_clear"] = True
                     # Drive に構成修正ログを保存（失敗してもメインフローは止めない）
                     _struct_log_creds = _get_gcp_creds(sheets_creds_file)
                     if _struct_log_creds:
