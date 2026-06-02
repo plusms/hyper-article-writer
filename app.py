@@ -2690,6 +2690,7 @@ with _safe_tab(tab_rank):
     _cb_kw_col1, _cb_kw_col2 = st.columns(2)
     _cb_main_kw = _cb_kw_col1.text_input("メインKW", key="cb_main_kw")
     _cb_sub_kw  = _cb_kw_col2.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
+    _cb_article_type = st.radio("記事タイプ", ["地域", "比較"], horizontal=True, key="cb_article_type")
     _cb_db_type = st.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
     _rb_uploaded = st.file_uploader(
         "📤 本文作成データをアップロード（任意）",
@@ -2947,6 +2948,7 @@ with _safe_tab(tab_rank):
                                 main_kw=_cb_main_kw,
                                 sub_kw=_cb_sub_kw_list,
                                 criteria_text=_cb_criteria,
+                                article_type=_cb_article_type,
                                 claude_api_key=claude_key,
                                 site_parts=_cb_site_parts,
                                 reference_html=_cb_reference_html,

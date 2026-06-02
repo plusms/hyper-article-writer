@@ -79,6 +79,7 @@ def generate_clinic_block(
     site_parts: str = "",
     reference_html: str = "",
     extra_instruction: str = "",
+    article_type: str = "",
 ) -> str:
     is_top3 = rank <= 3
     heading_type = template.get("heading_type", 1)
@@ -137,6 +138,24 @@ def generate_clinic_block(
 - テーブルの直前に必ず小見出しパーツ（または小見出し相当のHTML）を置く
 - テーブル内に院名・クリニック名を含める行・セルを設けない
 - 書き方・形式は他院と完全統一（診療時間の区切り文字・改行方法・単位の表記など）
+"""
+
+    article_type_section = ""
+    if article_type == "地域":
+        article_type_section = """
+【記事タイプ：地域記事】
+紹介文を書く際の方針（強制ルールではなく、質を上げるための指針）：
+- 紹介文の約半分は「このジャンル×この地域」で成立するトピックを軸にする。その地域の読者が気にしそうな文脈・需要を起点にして自然に地域性が出るように書く（アクセス・通いやすさは刺さるジャンルならそれを使うが縛りではない）
+- 全体の約3分の1はその院固有の情報（強み・実績・特徴）。ジャンル×地域の文脈との重複はOK
+- 院ごとに切り口を変え、同じ記事内で紹介文の型が揃わないようにする
+"""
+    elif article_type == "比較":
+        article_type_section = """
+【記事タイプ：比較記事】
+紹介文を書く際の方針（強制ルールではなく、質を上げるための指針）：
+- 選び方コンテンツの比較軸を念頭に置きながら、各院の強みを自然な流れで紹介する
+- 比較軸への答え合わせのような単調な構成にしない。読者が「この院を選ぶ理由」を感じ取れる文脈で書く
+- 院ごとに切り口・角度を変え、同じ記事内で紹介文がテンプレ化しないようにする
 """
 
     basic_info_sample_section = ""
@@ -210,6 +229,7 @@ def generate_clinic_block(
 【見出しの形式】
 {heading_instruction}
 
+{article_type_section}
 {price_section}
 {basic_info_section}
 {basic_info_sample_section}
