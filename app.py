@@ -1244,7 +1244,7 @@ with _safe_tab(tab_custom):
             st.error("GCP認証が設定されていません")
         elif not main_kw:
             st.error("メインKWを入力してください")
-            else:
+        else:
                 try:
                     _save_ws = get_sheet(article_sheet_url, _save_creds, tab_name=output_tab_sel)
                     _save_vals = _save_ws.get_all_values()
