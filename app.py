@@ -379,7 +379,9 @@ def _regenerate_h2_block(
 def build_inputs_from_row(row: dict, defaults: dict | None = None) -> dict:
     clinics_raw = row.get("clinics_raw", "")
     clinics = []
-    for item in clinics_raw.split(","):
+    _cr_items = [x.strip() for x in clinics_raw.split("\n") if x.strip() and "::" in x] or \
+                [x.strip() for x in clinics_raw.split(",") if x.strip() and "::" in x]
+    for item in _cr_items:
         item = item.strip()
         if "::" in item:
             parts = item.split("::")
@@ -725,7 +727,10 @@ with _safe_tab(tab_custom):
             st.session_state["custom_blocks"] = [{"text": _rrd["custom_block"], "intent": ""}]
         # 掲載院リストをパース
         _rrd_clinics = []
-        for _ci in [x.strip() for x in _rrd.get("clinics_raw", "").split(",") if x.strip()]:
+        _rrd_raw = _rrd.get("clinics_raw", "")
+        _rrd_items = [x.strip() for x in _rrd_raw.split("\n") if x.strip() and "::" in x] or \
+                     [x.strip() for x in _rrd_raw.split(",") if x.strip() and "::" in x]
+        for _ci in _rrd_items:
             _cp = _ci.split("::")
             _rrd_clinics.append({
                 "name": _cp[0].strip(),
@@ -812,7 +817,10 @@ with _safe_tab(tab_custom):
             if _sheet_hist:
                 for _th in _sheet_hist:
                     _th_clinics = []
-                    for _item in [x.strip() for x in _th.get("clinics_raw", "").split(",") if x.strip()]:
+                    _th_raw = _th.get("clinics_raw", "")
+                    _th_cr_items = [x.strip() for x in _th_raw.split("\n") if x.strip() and "::" in x] or \
+                                   [x.strip() for x in _th_raw.split(",") if x.strip() and "::" in x]
+                    for _item in _th_cr_items:
                         _p = _item.split("::")
                         _th_clinics.append({
                             "name":        _p[0].strip(),
@@ -924,7 +932,10 @@ with _safe_tab(tab_custom):
                                     st.session_state[f"tm_str_pt_{_stri}"] = _sr_strengths[_stri]["point"]
                                     st.session_state[f"tm_str_bs_{_stri}"] = _sr_strengths[_stri]["basis"]
                                 _sr_clinics = []
-                                for _src in [x.strip() for x in _sr_data.get("clinics_raw", "").split(",") if x.strip()]:
+                                _sr_cr_raw = _sr_data.get("clinics_raw", "")
+                                _sr_cr_items = [x.strip() for x in _sr_cr_raw.split("\n") if x.strip() and "::" in x] or \
+                                               [x.strip() for x in _sr_cr_raw.split(",") if x.strip() and "::" in x]
+                                for _src in _sr_cr_items:
                                     _sp = _src.split("::")
                                     _sr_clinics.append({
                                         "name":        _sp[0].strip(),

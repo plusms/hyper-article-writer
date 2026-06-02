@@ -182,7 +182,7 @@ def _serialize_clinic(c: dict) -> str:
 def write_full_row(ws: gspread.Worksheet, row_index: int, input_data: dict, output_data: dict) -> None:
     """入力情報（A-K）と出力情報（L-P）を一括書き込み。カスタム作成で使用。"""
     clinics = output_data.get("clinics") or input_data.get("clinics", [])
-    clinic_str = ", ".join(_serialize_clinic(c) for c in clinics if c.get("name"))
+    clinic_str = "\n".join(_serialize_clinic(c) for c in clinics if c.get("name"))
     sub_kw_val = input_data.get("sub_kw", "")
     if isinstance(sub_kw_val, list):
         sub_kw_val = ", ".join(sub_kw_val)
@@ -229,7 +229,7 @@ def write_full_row(ws: gspread.Worksheet, row_index: int, input_data: dict, outp
 def write_input_only_row(ws: gspread.Worksheet, row_index: int, input_data: dict) -> None:
     """入力データのみをA-K列に書き込む（一時保存用）。出力列（L-P）には触れない。"""
     clinics = input_data.get("clinics", [])
-    clinic_str = ", ".join(_serialize_clinic(c) for c in clinics if c.get("name"))
+    clinic_str = "\n".join(_serialize_clinic(c) for c in clinics if c.get("name"))
     sub_kw_val = input_data.get("sub_kw", "")
     if isinstance(sub_kw_val, list):
         sub_kw_val = ", ".join(sub_kw_val)
