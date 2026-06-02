@@ -1017,6 +1017,8 @@ with _safe_tab(tab_custom):
             st.session_state.custom_blocks[i] = {"text": t, "intent": intent}
         for idx in reversed(cb_to_remove):
             st.session_state.custom_blocks.pop(idx)
+        if cb_to_remove:
+            st.rerun()
         if st.button("＋ 追加指示を追加", key="cb_add"):
             st.session_state.custom_blocks.append({"text": "", "intent": ""})
             st.rerun()
@@ -1188,6 +1190,8 @@ with _safe_tab(tab_custom):
             st.session_state.test_clinics[i] = {"name": n, "domain": d, "recommended": r, "appeal": a, "metarif_name": m}
         for idx in reversed(to_remove):
             st.session_state.test_clinics.pop(idx)
+        if to_remove:
+            st.rerun()
         if st.button("＋ 案件を追加", key="t_add"):
             st.session_state.test_clinics.append({"name": "", "domain": "", "recommended": "", "appeal": "", "metarif_name": ""})
             st.rerun()
@@ -2528,6 +2532,12 @@ with _safe_tab(tab_settings):
                                 _cbt_bi_fields.append(_bfk)
                         _cbt_bi_sample = _cbt.get("basic_info_html_sample", "")
 
+                        _cbt_show_rank = st.checkbox(
+                            "見出しに順位（◯位）を含める",
+                            value=_cbt.get("show_rank_in_heading", True),
+                            key=f"cbt_rank_{_current_site4}_{_cbi}",
+                        )
+
                         st.caption("上位3件のリンク設置箇所")
                         _cbt_existing_links = _cbt.get("top3_link_placements", [])
                         _cbt_links = []
@@ -2557,6 +2567,7 @@ with _safe_tab(tab_settings):
                                 "component_order": _cbt_order,
                                 "basic_info_fields": _cbt_bi_fields,
                                 "basic_info_html_sample": _cbt_bi_sample.strip(),
+                                "show_rank_in_heading": _cbt_show_rank,
                                 "top3_link_placements": _cbt_links,
                                 "price_table_templates": _cbt_pts,
                             })

@@ -86,6 +86,7 @@ def generate_clinic_block(
     component_order = template.get("component_order", ["intro_text", "basic_info"])
     basic_info_fields = template.get("basic_info_fields", [])
     basic_info_html_sample = template.get("basic_info_html_sample", "")
+    show_rank_in_heading = template.get("show_rank_in_heading", True)
     price_table_templates = template.get("price_table_templates", [])
     top3_link_placements = template.get("top3_link_placements", [])
 
@@ -98,6 +99,8 @@ def generate_clinic_block(
         4: f'専用パーツ（コメント先行型）: [コメント]{name}',
     }
     heading_instruction = heading_map.get(heading_type, heading_map[1])
+    if not show_rank_in_heading:
+        heading_instruction += "\n※見出し・小見出しに「1位」「2位」などの順位番号を含めない"
 
     price_section = ""
     if "price_table" in active_components:
