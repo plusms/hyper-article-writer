@@ -2573,7 +2573,15 @@ with _safe_tab(tab_rank):
         help="本文作成タブの「ランキングブロック用データをダウンロード」で出力したファイルを読み込みます",
     )
     if _rb_uploaded is not None:
-        _rb_raw = _rb_uploaded.read().decode("utf-8")
+        _rb_fingerprint = f"{_rb_uploaded.name}_{_rb_uploaded.size}"
+        if st.session_state.get("_rb_last_processed") == _rb_fingerprint:
+            _rb_raw = None  # 処理済みのためスキップ
+        else:
+            st.session_state["_rb_last_processed"] = _rb_fingerprint
+            _rb_raw = _rb_uploaded.read().decode("utf-8")
+    else:
+        _rb_raw = None
+    if _rb_raw is not None:
         if "【掲載院一覧】" in _rb_raw:
             _rb_split = _rb_raw.split("【掲載院一覧】", 1)
             _rb_header = _rb_split[0]
