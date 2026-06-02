@@ -1232,13 +1232,18 @@ with _safe_tab(tab_custom):
     else:
         gen_mode = "一括生成"
     # ── 入力の一時保存ボタン ─────────────────────────────────────
-    if output_tab_sel != "（書き込まない）" and article_sheet_url and article_type != "ノウハウ":
-        if st.button("📥 入力を一時保存（スプシに書き込む）", key="t2_save_input", use_container_width=True):
-            _save_creds = _get_gcp_creds(sheets_creds_file)
-            if not _save_creds:
-                st.error("GCP認証が設定されていません")
-            elif not main_kw:
-                st.error("メインKWを入力してください")
+    if st.button("📥 入力を一時保存（スプシに書き込む）", key="t2_save_input", use_container_width=True):
+        _save_creds = _get_gcp_creds(sheets_creds_file)
+        if not article_sheet_url:
+            st.error("サイドバーでスプシURLを設定してください")
+        elif output_tab_sel == "（書き込まない）":
+            st.error("スプシ書き込み先タブを選択してください（「書き込まない」以外）")
+        elif article_type == "ノウハウ":
+            st.warning("ノウハウ記事の一時保存は非対応です")
+        elif not _save_creds:
+            st.error("GCP認証が設定されていません")
+        elif not main_kw:
+            st.error("メインKWを入力してください")
             else:
                 try:
                     _save_ws = get_sheet(article_sheet_url, _save_creds, tab_name=output_tab_sel)
