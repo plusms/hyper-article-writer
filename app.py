@@ -27,6 +27,7 @@ from core.sheets import (
     write_status_knowhow, write_output_row_knowhow, write_full_row_knowhow,
     read_input_rows_knowhow_bulk, write_status_knowhow_bulk, write_output_row_knowhow_bulk,
     COL_TITLE, COL_TITLE_KNOWHOW, read_notation_rules,
+    write_input_only_row, read_row_by_index,
 )
 from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
 
@@ -709,6 +710,38 @@ with _safe_tab(tab_custom):
 
     st.divider()
 
+    # ── スプシ行番号復元データを受け取ってフォームに展開 ─────────────────
+    if "_t2_restore_data" in st.session_state:
+        _rrd = st.session_state.pop("_t2_restore_data")
+        if _rrd.get("article_type"):
+            st.session_state["_pending_article_type"] = _rrd["article_type"]
+        if _rrd.get("main_kw"):
+            st.session_state["t_main_kw"] = _rrd["main_kw"]
+        if _rrd.get("sub_kw"):
+            st.session_state["t_sub_kw"] = _rrd["sub_kw"]
+        if _rrd.get("related_kw"):
+            st.session_state["t_related_kw"] = _rrd["related_kw"]
+        if _rrd.get("custom_block"):
+            st.session_state["custom_blocks"] = [{"text": _rrd["custom_block"], "intent": ""}]
+        # 掲載院リストをパース
+        _rrd_clinics = []
+        for _ci in [x.strip() for x in _rrd.get("clinics_raw", "").split(",") if x.strip()]:
+            _cp = _ci.split("::")
+            _rrd_clinics.append({
+                "name": _cp[0].strip(),
+                "domain": _cp[1].strip() if len(_cp) > 1 else "",
+                "recommended": _cp[2].strip() if len(_cp) > 2 else "",
+                "appeal": _cp[3].strip() if len(_cp) > 3 else "",
+                "metarif_name": "",
+            })
+        if _rrd_clinics:
+            st.session_state["test_clinics"] = _rrd_clinics
+        # 競合URL
+        _rrd_comps = [u.strip() for u in _rrd.get("competitor_urls_raw", "").split(",") if u.strip()]
+        for _rci in range(5):
+            st.session_state[f"t_comp_{_rci}"] = _rrd_comps[_rci] if _rci < len(_rrd_comps) else ""
+        st.success(f"✅ 行{_rrd.get('row_index', '')}のデータを復元しました")
+
     # 復元ボタン経由でタイプが変更された場合、radio描画前に適用する
     if "_pending_article_type" in st.session_state:
         st.session_state["test_type"] = st.session_state.pop("_pending_article_type")
@@ -733,6 +766,33 @@ with _safe_tab(tab_custom):
     # ── 登録情報履歴（スプシ最新5件・デプロイをまたいで永続）────────────────
     _hist_cache_key = f"t2_sheet_hist_{article_type}"
     if article_sheet_url:
+        # 行番号から直接復元
+        if article_type != "ノウハウ":
+            with st.expander("🔢 スプシの行番号から復元", expanded=False):
+                _row_restore_col1, _row_restore_col2 = st.columns([3, 1])
+                _row_num_input = _row_restore_col1.number_input(
+                    "行番号（スプシの何行目か）",
+                    min_value=2, value=2, step=1, key="t2_restore_row_num",
+                )
+                if _row_restore_col2.button("復元", key="t2_restore_row_btn", type="primary"):
+                    _rr_creds = _get_gcp_creds(sheets_creds_file)
+                    if not _rr_creds:
+                        st.error("GCP認証が設定されていません")
+                    else:
+                        try:
+                            _rr_ws = get_worksheet_readonly(article_sheet_url, _rr_creds, output_tab_sel if output_tab_sel != "（書き込まない）" else article_type)
+                            if _rr_ws:
+                                _rr_data = read_row_by_index(_rr_ws, int(_row_num_input))
+                                if _rr_data:
+                                    st.session_state["_t2_restore_data"] = _rr_data
+                                    st.rerun()
+                                else:
+                                    st.error(f"行{_row_num_input}にメインKWのデータがありません")
+                            else:
+                                st.error("タブが見つかりません。スプシ書き込み先タブを選択してください")
+                        except Exception as _rr_e:
+                            st.error(f"復元エラー: {_rr_e}")
+
         _hist_col1, _hist_col2 = st.columns([9, 1])
         _hist_col1.empty()
         if _hist_col2.button("🔄", key="t2_hist_refresh", help="スプシから再読み込み"):
@@ -1175,6 +1235,46 @@ with _safe_tab(tab_custom):
         )
     else:
         gen_mode = "一括生成"
+    # ── 入力の一時保存ボタン ─────────────────────────────────────
+    if output_tab_sel != "（書き込まない）" and article_sheet_url and article_type != "ノウハウ":
+        if st.button("📥 入力を一時保存（スプシに書き込む）", key="t2_save_input", use_container_width=True):
+            _save_creds = _get_gcp_creds(sheets_creds_file)
+            if not _save_creds:
+                st.error("GCP認証が設定されていません")
+            elif not main_kw:
+                st.error("メインKWを入力してください")
+            else:
+                try:
+                    _save_ws = get_sheet(article_sheet_url, _save_creds, tab_name=output_tab_sel)
+                    _save_vals = _save_ws.get_all_values()
+                    # メインKWが一致する空き行を探す → なければ末尾に追加
+                    _save_row = None
+                    for _ri, _rd in enumerate(_save_vals[1:], start=2):
+                        _pd = _rd + [""] * (11 - len(_rd))
+                        if _pd[3] == main_kw:
+                            _save_row = _ri
+                            break
+                    if _save_row is None:
+                        _save_row = len(_save_vals) + 1
+                    _save_clinics = [c for c in st.session_state.get("test_clinics", []) if c["name"]]
+                    _save_inputs = {
+                        "site_name":      st.session_state.get("t_site_sel", ""),
+                        "genre":          genre,
+                        "article_type":   article_type,
+                        "main_kw":        main_kw,
+                        "sub_kw":         sub_kw,
+                        "clinics":        _save_clinics,
+                        "competitor_urls":[u.strip() for u in [st.session_state.get(f"t_comp_{i}", "") for i in range(5)] if u.strip()],
+                        "custom_block":   "\n".join(filter(None, [cb["text"].strip() for cb in st.session_state.get("custom_blocks", [])])),
+                        "recommended":    _save_clinics[0]["recommended"] if _save_clinics else "",
+                        "related_kw":     related_kw,
+                    }
+                    write_input_only_row(_save_ws, _save_row, _save_inputs)
+                    st.success(f"✅ [{output_tab_sel}] 行{_save_row}に保存しました（復元時はこの行番号を使用）")
+                    st.session_state.pop(_hist_cache_key, None)
+                except Exception as _se:
+                    st.error(f"保存エラー: {_se}")
+
     _run_label = "🔍 見出しを生成" if gen_mode == "見出し確認あり" else "🚀 実行"
     if st.button(_run_label, type="primary", use_container_width=True, key="run_test"):
         valid_clinics = [c for c in st.session_state.get("test_clinics", []) if c["name"] and c["domain"]]

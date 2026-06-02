@@ -226,6 +226,57 @@ def write_full_row(ws: gspread.Worksheet, row_index: int, input_data: dict, outp
     _reset_row_height(ws, row_index)
 
 
+def write_input_only_row(ws: gspread.Worksheet, row_index: int, input_data: dict) -> None:
+    """入力データのみをA-K列に書き込む（一時保存用）。出力列（L-P）には触れない。"""
+    clinics = input_data.get("clinics", [])
+    clinic_str = ", ".join(_serialize_clinic(c) for c in clinics if c.get("name"))
+    sub_kw_val = input_data.get("sub_kw", "")
+    if isinstance(sub_kw_val, list):
+        sub_kw_val = ", ".join(sub_kw_val)
+    comp_str = ", ".join(input_data.get("competitor_urls", []))
+    ws.update(
+        f"A{row_index}:K{row_index}",
+        [[
+            input_data.get("site_name", ""),
+            input_data.get("genre", ""),
+            input_data.get("article_type", ""),
+            input_data.get("main_kw", ""),
+            sub_kw_val,
+            clinic_str,
+            comp_str,
+            input_data.get("custom_block", ""),
+            input_data.get("recommended", ""),
+            input_data.get("related_kw", ""),
+            "入力保存中",
+        ]]
+    )
+
+
+def read_row_by_index(ws: gspread.Worksheet, row_index: int) -> dict | None:
+    """指定行のデータをread_recent_input_rowsと同じ形式で返す。"""
+    all_values = ws.get_all_values()
+    if row_index < 2 or row_index > len(all_values):
+        return None
+    row = all_values[row_index - 1]
+    padded = row + [""] * (11 - len(row))
+    if not padded[COL_IN["main_kw"]]:
+        return None
+    return {
+        "row_index":           row_index,
+        "site_name":           padded[COL_IN["site_name"]],
+        "genre":               padded[COL_IN["genre"]],
+        "article_type":        padded[COL_IN["article_type"]],
+        "main_kw":             padded[COL_IN["main_kw"]],
+        "sub_kw":              padded[COL_IN["sub_kw"]],
+        "clinics_raw":         padded[COL_IN["clinics_raw"]],
+        "competitor_urls_raw": padded[COL_IN["competitor_urls_raw"]],
+        "custom_block":        padded[COL_IN["custom_block"]],
+        "recommended":         padded[COL_IN["recommended"]],
+        "related_kw":          padded[COL_IN["related_kw"]],
+        "status":              padded[COL_IN["status"]],
+    }
+
+
 def get_settings_sheet(sheet_url: str, creds_data: dict) -> gspread.Worksheet:
     """設定タブを取得。存在しない場合は作成する。"""
     creds = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
