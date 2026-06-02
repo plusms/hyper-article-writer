@@ -84,6 +84,7 @@ def generate_clinic_block(
     heading_type = template.get("heading_type", 1)
     component_order = template.get("component_order", ["intro_text", "basic_info"])
     basic_info_fields = template.get("basic_info_fields", [])
+    basic_info_html_sample = template.get("basic_info_html_sample", "")
     price_table_templates = template.get("price_table_templates", [])
     top3_link_placements = template.get("top3_link_placements", [])
 
@@ -136,6 +137,15 @@ def generate_clinic_block(
 - テーブルの直前に必ず小見出しパーツ（または小見出し相当のHTML）を置く
 - テーブル内に院名・クリニック名を含める行・セルを設けない
 - 書き方・形式は他院と完全統一（診療時間の区切り文字・改行方法・単位の表記など）
+"""
+
+    basic_info_sample_section = ""
+    if basic_info_html_sample:
+        basic_info_sample_section = f"""
+【基本情報テーブルのHTMLサンプル（行名・形式を必ず踏襲）】
+以下は基本情報テーブルの見本HTMLです。行名（項目名）・テーブル構造・HTMLタグをそのまま使用してください。
+各行の内容はこのクリニック固有の情報で埋め直すこと。取得できない項目は[要確認]と記載。
+{basic_info_html_sample}
 """
 
     appeal_points_section = ""
@@ -202,6 +212,7 @@ def generate_clinic_block(
 
 {price_section}
 {basic_info_section}
+{basic_info_sample_section}
 {appeal_points_section}
 {f"【サイト別HTMLパーツ】{chr(10)}{site_parts}" if site_parts else ""}
 {reference_section}

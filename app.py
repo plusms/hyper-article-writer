@@ -2514,6 +2514,13 @@ with _safe_tab(tab_settings):
                                 key=f"cbt_bi_{_current_site4}_{_cbi}_{_bfk}",
                             ):
                                 _cbt_bi_fields.append(_bfk)
+                        _cbt_bi_sample = st.text_area(
+                            "基本情報テーブル HTMLサンプル（行名・形式の参考。内容はAIが埋める）",
+                            value=_cbt.get("basic_info_html_sample", ""),
+                            height=150,
+                            key=f"cbt_bi_sample_{_current_site4}_{_cbi}",
+                            placeholder="<table>...</table> の形式で貼り付け。行名と構造のみ参照されます。",
+                        )
 
                         st.caption("上位3件のリンク設置箇所")
                         _cbt_existing_links = _cbt.get("top3_link_placements", [])
@@ -2543,6 +2550,7 @@ with _safe_tab(tab_settings):
                                 "heading_type": _cbt_heading,
                                 "component_order": _cbt_order,
                                 "basic_info_fields": _cbt_bi_fields,
+                                "basic_info_html_sample": _cbt_bi_sample.strip(),
                                 "top3_link_placements": _cbt_links,
                                 "price_table_templates": _cbt_pts,
                             })
