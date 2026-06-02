@@ -379,8 +379,8 @@ def _regenerate_h2_block(
 def build_inputs_from_row(row: dict, defaults: dict | None = None) -> dict:
     clinics_raw = row.get("clinics_raw", "")
     clinics = []
-    _cr_items = [x.strip() for x in clinics_raw.split("\n") if x.strip() and "::" in x] or \
-                [x.strip() for x in clinics_raw.split(",") if x.strip() and "::" in x]
+    _cr_sep = "\n" if "\n" in clinics_raw else ","
+    _cr_items = [x.strip() for x in clinics_raw.split(_cr_sep) if x.strip() and "::" in x]
     for item in _cr_items:
         item = item.strip()
         if "::" in item:
@@ -728,8 +728,8 @@ with _safe_tab(tab_custom):
         # 掲載院リストをパース
         _rrd_clinics = []
         _rrd_raw = _rrd.get("clinics_raw", "")
-        _rrd_items = [x.strip() for x in _rrd_raw.split("\n") if x.strip() and "::" in x] or \
-                     [x.strip() for x in _rrd_raw.split(",") if x.strip() and "::" in x]
+        _rrd_sep = "\n" if "\n" in _rrd_raw else ","
+        _rrd_items = [x.strip() for x in _rrd_raw.split(_rrd_sep) if x.strip() and "::" in x]
         for _ci in _rrd_items:
             _cp = _ci.split("::")
             _rrd_clinics.append({
@@ -818,8 +818,8 @@ with _safe_tab(tab_custom):
                 for _th in _sheet_hist:
                     _th_clinics = []
                     _th_raw = _th.get("clinics_raw", "")
-                    _th_cr_items = [x.strip() for x in _th_raw.split("\n") if x.strip() and "::" in x] or \
-                                   [x.strip() for x in _th_raw.split(",") if x.strip() and "::" in x]
+                    _th_sep = "\n" if "\n" in _th_raw else ","
+                    _th_cr_items = [x.strip() for x in _th_raw.split(_th_sep) if x.strip() and "::" in x]
                     for _item in _th_cr_items:
                         _p = _item.split("::")
                         _th_clinics.append({
@@ -933,8 +933,8 @@ with _safe_tab(tab_custom):
                                     st.session_state[f"tm_str_bs_{_stri}"] = _sr_strengths[_stri]["basis"]
                                 _sr_clinics = []
                                 _sr_cr_raw = _sr_data.get("clinics_raw", "")
-                                _sr_cr_items = [x.strip() for x in _sr_cr_raw.split("\n") if x.strip() and "::" in x] or \
-                                               [x.strip() for x in _sr_cr_raw.split(",") if x.strip() and "::" in x]
+                                _sr_cr_sep = "\n" if "\n" in _sr_cr_raw else ","
+                                _sr_cr_items = [x.strip() for x in _sr_cr_raw.split(_sr_cr_sep) if x.strip() and "::" in x]
                                 for _src in _sr_cr_items:
                                     _sp = _src.split("::")
                                     _sr_clinics.append({
