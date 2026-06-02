@@ -2717,12 +2717,30 @@ with _safe_tab(tab_rank):
                 )
 
         st.divider()
-        _cb_extra_instruction = st.text_area(
-            "追加指示（任意・全院共通）",
-            height=80,
-            placeholder="例：紹介文のトーンをもっとやわらかく／CTAボタンのテキストを「無料カウンセリングはこちら」に統一",
-            key="cb_extra_instruction",
-        )
+        if "cb_extra_blocks" not in st.session_state:
+            st.session_state.cb_extra_blocks = [{"text": "", "intent": ""}]
+        _cb_extra_to_remove = []
+        for _cbi, _cbb in enumerate(st.session_state.cb_extra_blocks):
+            _cbb_cols = st.columns([11, 1])
+            _cbb_t = _cbb_cols[0].text_area(
+                f"追加指示 {_cbi + 1}（任意・全院共通）",
+                value=_cbb["text"], height=80, key=f"cbb_text_{_cbi}",
+                placeholder="例：紹介文のトーンをもっとやわらかく／CTAボタンのテキストを「無料カウンセリングはこちら」に統一",
+            )
+            if len(st.session_state.cb_extra_blocks) > 1 and _cbb_cols[1].button("✕", key=f"cbb_rm_{_cbi}"):
+                _cb_extra_to_remove.append(_cbi)
+            _cbb_i = st.text_area(
+                "追加指示の意図（任意）",
+                value=_cbb["intent"], height=60, key=f"cbb_intent_{_cbi}",
+                placeholder="例：競合との差別化を読者が直感的に感じ取れるようにしたい",
+            )
+            st.session_state.cb_extra_blocks[_cbi] = {"text": _cbb_t, "intent": _cbb_i}
+        for _cbi_rm in reversed(_cb_extra_to_remove):
+            st.session_state.cb_extra_blocks.pop(_cbi_rm)
+        if st.button("＋ 追加指示を追加", key="cbb_add"):
+            st.session_state.cb_extra_blocks.append({"text": "", "intent": ""})
+            st.rerun()
+
         _cb_gen_all = st.button("🚀 全案件のブロックを生成", type="primary", use_container_width=True, key="cb_gen_all")
 
         if _cb_gen_all:
@@ -2781,7 +2799,9 @@ with _safe_tab(tab_rank):
                             _scraped_text = "（取得失敗）"
 
                         st.write(f"✍️ {_r}位: {_cbc['name']} のブロックを生成中...")
-                        _cb_instr_val = st.session_state.get("cb_extra_instruction", "").strip()
+                        _cbb_texts   = [b["text"].strip()   for b in st.session_state.get("cb_extra_blocks", []) if b["text"].strip()]
+                        _cbb_intents = [b["intent"].strip() for b in st.session_state.get("cb_extra_blocks", []) if b["intent"].strip()]
+                        _cb_instr_val = "\n".join(filter(None, _cbb_texts + (["【意図】" + "\n".join(_cbb_intents)] if _cbb_intents else [])))
                         try:
                             _html = clinic_block_writer.generate_clinic_block(
                                 name=_cbc["name"],
