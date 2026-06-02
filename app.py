@@ -1140,6 +1140,7 @@ with _safe_tab(tab_custom):
                         if _ca_entry.get("domain"):
                             st.session_state[f"tcd_pending_{i}"] = _ca_entry["domain"]
                         st.session_state[f"t_ca_db_info_{i}"] = _ca_entry.get("info", "")
+                        st.session_state[f"t_ca_db_info_name_{i}"] = n.strip()
                         _lp_raw = _ca_entry.get("lp_info", "")
                         if _lp_raw:
                             _lp_parts = _lp_raw.split("---", 1)
@@ -1152,6 +1153,7 @@ with _safe_tab(tab_custom):
                         st.rerun()
                     else:
                         st.session_state[f"t_ca_db_info_{i}"] = ""
+                        st.session_state[f"t_ca_db_info_name_{i}"] = n.strip()
                         st.info(f"「{n}」はDBに未登録です（スクレイピングで取得）")
                 else:
                     st.warning("案件名とジャンルを入力してください")
@@ -1159,7 +1161,8 @@ with _safe_tab(tab_custom):
             if tc3.button("✕", key=f"trm_{i}", use_container_width=True) and len(st.session_state.test_clinics) > 1:
                 to_remove.append(i)
             _ca_db_info_val = st.session_state.get(f"t_ca_db_info_{i}")
-            if _ca_db_info_val:
+            _ca_db_info_name = st.session_state.get(f"t_ca_db_info_name_{i}", "")
+            if _ca_db_info_val and _ca_db_info_name == n.strip():
                 st.caption("📂 DB情報（記事生成に反映されます）")
                 st.text_area("", value=_ca_db_info_val, height=100, disabled=True,
                              key=f"t_ca_db_preview_{i}", label_visibility="collapsed")
