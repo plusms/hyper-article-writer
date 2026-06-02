@@ -1864,7 +1864,12 @@ with _safe_tab(tab_custom):
             key="t2_clinic_list_dl",
         )
 
-    # ── 画像生成セクション（design_system が登録されているサイトのみ表示）──
+    # ── 画像生成セクション ──
+    if _t2_last:
+        if not _t2_last.get("site_config", {}).get("design_system"):
+            st.divider()
+            st.subheader("🖼️ 画像生成")
+            st.info(f"「{_t2_last.get('site_name', 'このサイト')}」にデザインシステムが未登録です。サイト設定タブで参照画像をアップしてください。")
     if _t2_last and _t2_last.get("site_config", {}).get("design_system"):
         st.divider()
         st.subheader("🖼️ 画像生成")
