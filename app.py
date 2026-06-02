@@ -766,33 +766,6 @@ with _safe_tab(tab_custom):
     # ── 登録情報履歴（スプシ最新5件・デプロイをまたいで永続）────────────────
     _hist_cache_key = f"t2_sheet_hist_{article_type}"
     if article_sheet_url:
-        # 行番号から直接復元
-        if article_type != "ノウハウ":
-            with st.expander("🔢 スプシの行番号から復元", expanded=False):
-                _row_restore_col1, _row_restore_col2 = st.columns([3, 1])
-                _row_num_input = _row_restore_col1.number_input(
-                    "行番号（スプシの何行目か）",
-                    min_value=2, value=2, step=1, key="t2_restore_row_num",
-                )
-                if _row_restore_col2.button("復元", key="t2_restore_row_btn", type="primary"):
-                    _rr_creds = _get_gcp_creds(sheets_creds_file)
-                    if not _rr_creds:
-                        st.error("GCP認証が設定されていません")
-                    else:
-                        try:
-                            _rr_ws = get_worksheet_readonly(article_sheet_url, _rr_creds, output_tab_sel if output_tab_sel != "（書き込まない）" else article_type)
-                            if _rr_ws:
-                                _rr_data = read_row_by_index(_rr_ws, int(_row_num_input))
-                                if _rr_data:
-                                    st.session_state["_t2_restore_data"] = _rr_data
-                                    st.rerun()
-                                else:
-                                    st.error(f"行{_row_num_input}にメインKWのデータがありません")
-                            else:
-                                st.error("タブが見つかりません。スプシ書き込み先タブを選択してください")
-                        except Exception as _rr_e:
-                            st.error(f"復元エラー: {_rr_e}")
-
         _hist_col1, _hist_col2 = st.columns([9, 1])
         _hist_col1.empty()
         if _hist_col2.button("🔄", key="t2_hist_refresh", help="スプシから再読み込み"):
@@ -812,8 +785,31 @@ with _safe_tab(tab_custom):
                     st.session_state[_hist_cache_key] = []
 
         _sheet_hist = st.session_state.get(_hist_cache_key, [])
-        if _sheet_hist:
-            with st.expander(f"📋 {article_type}の登録情報履歴（最新{len(_sheet_hist)}件）", expanded=False):
+        with st.expander(f"📋 {article_type}の登録情報履歴（最新{len(_sheet_hist)}件）", expanded=False):
+            # 行番号を直接入力して復元
+            if article_type != "ノウハウ":
+                st.caption("行番号を直接指定して復元")
+                _row_restore_col1, _row_restore_col2 = st.columns([3, 1])
+                _row_num_input = _row_restore_col1.number_input(
+                    "行番号", min_value=2, value=2, step=1, key="t2_restore_row_num", label_visibility="collapsed",
+                )
+                if _row_restore_col2.button("この行を復元", key="t2_restore_row_btn"):
+                    _rr_creds = _get_gcp_creds(sheets_creds_file)
+                    if _rr_creds:
+                        try:
+                            _rr_ws = get_worksheet_readonly(article_sheet_url, _rr_creds, output_tab_sel if output_tab_sel != "（書き込まない）" else article_type)
+                            if _rr_ws:
+                                _rr_data = read_row_by_index(_rr_ws, int(_row_num_input))
+                                if _rr_data:
+                                    st.session_state["_t2_restore_data"] = _rr_data
+                                    st.rerun()
+                                else:
+                                    st.error(f"行{_row_num_input}にデータがありません")
+                        except Exception as _rr_e:
+                            st.error(f"復元エラー: {_rr_e}")
+                if _sheet_hist:
+                    st.divider()
+            if _sheet_hist:
                 for _th in _sheet_hist:
                     _th_clinics = []
                     for _item in [x.strip() for x in _th.get("clinics_raw", "").split(",") if x.strip()]:
