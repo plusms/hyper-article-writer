@@ -4,6 +4,7 @@ import anthropic
 COMPONENT_LABELS = {
     "spec_image": "スペック画像",
     "intro_text": "クリニック紹介文",
+    "appeal_points": "おすすめポイント（箇条書き）",
     "price_table": "料金テーブル",
     "reviews": "口コミ",
     "map_image": "マップ画像",
@@ -137,6 +138,16 @@ def generate_clinic_block(
 - 書き方・形式は他院と完全統一（診療時間の区切り文字・改行方法・単位の表記など）
 """
 
+    appeal_points_section = ""
+    if "appeal_points" in active_components:
+        appeal_points_section = """
+【おすすめポイント（箇条書き）（厳守）】
+- クリニックの強み・差別化ポイントを箇条書きで3〜5項目出力する
+- 各項目は簡潔に1〜2行。読者が「選ぶ理由」として納得できる具体的な内容にする
+- サイトパーツの箇条書きHTMLがあればそれを使用する。なければ<ul><li>形式で出力する
+- 直前に小見出しパーツ（または相当のHTML）を置く
+"""
+
     if is_top3:
         top3_section = f"【上位3院ルール（{rank}位）】\n- クリニック紹介文は4段落\n"
         if rank == 1:
@@ -191,6 +202,7 @@ def generate_clinic_block(
 
 {price_section}
 {basic_info_section}
+{appeal_points_section}
 {f"【サイト別HTMLパーツ】{chr(10)}{site_parts}" if site_parts else ""}
 {reference_section}
 {f"【追加指示】{chr(10)}{extra_instruction}{chr(10)}" if extra_instruction.strip() else ""}
