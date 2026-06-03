@@ -810,7 +810,7 @@ def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, clau
 {criteria}
 
 【記事HTML】
-{html[:6000]}
+{html[:20000]}
 
 【修正指示を出す際の絶対ルール（厳守）】
 修正指示文・修正案に以下のNGワード・NGパターンを使ってはならない。これらを含む修正案は別の表現に必ず置き換えること。
