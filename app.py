@@ -1900,47 +1900,75 @@ with _safe_tab(tab_custom):
             placeholder="例: aga-treatment-tokyo",
         )
 
-        if st.button("💡 画像案を生成", key="t2_img_gen", type="primary"):
-            errs_img = []
-            if image_provider == "dalle" and not openai_key:
-                errs_img.append("DALL-E を使うには OpenAI API Key が必要です")
-            elif image_provider == "gemini" and not gemini_key:
-                errs_img.append("Gemini API Key が未設定です")
-            if not _img_slug.strip():
-                errs_img.append("スラッグを入力してください")
-            for e in errs_img:
+        # ── Step1: 画像案を提案（Geminiが全H2分の案を出す） ──────
+        if st.button("💡 Step1: 画像案を確認する", key="t2_img_propose", use_container_width=True):
+            _p_errs = []
+            if not gemini_key:
+                _p_errs.append("Gemini API Key が未設定です")
+            for e in _p_errs:
                 st.error(e)
+            if not _p_errs:
+                with st.spinner("Geminiが画像案を分析中..."):
+                    try:
+                        _proposals = image_generator.generate_image_proposals(
+                            _t2_last["html"], _img_site_config, gemini_key
+                        )
+                        st.session_state["t2_img_proposals"] = _proposals
+                        st.session_state.pop("t2_img_results", None)
+                    except Exception as _pe:
+                        st.error(f"提案生成エラー: {_pe}")
 
-            if not errs_img:
-                _creds_img = _get_gcp_creds(sheets_creds_file)
-                if not _creds_img:
-                    st.error("Google Sheets 認証情報が未設定です")
-                else:
-                    with st.status("画像生成中...", expanded=True) as img_status:
+        # ── 案の選択 ──────────────────────────────────────────────
+        _t2_proposals = st.session_state.get("t2_img_proposals", [])
+        if _t2_proposals:
+            st.caption(f"Geminiが {len(_t2_proposals)} 案を提案しました。生成する案を選んでください。")
+            _selected_proposals = []
+            for _pi, _pp in enumerate(_t2_proposals):
+                _checked = st.checkbox(
+                    f"**{_pp.get('placement', f'案{_pi+1}')}** — {_pp.get('purpose', '')}",
+                    value=True,
+                    key=f"t2_img_sel_{_pi}",
+                )
+                if _checked:
+                    _selected_proposals.append(_pp)
+
+        # ── Step2: 選択した案を画像生成 ──────────────────────────
+        if _t2_proposals:
+            if st.button("🎨 Step2: 選択した案を画像生成", key="t2_img_gen", type="primary", use_container_width=True):
+                _g_errs = []
+                if image_provider == "dalle" and not openai_key:
+                    _g_errs.append("DALL-E を使うには OpenAI API Key が必要です")
+                elif image_provider == "gemini" and not gemini_key:
+                    _g_errs.append("Gemini API Key が未設定です")
+                if not _img_slug.strip():
+                    _g_errs.append("スラッグを入力してください")
+                if not _selected_proposals:
+                    _g_errs.append("生成する案を1つ以上選んでください")
+                for e in _g_errs:
+                    st.error(e)
+                if not _g_errs:
+                    _creds_img = _get_gcp_creds(sheets_creds_file)
+                    with st.status(f"画像生成中（{len(_selected_proposals)}枚）...", expanded=True) as img_status:
                         try:
                             _ref_key = f"ref_images_{_img_site_name}"
                             if _ref_key not in st.session_state:
-                                st.write("☁️ 参照画像をDriveから読み込み中...")
+                                st.write("☁️ 参照画像を読み込み中...")
                                 st.session_state[_ref_key] = image_generator.load_reference_images_from_drive(
-                                    _img_site_name, _creds_img, _drive_folder_id,
+                                    _img_site_name, _get_gcp_creds(sheets_creds_file), _drive_folder_id,
                                 )
                             _ref_imgs = st.session_state[_ref_key]
-                            st.write(f"　→ 参照画像: {len(_ref_imgs)} 枚")
-                            st.write("💡 画像案を生成中（Gemini）...")
-                            _gen_results = image_generator.generate_images_for_article(
-                                article_text=_t2_last["html"],
-                                site_config=_img_site_config,
-                                reference_images=_ref_imgs,
-                                provider=image_provider,
-                                gemini_api_key=gemini_key,
-                                openai_api_key=openai_key,
-                            )
-                            st.write(f"　→ {len(_gen_results)} 案を生成")
-                            st.session_state["t2_img_results"] = [
-                                {"bytes": r["bytes"], "proposal": r["proposal"], "drive_url": None}
-                                for r in _gen_results
-                            ]
-                            img_status.update(label=f"✅ {len(_gen_results)} 案の生成完了 — 下で確認・アップロードしてください", state="complete")
+                            _ds = image_generator.build_design_system(_img_site_config)
+                            _gen_results = []
+                            for _sp in _selected_proposals:
+                                _prompt = image_generator.build_generation_prompt(_ds, _sp, "16:9", bool(_ref_imgs))
+                                st.write(f"🎨 生成中: {_sp.get('placement', '')}...")
+                                _b = image_generator.generate_image_bytes(
+                                    _prompt, reference_images=_ref_imgs or None,
+                                    provider=image_provider, gemini_api_key=gemini_key, openai_api_key=openai_key,
+                                )
+                                _gen_results.append({"bytes": _b, "proposal": _sp, "drive_url": None})
+                            st.session_state["t2_img_results"] = _gen_results
+                            img_status.update(label=f"✅ {len(_gen_results)} 枚の生成完了", state="complete")
                         except Exception as e:
                             img_status.update(label="❌ エラー", state="error")
                             st.error(str(e))
