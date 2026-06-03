@@ -31,7 +31,7 @@ def _llm_call(claude_api_key: str, prompt: str, gemini_api_key: str = "", provid
     return _claude_call(claude_api_key, prompt)
 
 
-def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude") -> dict:
+def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude", base_structure: str = "") -> dict:
     article_type = inputs["article_type"]
     clinics_list_parts = []
     for c in inputs["clinics"]:
@@ -153,10 +153,23 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
         "クリニックが0件の場合、クリニック紹介H2自体を設けない。"
     ) if inputs["clinics"] else "\nクリニック指定なし：クリニック紹介H2は設けない。"
 
-    revision_note = (
-        f"\n\n【構成の修正指示（最優先で反映すること）】\n{inputs['_revision_note']}\n"
-        if inputs.get("_revision_note") else ""
-    )
+    revision_note = ""
+    if inputs.get("_revision_note"):
+        if base_structure:
+            revision_note = f"""
+
+【修正モード（重要）】
+以下は現在の構成です。この構成をベースとして、修正指示の内容だけを変更してください。
+追加指示・クリニック指定・その他の制約はすべてそのまま維持すること。修正指示に明示されていない箇所は変更しない。
+
+【現在の構成】
+{base_structure}
+
+【修正指示（この内容だけを反映する）】
+{inputs['_revision_note']}
+"""
+        else:
+            revision_note = f"\n\n【構成の修正指示（最優先で反映すること）】\n{inputs['_revision_note']}\n"
 
     selected = inputs.get("selected_topics")
     from core.config import TOPICS, TOPIC_LABELS

@@ -1545,6 +1545,7 @@ with _safe_tab(tab_custom):
                     _new_struct = generate_structure(
                         _rv_inputs, _t2_draft["comp"], _t2_draft["clinics"],
                         claude_key, gemini_api_key=gemini_key, article_provider=article_provider,
+                        base_structure=_t2_draft["structure"].get("structure_text", ""),
                     )
                     st.session_state["t2_draft"] = {**_t2_draft, "structure": _new_struct}
                     st.session_state["_t2_revision_clear"] = True
