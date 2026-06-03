@@ -1900,7 +1900,7 @@ with _safe_tab(tab_custom):
             placeholder="例: aga-treatment-tokyo",
         )
 
-        if st.button("🖼️ 画像を生成してDriveにアップロード", key="t2_img_gen", type="primary"):
+        if st.button("💡 画像案を生成", key="t2_img_gen", type="primary"):
             errs_img = []
             if image_provider == "dalle" and not openai_key:
                 errs_img.append("DALL-E を使うには OpenAI API Key が必要です")
@@ -1918,7 +1918,6 @@ with _safe_tab(tab_custom):
                 else:
                     with st.status("画像生成中...", expanded=True) as img_status:
                         try:
-                            # 参照画像をキャッシュから取得
                             _ref_key = f"ref_images_{_img_site_name}"
                             if _ref_key not in st.session_state:
                                 st.write("☁️ 参照画像をDriveから読み込み中...")
@@ -1927,9 +1926,8 @@ with _safe_tab(tab_custom):
                                 )
                             _ref_imgs = st.session_state[_ref_key]
                             st.write(f"　→ 参照画像: {len(_ref_imgs)} 枚")
-
                             st.write("💡 画像案を生成中（Gemini）...")
-                            _img_results_t2 = image_generator.generate_images_for_article(
+                            _gen_results = image_generator.generate_images_for_article(
                                 article_text=_t2_last["html"],
                                 site_config=_img_site_config,
                                 reference_images=_ref_imgs,
@@ -1937,49 +1935,95 @@ with _safe_tab(tab_custom):
                                 gemini_api_key=gemini_key,
                                 openai_api_key=openai_key,
                             )
-                            st.write(f"　→ {len(_img_results_t2)} 案を生成")
-
-                            _uploaded_t2 = []
-                            for i, _ir in enumerate(_img_results_t2):
-                                if _ir["bytes"]:
-                                    _ir_fname = f"{_img_slug.strip()}-img{i+1}.png"
-                                    st.write(f"🎨 アップロード中 ({i+1}/{len(_img_results_t2)}): {_ir_fname}...")
-                                    drive_url = drive_uploader.upload_image(
-                                        _ir["bytes"], _ir_fname,
-                                        _img_site_name, _img_slug.strip(),
-                                        _creds_img, _drive_folder_id,
-                                    )
-                                    _uploaded_t2.append({"fname": _ir_fname, "drive_url": drive_url, "proposal": _ir["proposal"]})
-                                else:
-                                    st.warning(f"案{i+1} の画像生成に失敗しました")
-
-                            img_status.update(label=f"✅ {len(_uploaded_t2)} 枚アップロード完了", state="complete")
-
-                            # 画像タグを記事HTMLに注入
-                            _img_settings_t2 = _img_site_config.get("image_settings", {})
-                            if _img_settings_t2.get("base_url") and _img_slug.strip():
-                                _updated_html = inject_images_into_html(
-                                    _t2_last["html"],
-                                    _img_results_t2,
-                                    _img_settings_t2,
-                                    _img_slug.strip(),
-                                )
-                                _t2_last["html"] = _updated_html
-                                st.session_state["t2_last"] = _t2_last
-                                st.session_state.pop("t2_h2_blocks_hash", None)
-                                st.caption("✅ 画像タグを記事に挿入しました")
-
-                            for r in _uploaded_t2:
-                                st.markdown(
-                                    f"**{r['proposal'].get('placement', '')}**  \n"
-                                    f"ファイル名: `{r['fname']}`  \n"
-                                    f"[Driveで開く]({r['drive_url']})"
-                                )
-                                st.divider()
-
+                            st.write(f"　→ {len(_gen_results)} 案を生成")
+                            st.session_state["t2_img_results"] = [
+                                {"bytes": r["bytes"], "proposal": r["proposal"], "drive_url": None}
+                                for r in _gen_results
+                            ]
+                            img_status.update(label=f"✅ {len(_gen_results)} 案の生成完了 — 下で確認・アップロードしてください", state="complete")
                         except Exception as e:
                             img_status.update(label="❌ エラー", state="error")
                             st.error(str(e))
+
+        # ── 生成結果：確認・個別再生成・アップロード ──────────────
+        _t2_img_results = st.session_state.get("t2_img_results", [])
+        if _t2_img_results:
+            st.divider()
+            _t2_creds_up = _get_gcp_creds(sheets_creds_file)
+            for _t2i, _t2ir in enumerate(_t2_img_results):
+                _t2_proposal = _t2ir.get("proposal", {})
+                _t2_bytes = _t2ir.get("bytes")
+                st.caption(f"**{_t2i+1}. {_t2_proposal.get('placement', '')}**")
+                _t2_col1, _t2_col2 = st.columns([2, 1])
+                with _t2_col1:
+                    if _t2_bytes:
+                        st.image(_t2_bytes)
+                    else:
+                        st.info("生成失敗")
+                with _t2_col2:
+                    _t2_instr = st.text_input("修正指示", key=f"t2_img_instr_{_t2i}", placeholder="もっと明るいトーンで")
+                    if st.button("🔄 再生成", key=f"t2_img_regen_{_t2i}", use_container_width=True):
+                        _t2_sc = _img_site_config
+                        _t2_ds = image_generator.build_design_system(_t2_sc)
+                        _t2_ref = st.session_state.get(f"ref_images_{_img_site_name}", [])
+                        _t2_rp = dict(_t2_proposal)
+                        if _t2_instr.strip():
+                            _t2_rp["additional_instruction"] = _t2_instr.strip()
+                        _t2_prompt = image_generator.build_generation_prompt(_t2_ds, _t2_rp, "16:9", bool(_t2_ref))
+                        if _t2_instr.strip():
+                            _t2_prompt += f"\n\n修正指示: {_t2_instr.strip()}"
+                        with st.spinner("再生成中..."):
+                            try:
+                                _t2_new_bytes = image_generator.generate_image_bytes(
+                                    _t2_prompt, reference_images=_t2_ref or None,
+                                    provider=image_provider, gemini_api_key=gemini_key, openai_api_key=openai_key,
+                                )
+                                st.session_state["t2_img_results"][_t2i]["bytes"] = _t2_new_bytes
+                                st.session_state["t2_img_results"][_t2i]["drive_url"] = None
+                                st.rerun()
+                            except Exception as _re:
+                                st.error(f"再生成エラー: {_re}")
+                    if _t2_bytes and _t2_creds_up:
+                        if _t2ir.get("drive_url"):
+                            st.caption(f"✅ アップ済み")
+                            st.markdown(f"[Driveで開く]({_t2ir['drive_url']})")
+                        elif st.button("⬆️ アップロード", key=f"t2_img_up_{_t2i}", use_container_width=True):
+                            _t2_fname = f"{_img_slug.strip()}-img{_t2i+1}.png"
+                            with st.spinner("アップロード中..."):
+                                try:
+                                    _t2_url = drive_uploader.upload_image(
+                                        _t2_bytes, _t2_fname, _img_site_name, _img_slug.strip(), _t2_creds_up, _drive_folder_id,
+                                    )
+                                    st.session_state["t2_img_results"][_t2i]["drive_url"] = _t2_url
+                                    st.rerun()
+                                except Exception as _ue:
+                                    st.error(f"アップロードエラー: {_ue}")
+                st.divider()
+
+            if st.button("⬆️ 全件アップロード", key="t2_img_up_all", type="primary", use_container_width=True):
+                if _t2_creds_up:
+                    _t2_up_ok = 0
+                    for _t2ai, _t2ar in enumerate(st.session_state["t2_img_results"]):
+                        if _t2ar.get("bytes") and not _t2ar.get("drive_url"):
+                            _t2_afname = f"{_img_slug.strip()}-img{_t2ai+1}.png"
+                            try:
+                                _t2_aurl = drive_uploader.upload_image(
+                                    _t2ar["bytes"], _t2_afname, _img_site_name, _img_slug.strip(), _t2_creds_up, _drive_folder_id,
+                                )
+                                st.session_state["t2_img_results"][_t2ai]["drive_url"] = _t2_aurl
+                                _t2_up_ok += 1
+                            except Exception as _ae:
+                                st.warning(f"img{_t2ai+1} エラー: {_ae}")
+                    # 画像タグを記事HTMLに注入
+                    _img_settings_t2 = _img_site_config.get("image_settings", {})
+                    if _img_settings_t2.get("base_url") and _img_slug.strip():
+                        _all_results = [{"bytes": r["bytes"], "proposal": r["proposal"]} for r in st.session_state["t2_img_results"]]
+                        _updated_html = inject_images_into_html(_t2_last["html"], _all_results, _img_settings_t2, _img_slug.strip())
+                        _t2_last["html"] = _updated_html
+                        st.session_state["t2_last"] = _t2_last
+                        st.session_state.pop("t2_h2_blocks_hash", None)
+                    st.success(f"✅ {_t2_up_ok} 枚アップロード完了")
+                    st.rerun()
 
 
 # ════════════════════════════════════════════════════════
