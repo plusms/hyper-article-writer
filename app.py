@@ -2030,6 +2030,7 @@ with _safe_tab(tab_custom):
                                     st.error(f"アップロードエラー: {_ue}")
                 st.divider()
 
+            st.caption("※ 同名ファイルが既にDriveにある場合は上書きされます")
             if st.button("⬆️ 全件アップロード", key="t2_img_up_all", type="primary", use_container_width=True):
                 if _t2_creds_up:
                     # フォルダを1回だけ作成して全枚数を同一フォルダに保存（重複フォルダ問題を回避）
