@@ -67,6 +67,39 @@ def upload_image(
     return file.get("webViewLink", "")
 
 
+def upload_images_batch(
+    images: list[tuple[bytes, str]],
+    site_name: str,
+    slug: str,
+    credentials_dict: dict,
+    parent_folder_id: str,
+) -> list[str]:
+    """
+    複数画像を同一フォルダにまとめてアップロード。
+    フォルダ構造を1回だけ作成してフォルダIDを使い回すことで、
+    Shared Drive の結果整合性問題（重複フォルダ作成）を回避する。
+    images: [(image_bytes, filename), ...]
+    Returns: webViewLink のリスト（失敗分は空文字）
+    """
+    service = _get_service(credentials_dict)
+    images_folder_id = _find_or_create_folder(service, "生成画像", parent_folder_id)
+    site_folder_id = _find_or_create_folder(service, site_name or "default", images_folder_id)
+    slug_folder_id = _find_or_create_folder(service, slug, site_folder_id)
+    results = []
+    for image_bytes, filename in images:
+        try:
+            media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/png")
+            metadata = {"name": filename, "parents": [slug_folder_id]}
+            file = service.files().create(
+                body=metadata, media_body=media,
+                fields="id, webViewLink", supportsAllDrives=True,
+            ).execute()
+            results.append(file.get("webViewLink", ""))
+        except Exception:
+            results.append("")
+    return results
+
+
 def _find_or_create_folder_path(service, path: list, root_id: str) -> str:
     """パスリストを順番に辿り、存在しないフォルダは作成して末端のIDを返す。"""
     current = root_id

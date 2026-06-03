@@ -2030,18 +2030,25 @@ with _safe_tab(tab_custom):
 
             if st.button("⬆️ 全件アップロード", key="t2_img_up_all", type="primary", use_container_width=True):
                 if _t2_creds_up:
-                    _t2_up_ok = 0
-                    for _t2ai, _t2ar in enumerate(st.session_state["t2_img_results"]):
-                        if _t2ar.get("bytes") and not _t2ar.get("drive_url"):
-                            _t2_afname = f"{_img_slug.strip()}-img{_t2ai+1}.png"
-                            try:
-                                _t2_aurl = drive_uploader.upload_image(
-                                    _t2ar["bytes"], _t2_afname, _img_site_name, _img_slug.strip(), _t2_creds_up, _drive_folder_id,
-                                )
-                                st.session_state["t2_img_results"][_t2ai]["drive_url"] = _t2_aurl
-                                _t2_up_ok += 1
-                            except Exception as _ae:
-                                st.warning(f"img{_t2ai+1} エラー: {_ae}")
+                    # フォルダを1回だけ作成して全枚数を同一フォルダに保存（重複フォルダ問題を回避）
+                    _batch_items = [
+                        (r["bytes"], f"{_img_slug.strip()}-img{i+1}.png")
+                        for i, r in enumerate(st.session_state["t2_img_results"])
+                        if r.get("bytes") and not r.get("drive_url")
+                    ]
+                    _batch_indices = [
+                        i for i, r in enumerate(st.session_state["t2_img_results"])
+                        if r.get("bytes") and not r.get("drive_url")
+                    ]
+                    if _batch_items:
+                        with st.spinner(f"{len(_batch_items)} 枚をアップロード中..."):
+                            _batch_urls = drive_uploader.upload_images_batch(
+                                _batch_items, _img_site_name, _img_slug.strip(), _t2_creds_up, _drive_folder_id,
+                            )
+                        for _idx, _url in zip(_batch_indices, _batch_urls):
+                            if _url:
+                                st.session_state["t2_img_results"][_idx]["drive_url"] = _url
+                    _t2_up_ok = sum(1 for u in _batch_urls if u)
                     # 画像タグを記事HTMLに注入
                     _img_settings_t2 = _img_site_config.get("image_settings", {})
                     if _img_settings_t2.get("base_url") and _img_slug.strip():
