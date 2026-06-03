@@ -87,6 +87,7 @@ IMAGE_PROPOSAL_TEMPLATE = """あなたはSEO記事の画像設計ディレクタ
 [
   {{
     "placement": "H2: [見出しテキスト]",
+    "filename_key": "画像内容を端的に表す英単語1〜2語（小文字・ハイフン区切り。例: flow / merit-demerit / cost-compare / point）",
     "reader_mindset": "このH2に来た読者が今思っていること・知りたいこと",
     "purpose": "この画像で読者の何を解決するか",
     "conclusion": "画像を見た読者が得る結論（1文）",
