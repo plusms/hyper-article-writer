@@ -551,7 +551,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                             _bulk_uploaded = 0
                             for _bi, _br in enumerate(_bulk_results):
                                 if _br["bytes"] and _bulk_img_creds:
-                                    _bfk = "".join(c for c in _br["proposal"].get("filename_key", "").lower() if c.isalnum() or c == "-")
+                                    _bfk = "".join(c for c in _br["proposal"].get("filename_key", "").lower() if c.isalpha() or c == "-")
                                     _bulk_fname = f"{_bulk_slug}-{_bfk or f'img{_bi+1}'}.png"
                                     drive_uploader.upload_image(
                                         _br["bytes"], _bulk_fname,
@@ -2040,7 +2040,7 @@ with _safe_tab(tab_custom):
                             st.caption(f"✅ アップ済み")
                             st.markdown(f"[Driveで開く]({_t2ir['drive_url']})")
                         elif st.button("⬆️ アップロード", key=f"t2_img_up_{_t2i}", use_container_width=True):
-                            _t2fk = "".join(c for c in _t2_proposal.get("filename_key", "").lower() if c.isalnum() or c == "-")
+                            _t2fk = "".join(c for c in _t2_proposal.get("filename_key", "").lower() if c.isalpha() or c == "-")
                             _t2_fname = f"{_img_slug.strip()}-{_t2fk or f'img{_t2i+1}'}.png"
                             with st.spinner("アップロード中..."):
                                 try:
@@ -2060,7 +2060,7 @@ with _safe_tab(tab_custom):
                     _batch_items = [
                         (r["bytes"], "{}-{}.png".format(
                             _img_slug.strip(),
-                            "".join(c for c in r["proposal"].get("filename_key", "").lower() if c.isalnum() or c == "-") or f"img{i+1}"
+                            "".join(c for c in r["proposal"].get("filename_key", "").lower() if c.isalpha() or c == "-") or f"img{i+1}"
                         ))
                         for i, r in enumerate(st.session_state["t2_img_results"])
                         if r.get("bytes") and not r.get("drive_url")
@@ -3811,7 +3811,7 @@ if tab_image_gen:
                         if _ig_bc2.button("⬆️ アップロード", key=f"ig_upload_{_ig_di}", use_container_width=True):
                             try:
                                 _ig_uc = _get_gcp_creds(sheets_creds_file)
-                                _igfk = "".join(c for c in _ig_proposal.get("filename_key", "").lower() if c.isalnum() or c == "-")
+                                _igfk = "".join(c for c in _ig_proposal.get("filename_key", "").lower() if c.isalpha() or c == "-")
                                 _ig_fname = f"{_ig_slug.strip()}-{_igfk or f'img{_ig_di+1}'}.png"
                                 drive_uploader.upload_image(
                                     _ig_img_bytes, _ig_fname,
@@ -3829,7 +3829,7 @@ if tab_image_gen:
             for _ig_ai, _ig_ar in enumerate(st.session_state.get("ig_results", [])):
                 if _ig_ar["bytes"]:
                     try:
-                        _igafk = "".join(c for c in _ig_ar.get("proposal", {}).get("filename_key", "").lower() if c.isalnum() or c == "-")
+                        _igafk = "".join(c for c in _ig_ar.get("proposal", {}).get("filename_key", "").lower() if c.isalpha() or c == "-")
                         _ig_all_fname = f"{_ig_slug.strip()}-{_igafk or f'img{_ig_ai+1}'}.png"
                         drive_uploader.upload_image(
                             _ig_ar["bytes"], _ig_all_fname,
