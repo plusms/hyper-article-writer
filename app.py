@@ -28,6 +28,7 @@ from core.sheets import (
     read_input_rows_knowhow_bulk, write_status_knowhow_bulk, write_output_row_knowhow_bulk,
     COL_TITLE, COL_TITLE_KNOWHOW, read_notation_rules,
     write_input_only_row, read_row_by_index,
+    read_site_info, write_site_info_settings, create_site_tab, init_site_info_sheet,
 )
 from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
 
@@ -77,6 +78,7 @@ _article_sheet_url_default         = _secret("ARTICLE_SHEET_URL")
 _db_sheet_url_default              = _secret("CLINIC_DB_SHEET_URL")
 _lifestyle_sheet_url_default       = _secret("LIFESTYLE_DB_SHEET_URL")
 _notation_rules_sheet_url_default  = _secret("NOTATION_RULES_SHEET_URL", "1h6BBETAdRTfGsOFBCxSlS9M6gzQ30KlBx53wRUAjB84")
+_site_info_sheet_url_default       = _secret("SITE_INFO_SHEET_URL", "1Mnan9LI3HAwd7n1VABvdTnrYBmpLre2yYWwrtt8PlNk")
 
 # ── サイドバー：設定 ──────────────────────────────────────
 with st.sidebar:
@@ -494,8 +496,18 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             )
             clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache, db_type=DB_TYPE_CLINIC, gemini_api_key=gemini_key, research_provider=research_provider)
             structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
+            _batch_site_info = {}
+            if _batch_site_name and _site_info_sheet_url_default:
+                try:
+                    _si_creds = _get_gcp_creds(sheets_creds_file)
+                    if _si_creds:
+                        _batch_site_info = read_site_info(_site_info_sheet_url_default, _si_creds, _batch_site_name)
+                except Exception:
+                    pass
             output    = generate_body(inputs, structure, clinics, claude_key, comp,
-                                      site_parts=_batch_site_parts, gemini_api_key=gemini_key, article_provider=article_provider)
+                                      site_parts=_batch_site_parts, gemini_api_key=gemini_key, article_provider=article_provider,
+                                      notation_rules=_batch_site_info.get("notation_rules"),
+                                      site_notes=_batch_site_info.get("notes", ""))
 
             _out = {
                 "title":     structure["title"],
@@ -1431,19 +1443,19 @@ with _safe_tab(tab_custom):
                     else:
                         _provider_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
                         st.write(f"✍️ 本文生成中（{_provider_label}）...")
-                        _t2_notation_rules = []
-                        if _batch_site_name and _notation_rules_sheet_url_default:
+                        _t2_site_info = {}
+                        if site_name and _site_info_sheet_url_default:
                             try:
                                 _nr_creds = _get_gcp_creds(sheets_creds_file)
                                 if _nr_creds:
-                                    _t2_notation_rules = read_notation_rules(
-                                        _notation_rules_sheet_url_default, _nr_creds, _batch_site_name
-                                    )
+                                    _t2_site_info = read_site_info(_site_info_sheet_url_default, _nr_creds, site_name)
                             except Exception:
                                 pass
                         output = generate_body(inputs, structure, clinics, claude_key, comp,
                                               site_parts=_single_site_parts, gemini_api_key=gemini_key,
-                                              article_provider=article_provider, notation_rules=_t2_notation_rules)
+                                              article_provider=article_provider,
+                                              notation_rules=_t2_site_info.get("notation_rules"),
+                                              site_notes=_t2_site_info.get("notes", ""))
                         st.write("📝 選び方コンテンツ抽出中...")
                         _criteria_summary = extract_criteria_summary(output["html"], claude_key)
                         st.session_state["t2_last"] = {
@@ -1584,12 +1596,23 @@ with _safe_tab(tab_custom):
                 try:
                     _di = _t2_draft["inputs"]
                     _ds = _t2_draft["structure"]
+                    _draft_site_info = {}
+                    _draft_site_name = _di.get("site_name", "")
+                    if _draft_site_name and _site_info_sheet_url_default:
+                        try:
+                            _draft_si_creds = _get_gcp_creds(sheets_creds_file)
+                            if _draft_si_creds:
+                                _draft_site_info = read_site_info(_site_info_sheet_url_default, _draft_si_creds, _draft_site_name)
+                        except Exception:
+                            pass
                     output = generate_body(
                         _di, _ds, _t2_draft["clinics"],
                         claude_key, _t2_draft["comp"],
                         site_parts=_t2_draft["site_parts"],
                         gemini_api_key=gemini_key,
                         article_provider=article_provider,
+                        notation_rules=_draft_site_info.get("notation_rules"),
+                        site_notes=_draft_site_info.get("notes", ""),
                     )
                     st.session_state["t2_last"] = {
                         "html":           output["html"],
@@ -2268,6 +2291,28 @@ with _safe_tab(tab_settings):
     st.title("⚙️ サイト設定")
     st.caption("サイト別の画像テンプレート・HTMLパーツを登録します。")
 
+    # ── サイト情報シート：全サイト初期タブ一括作成 ───────────────────────
+    with st.expander("📋 サイト情報シート：全サイトのタブを一括作成", expanded=False):
+        st.caption("サイト情報シートに登録済みサイト分のタブをまとめて作成します。既存タブはスキップされます。")
+        if st.button("🗂️ タブを一括作成", key="init_site_info_tabs_btn"):
+            if not _site_cfg_creds:
+                st.error("Google認証が未設定です")
+            elif not _site_info_sheet_url_default:
+                st.error("SITE_INFO_SHEET_URL が未設定です")
+            else:
+                _init_sites = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
+                if not _init_sites:
+                    st.warning("登録済みサイトがありません")
+                else:
+                    with st.spinner(f"{len(_init_sites)} サイトのタブを作成中..."):
+                        _init_results = init_site_info_sheet(_site_info_sheet_url_default, _site_cfg_creds, _init_sites)
+                    _ok = sum(1 for v in _init_results.values() if v == "ok")
+                    _skip = sum(1 for v in _init_results.values() if v == "skip")
+                    _err = {k: v for k, v in _init_results.items() if v not in ("ok", "skip")}
+                    st.success(f"✅ 作成: {_ok} 件 / スキップ（既存）: {_skip} 件")
+                    if _err:
+                        st.warning(f"エラー: {_err}")
+
     sites_list = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
     col_left4, col_right4 = st.columns([1, 2])
 
@@ -2486,12 +2531,18 @@ with _safe_tab(tab_settings):
                 )
                 if st.form_submit_button("💾 画像テンプレートを保存"):
                     _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
-                    _cfg_now["image_settings"] = {
+                    _new_img_settings = {
                         "base_url": _imgs_base_url.strip(),
                         "ext": _imgs_ext,
                         "template": _imgs_template,
                     }
+                    _cfg_now["image_settings"] = _new_img_settings
                     if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
+                        if _site_info_sheet_url_default and _site_cfg_creds:
+                            write_site_info_settings(
+                                _site_info_sheet_url_default, _site_cfg_creds, _current_site4,
+                                _new_img_settings, _cfg_now.get("link_settings", {}),
+                            )
                         st.success("✅ 保存しました。")
                         st.rerun()
                     else:
@@ -2561,9 +2612,13 @@ with _safe_tab(tab_settings):
                 _submitted4 = st.form_submit_button("💾 設定を保存する", type="primary")
 
             if _submitted4:
+                _is_new_site = _selected4 == "-- 新規作成 --"
                 _cfg_now = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
                 _cfg_now["components"] = _updated_comps
                 if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
+                    # 新規サイトの場合はサイト情報シートにタブを自動作成
+                    if _is_new_site and _site_info_sheet_url_default and _site_cfg_creds:
+                        create_site_tab(_site_info_sheet_url_default, _site_cfg_creds, _current_site4)
                     st.success(f"「{_current_site4}」の設定を保存しました。")
                     st.rerun()
                 else:
@@ -2731,12 +2786,18 @@ with _safe_tab(tab_settings):
 
             if _ls_submitted:
                 _ls_save_config = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
-                _ls_save_config["link_settings"] = {
+                _new_link_settings = {
                     "affili_base_url": _ls_base_url.strip(),
                     "affili_param_positions": _ls_positions.strip(),
                     "affili_param_formats": _ls_formats.strip(),
                 }
+                _ls_save_config["link_settings"] = _new_link_settings
                 if site_config_manager.save_site_config(_current_site4, _ls_save_config, _site_cfg_creds, _site_cfg_parent_folder):
+                    if _site_info_sheet_url_default and _site_cfg_creds:
+                        write_site_info_settings(
+                            _site_info_sheet_url_default, _site_cfg_creds, _current_site4,
+                            _ls_save_config.get("image_settings", {}), _new_link_settings,
+                        )
                     st.success("リンク設定を保存しました。")
                     st.rerun()
                 else:

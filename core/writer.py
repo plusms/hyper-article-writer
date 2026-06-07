@@ -390,6 +390,7 @@ def _build_body_prompt(
     site_parts: str = "",
     is_final_section: bool = True,
     notation_rules: list | None = None,
+    site_notes: str = "",
 ) -> str:
     article_type = inputs["article_type"]
     clinic_names = list(clinic_info.keys()) if clinic_info else []
@@ -571,6 +572,7 @@ def _build_body_prompt(
 
 {WRITING_RULES}
 {build_notation_rules_note(notation_rules or [])}
+{build_site_notes_block(site_notes)}
 {type_instruction}
 {site_parts_block}
 【HTML出力ルール】
@@ -632,6 +634,13 @@ def build_notation_rules_note(notation_rules: list) -> str:
     return "\n".join(lines) + "\n"
 
 
+def build_site_notes_block(site_notes: str) -> str:
+    """サイト固有の注意事項をプロンプト用テキストに変換する。"""
+    if not site_notes or not site_notes.strip():
+        return ""
+    return f"【サイト固有の注意事項（厳守）】\n{site_notes.strip()}\n"
+
+
 def inject_images_into_html(html: str, image_results: list, image_settings: dict, slug: str) -> str:
     """生成画像を article HTML の各H2直後に挿入する。"""
     import re
@@ -665,6 +674,7 @@ def generate_body(
     gemini_api_key: str = "",
     article_provider: str = "claude",
     notation_rules: list | None = None,
+    site_notes: str = "",
 ) -> dict:
     use_clinic_placeholder = inputs.get("article_type") in ("地域", "比較")
 
@@ -719,6 +729,7 @@ def generate_body(
             site_parts=site_parts,
             is_final_section=True,
             notation_rules=notation_rules,
+            site_notes=site_notes,
         )
         return _finish(_call([{"role": "user", "content": fallback_prompt}]),
                        debug="H2パース失敗: フォールバック使用")
@@ -736,6 +747,7 @@ def generate_body(
         site_parts=site_parts,
         is_final_section=not second_half,
         notation_rules=notation_rules,
+        site_notes=site_notes,
     )
     messages = [{"role": "user", "content": prompt1}]
     part1 = _call(messages)
@@ -753,6 +765,7 @@ def generate_body(
         site_parts=site_parts,
         is_final_section=True,
         notation_rules=notation_rules,
+        site_notes=site_notes,
     )
     messages.append({"role": "user", "content": prompt2})
     part2 = _call(messages)
