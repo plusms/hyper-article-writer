@@ -72,6 +72,7 @@ class OpenAIImageClient:
                 image=image_files if len(image_files) > 1 else image_files[0],
                 prompt=prompt,
                 size=size,
+                quality="high",
                 n=1,
             )
         else:
@@ -79,6 +80,7 @@ class OpenAIImageClient:
                 model=OPENAI_IMAGE_MODEL,
                 prompt=prompt,
                 size=size,
+                quality="high",
                 n=1,
             )
 
