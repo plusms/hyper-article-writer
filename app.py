@@ -2340,6 +2340,19 @@ with _safe_tab(tab_settings):
         else:
             st.subheader(f"「{_current_site4}」の設定")
 
+            # ── サイト情報シートへの一括反映 ──────────────────────────
+            if _site_info_sheet_url_default and _site_cfg_creds:
+                if st.button("📊 サイト情報をシートに一括反映", key=f"sync_site_info_{_current_site4}"):
+                    _sync_cfg = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
+                    _sync_ok = write_site_info_settings(
+                        _site_info_sheet_url_default, _site_cfg_creds, _current_site4,
+                        _sync_cfg.get("image_settings", {}), _sync_cfg.get("link_settings", {}),
+                    )
+                    if _sync_ok:
+                        st.success("✅ シートに反映しました。")
+                    else:
+                        st.warning("⚠️ 反映に失敗しました（タブが未作成か認証エラー）")
+
             # ── 1. デザインシステム ──────────────────────────────────
             st.markdown("### 🎨 1. デザインシステム")
             _ds = _config4.get("design_system", {})
