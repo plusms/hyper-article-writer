@@ -2313,6 +2313,31 @@ with _safe_tab(tab_settings):
                     if _err:
                         st.warning(f"エラー: {_err}")
 
+    # ── 登録状況一覧 ──────────────────────────────────────────
+    with st.expander("📋 サイト別登録状況", expanded=False):
+        if st.button("🔄 確認する", key="cfg_status_load"):
+            _st_sites = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
+            _st_rows = []
+            for _sn in _st_sites:
+                _sc = site_config_manager.load_site_config(_sn, _site_cfg_creds, _site_cfg_parent_folder)
+                _ds = _sc.get("design_system", {})
+                _imgs = _sc.get("image_settings", {})
+                _ls = _sc.get("link_settings", {})
+                _comps = [c for c in _sc.get("components", []) if c.get("active", True)]
+                _st_rows.append({
+                    "サイト": _sn,
+                    "デザイン": "✅" if (_ds.get("ref_image_analysis") or _ds.get("primary_color")) else "—",
+                    "画像設定": "✅" if _imgs.get("base_url") else "—",
+                    "リンク設定": "✅" if _ls.get("affili_base_url") else "—",
+                    "パーツ": f"{len(_comps)}件" if _comps else "—",
+                })
+            st.session_state["cfg_status_cache"] = _st_rows
+        if "cfg_status_cache" in st.session_state:
+            _md = "| サイト | デザイン | 画像設定 | リンク設定 | パーツ |\n|---|---|---|---|---|\n"
+            for _r in st.session_state["cfg_status_cache"]:
+                _md += f"| {_r['サイト']} | {_r['デザイン']} | {_r['画像設定']} | {_r['リンク設定']} | {_r['パーツ']} |\n"
+            st.markdown(_md)
+
     sites_list = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
     col_left4, col_right4 = st.columns([1, 2])
 
