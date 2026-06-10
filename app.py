@@ -2313,6 +2313,37 @@ with _safe_tab(tab_settings):
                     if _err:
                         st.warning(f"エラー: {_err}")
 
+    # ── サイト情報シート：全サイト値を一括反映 ───────────────────────
+    with st.expander("📤 サイト情報シート：全サイトの値を一括反映", expanded=False):
+        st.caption("各サイトのJSON設定（アフィリリンク・画像リンク）をサイト情報シートに一括書き出します。")
+        if st.button("🔄 全サイト一括反映", key="bulk_sync_site_info_btn"):
+            if not _site_cfg_creds:
+                st.error("Google認証が未設定です")
+            elif not _site_info_sheet_url_default:
+                st.error("SITE_INFO_SHEET_URL が未設定です")
+            else:
+                _sync_sites = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
+                if not _sync_sites:
+                    st.warning("登録済みサイトがありません")
+                else:
+                    _sync_ok = 0
+                    _sync_err = []
+                    with st.spinner(f"{len(_sync_sites)} サイトを反映中..."):
+                        for _sn in _sync_sites:
+                            _sc = site_config_manager.load_site_config(_sn, _site_cfg_creds, _site_cfg_parent_folder)
+                            _ok = write_site_info_settings(
+                                _site_info_sheet_url_default, _site_cfg_creds, _sn,
+                                _sc.get("image_settings", {}),
+                                _sc.get("link_settings", {}),
+                            )
+                            if _ok:
+                                _sync_ok += 1
+                            else:
+                                _sync_err.append(_sn)
+                    st.success(f"✅ 反映完了: {_sync_ok} 件")
+                    if _sync_err:
+                        st.warning(f"失敗: {_sync_err}")
+
     # ── 登録状況一覧 ──────────────────────────────────────────
     with st.expander("📋 サイト別登録状況", expanded=True):
         if st.button("🔄 確認する", key="cfg_status_load"):
