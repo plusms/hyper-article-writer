@@ -2331,7 +2331,7 @@ with _safe_tab(tab_settings):
                     "デザイン": "✅" if (_ds.get("ref_image_analysis") or _ds.get("primary_color")) else "—",
                     "画像リンク": "✅" if _imgs.get("base_url") else "—",
                     "アフィリリンク": "✅" if _ls.get("affili_base_url") else "—",
-                    "パーツ": f"✅ {len(_filled)}/{len(_comps)}" if _filled else "—",
+                    "パーツ": f"✅ {len(_filled)}件" if _filled else "—",
                     "ランキングブロック": f"✅ {len(_cbs)}件" if _cbs else "—",
                 })
             st.session_state["cfg_status_cache"] = _st_rows
