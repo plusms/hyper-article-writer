@@ -3067,10 +3067,10 @@ with _safe_tab(tab_rank):
             st.rerun()
 
         _cb_bi_sample = st.text_area(
-            "基本情報テーブル HTMLサンプル（任意・行名・形式の参考）",
+            "見本ブロックHTML（任意・構成・形式の参照）",
             height=120,
             key="cb_bi_html_sample",
-            placeholder="1記事目を生成後、出てきた基本情報テーブルのHTMLをここに貼り付けると2院目以降で行名・形式を統一できます。",
+            placeholder="他記事で生成済みの1院分ブロックHTML全体を貼り付けると、基本情報の項目・料金テーブルの形式（タブ切り替えの有無等）・口コミ有無など構成全体を統一できます。",
         )
 
         _cb_gen_all = st.button("🚀 全案件のブロックを生成", type="primary", use_container_width=True, key="cb_gen_all")
