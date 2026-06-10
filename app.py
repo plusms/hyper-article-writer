@@ -111,8 +111,8 @@ with st.sidebar:
 
     image_provider = st.radio(
         "画像生成AI",
-        ["gemini", "dalle"],
-        format_func=lambda x: "Gemini" if x == "gemini" else "DALL-E 3 (ChatGPT)",
+        ["dalle", "gemini"],
+        format_func=lambda x: "ChatGPT (gpt-image-2)" if x == "dalle" else "Gemini",
         horizontal=True,
         key="image_provider",
     )
