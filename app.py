@@ -2417,10 +2417,10 @@ with _safe_tab(tab_settings):
                         "prohibited_elements": _ds_prohibit, "additional_notes": _ds_notes,
                     })
                     if site_config_manager.save_site_config(_current_site4, _cfg_now, _site_cfg_creds, _site_cfg_parent_folder):
-                        st.success("✅ 保存しました。")
+                        st.toast("✅ デザインシステムを保存しました", icon="✅")
                         st.rerun()
                     else:
-                        st.error("保存に失敗しました。")
+                        st.error("❌ 保存に失敗しました。Drive認証を確認してください。")
 
             st.markdown("---")
 
@@ -2526,18 +2526,21 @@ with _safe_tab(tab_settings):
                         if _v:
                             _existing_ds[_k] = _v
                     _cfg_apply["design_system"] = _existing_ds
-                    site_config_manager.save_site_config(_current_site4, _cfg_apply, _site_cfg_creds, _site_cfg_parent_folder)
-                    st.session_state.pop(_ds_analysis_key, None)
-                    st.session_state.pop(f"ref_images_{_current_site4}", None)
-                    # フォームwidgetのセッションステートをクリアして新値で再描画させる
-                    for _fk in [f"ds_primary_{_current_site4}", f"ds_accent_{_current_site4}",
-                                 f"ds_bg_{_current_site4}", f"ds_text_{_current_site4}",
-                                 f"ds_secondary_{_current_site4}", f"ds_danger_{_current_site4}",
-                                 f"ds_style_{_current_site4}", f"ds_prohibit_{_current_site4}",
-                                 f"ds_notes_{_current_site4}"]:
-                        st.session_state.pop(_fk, None)
-                    st.success("✅ 保存しました。")
-                    st.rerun()
+                    _save_ok = site_config_manager.save_site_config(_current_site4, _cfg_apply, _site_cfg_creds, _site_cfg_parent_folder)
+                    if not _save_ok:
+                        st.error("❌ 保存に失敗しました。Drive認証を確認してください。")
+                    else:
+                        st.session_state.pop(_ds_analysis_key, None)
+                        st.session_state.pop(f"ref_images_{_current_site4}", None)
+                        # フォームwidgetのセッションステートをクリアして新値で再描画させる
+                        for _fk in [f"ds_primary_{_current_site4}", f"ds_accent_{_current_site4}",
+                                     f"ds_bg_{_current_site4}", f"ds_text_{_current_site4}",
+                                     f"ds_secondary_{_current_site4}", f"ds_danger_{_current_site4}",
+                                     f"ds_style_{_current_site4}", f"ds_prohibit_{_current_site4}",
+                                     f"ds_notes_{_current_site4}"]:
+                            st.session_state.pop(_fk, None)
+                        st.toast("✅ デザインシステムを保存しました", icon="✅")
+                        st.rerun()
                 if _rc2.button("✕ 破棄", key=f"discard_ds_{_current_site4}"):
                     st.session_state.pop(_ds_analysis_key, None)
                     st.rerun()
