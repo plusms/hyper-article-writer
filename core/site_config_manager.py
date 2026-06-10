@@ -210,6 +210,16 @@ def list_sites(creds_data: dict | None = None, drive_parent_folder_id: str = "")
     return sorted([f[:-5] for f in os.listdir(SITES_CONFIG_DIR) if f.endswith(".json")])
 
 
+def _normalize_components(components: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """componentsをFIXED_COMPONENT_SCHEMAの23スロットに正規化する。
+    スキーマ外の名前を除去し、順序をスキーマに合わせる。既存のpattern/activeは保持。"""
+    existing = {c["name"]: c for c in components}
+    return [
+        existing.get(slot, {"name": slot, "pattern": "", "active": True})
+        for slot in FIXED_COMPONENT_SCHEMA
+    ]
+
+
 def load_site_config(site_name: str, creds_data: dict | None = None, drive_parent_folder_id: str = "") -> Dict[str, Any]:
     if creds_data and (drive_parent_folder_id or SITE_CONFIG_FOLDER_ID_OVERRIDE):
         try:
@@ -234,6 +244,7 @@ def load_site_config(site_name: str, creds_data: dict | None = None, drive_paren
                         for sub_key, sub_val in val.items():
                             if sub_key not in config[key]:
                                 config[key][sub_key] = sub_val
+                config["components"] = _normalize_components(config.get("components", []))
                 return config
         except Exception as e:
             print(f"Error loading site config from Drive for {site_name}: {e}")
@@ -251,6 +262,7 @@ def load_site_config(site_name: str, creds_data: dict | None = None, drive_paren
                 for sub_key, sub_val in val.items():
                     if sub_key not in config[key]:
                         config[key][sub_key] = sub_val
+        config["components"] = _normalize_components(config.get("components", []))
         return config
     except Exception as e:
         print(f"Error loading site config for {site_name}: {e}")
