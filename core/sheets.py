@@ -532,6 +532,13 @@ def _get_client(creds_data: dict):
     return gspread.authorize(creds)
 
 
+def _open_ss(client, sheet_url: str):
+    """URLでもIDでも開けるヘルパー。"""
+    if sheet_url.strip().startswith("http"):
+        return client.open_by_url(sheet_url.strip())
+    return client.open_by_key(sheet_url.strip())
+
+
 def _get_or_create_worksheet(spreadsheet, site_name: str):
     """サイト名のタブを取得または作成する。"""
     try:
@@ -552,7 +559,7 @@ def create_site_tab(sheet_url: str, creds_data: dict, site_name: str) -> bool:
     """サイト情報シートに新規タブを作成する。既存タブは上書きしない。"""
     try:
         client = _get_client(creds_data)
-        ss = client.open_by_url(sheet_url)
+        ss = _open_ss(client, sheet_url)
         existing = [ws.title for ws in ss.worksheets()]
         if site_name in existing:
             return True
@@ -569,7 +576,7 @@ def init_site_info_sheet(sheet_url: str, creds_data: dict, site_names: list) -> 
     results = {}
     try:
         client = _get_client(creds_data)
-        ss = client.open_by_url(sheet_url)
+        ss = _open_ss(client, sheet_url)
         existing = {ws.title for ws in ss.worksheets()}
         for name in site_names:
             if name in existing:
@@ -605,7 +612,7 @@ def write_site_info_settings(
     }
     try:
         client = _get_client(creds_data)
-        ss = client.open_by_url(sheet_url)
+        ss = _open_ss(client, sheet_url)
         ws = _get_or_create_worksheet(ss, site_name)
         all_rows = ws.get_all_values()
         batch = []
@@ -628,7 +635,7 @@ def read_site_info(sheet_url: str, creds_data: dict, site_name: str) -> dict:
     """
     try:
         client = _get_client(creds_data)
-        ss = client.open_by_url(sheet_url)
+        ss = _open_ss(client, sheet_url)
         try:
             ws = ss.worksheet(site_name)
         except gspread.exceptions.WorksheetNotFound:
