@@ -2331,7 +2331,7 @@ with _safe_tab(tab_settings):
                     with st.spinner(f"{len(_sync_sites)} サイトを反映中..."):
                         for _sn in _sync_sites:
                             _sc = site_config_manager.load_site_config(_sn, _site_cfg_creds, _site_cfg_parent_folder)
-                            _ok = write_site_info_settings(
+                            _ok, _err_msg = write_site_info_settings(
                                 _site_info_sheet_url_default, _site_cfg_creds, _sn,
                                 _sc.get("image_settings", {}),
                                 _sc.get("link_settings", {}),
@@ -2339,7 +2339,7 @@ with _safe_tab(tab_settings):
                             if _ok:
                                 _sync_ok += 1
                             else:
-                                _sync_err.append(_sn)
+                                _sync_err.append(f"{_sn}（{_err_msg}）")
                     st.success(f"✅ 反映完了: {_sync_ok} 件")
                     if _sync_err:
                         st.warning(f"失敗: {_sync_err}")
@@ -2403,14 +2403,14 @@ with _safe_tab(tab_settings):
             if _site_info_sheet_url_default and _site_cfg_creds:
                 if st.button("📊 サイト情報をシートに一括反映", key=f"sync_site_info_{_current_site4}"):
                     _sync_cfg = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
-                    _sync_ok = write_site_info_settings(
+                    _sync_ok, _sync_err_msg = write_site_info_settings(
                         _site_info_sheet_url_default, _site_cfg_creds, _current_site4,
                         _sync_cfg.get("image_settings", {}), _sync_cfg.get("link_settings", {}),
                     )
                     if _sync_ok:
                         st.success("✅ シートに反映しました。")
                     else:
-                        st.warning("⚠️ 反映に失敗しました（タブが未作成か認証エラー）")
+                        st.warning(f"⚠️ 反映に失敗しました: {_sync_err_msg}")
 
             # ── 1. デザインシステム ──────────────────────────────────
             st.markdown("### 🎨 1. デザインシステム")

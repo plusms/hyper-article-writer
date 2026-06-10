@@ -622,10 +622,9 @@ def write_site_info_settings(
                 batch.append({"range": f"C{i}", "values": [[str(values[item])]]})
         if batch:
             ws.batch_update(batch)
-        return True
+        return True, ""
     except Exception as e:
-        print(f"write_site_info_settings error ({site_name}): {e}")
-        return False
+        return False, str(e) or type(e).__name__
 
 
 def read_site_info(sheet_url: str, creds_data: dict, site_name: str) -> dict:
