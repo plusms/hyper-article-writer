@@ -56,7 +56,7 @@ def upload_image(
     images_folder_id = _find_or_create_folder(service, "生成画像", parent_folder_id)
     site_folder_id = _find_or_create_folder(service, site_name or "default", images_folder_id)
     slug_folder_id = _find_or_create_folder(service, slug, site_folder_id)
-    media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/png")
+    media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/webp")
     metadata = {"name": filename, "parents": [slug_folder_id]}
     file = service.files().create(
         body=metadata,
@@ -88,7 +88,7 @@ def upload_images_batch(
     results = []
     for image_bytes, filename in images:
         try:
-            media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/png")
+            media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype="image/webp")
             metadata = {"name": filename, "parents": [slug_folder_id]}
             file = service.files().create(
                 body=metadata, media_body=media,

@@ -552,7 +552,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                             for _bi, _br in enumerate(_bulk_results):
                                 if _br["bytes"] and _bulk_img_creds:
                                     _bfk = "".join(c for c in _br["proposal"].get("filename_key", "").lower() if c.isalpha() or c == "-")
-                                    _bulk_fname = f"{_bulk_slug}-{_bfk or f'img{_bi+1}'}.png"
+                                    _bulk_fname = f"{_bulk_slug}-{_bfk or f'img{_bi+1}'}.webp"
                                     drive_uploader.upload_image(
                                         _br["bytes"], _bulk_fname,
                                         _batch_site_name, _bulk_slug,
@@ -2041,7 +2041,7 @@ with _safe_tab(tab_custom):
                             st.markdown(f"[Driveで開く]({_t2ir['drive_url']})")
                         elif st.button("⬆️ アップロード", key=f"t2_img_up_{_t2i}", use_container_width=True):
                             _t2fk = "".join(c for c in _t2_proposal.get("filename_key", "").lower() if c.isalpha() or c == "-")
-                            _t2_fname = f"{_img_slug.strip()}-{_t2fk or f'img{_t2i+1}'}.png"
+                            _t2_fname = f"{_img_slug.strip()}-{_t2fk or f'img{_t2i+1}'}.webp"
                             with st.spinner("アップロード中..."):
                                 try:
                                     _t2_url = drive_uploader.upload_image(
@@ -2058,7 +2058,7 @@ with _safe_tab(tab_custom):
                 if _t2_creds_up:
                     # フォルダを1回だけ作成して全枚数を同一フォルダに保存（重複フォルダ問題を回避）
                     _batch_items = [
-                        (r["bytes"], "{}-{}.png".format(
+                        (r["bytes"], "{}-{}.webp".format(
                             _img_slug.strip(),
                             "".join(c for c in r["proposal"].get("filename_key", "").lower() if c.isalpha() or c == "-") or f"img{i+1}"
                         ))
@@ -2314,7 +2314,7 @@ with _safe_tab(tab_settings):
                         st.warning(f"エラー: {_err}")
 
     # ── 登録状況一覧 ──────────────────────────────────────────
-    with st.expander("📋 サイト別登録状況", expanded=False):
+    with st.expander("📋 サイト別登録状況", expanded=True):
         if st.button("🔄 確認する", key="cfg_status_load"):
             _st_sites = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
             _st_rows = []
@@ -2323,19 +2323,22 @@ with _safe_tab(tab_settings):
                 _ds = _sc.get("design_system", {})
                 _imgs = _sc.get("image_settings", {})
                 _ls = _sc.get("link_settings", {})
-                _comps = [c for c in _sc.get("components", []) if c.get("active", True)]
+                _comps = _sc.get("components", [])
+                _filled = [c for c in _comps if c.get("active", True) and c.get("pattern", "").strip()]
+                _cbs = _sc.get("clinic_block_templates", [])
                 _st_rows.append({
                     "サイト": _sn,
                     "デザイン": "✅" if (_ds.get("ref_image_analysis") or _ds.get("primary_color")) else "—",
-                    "画像設定": "✅" if _imgs.get("base_url") else "—",
-                    "リンク設定": "✅" if _ls.get("affili_base_url") else "—",
-                    "パーツ": f"{len(_comps)}件" if _comps else "—",
+                    "画像リンク": "✅" if _imgs.get("base_url") else "—",
+                    "アフィリリンク": "✅" if _ls.get("affili_base_url") else "—",
+                    "パーツ": f"✅ {len(_filled)}/{len(_comps)}" if _filled else "—",
+                    "ランキングブロック": f"✅ {len(_cbs)}件" if _cbs else "—",
                 })
             st.session_state["cfg_status_cache"] = _st_rows
         if "cfg_status_cache" in st.session_state:
-            _md = "| サイト | デザイン | 画像設定 | リンク設定 | パーツ |\n|---|---|---|---|---|\n"
+            _md = "| サイト | デザイン | 画像リンク | アフィリリンク | パーツ | ランキングブロック |\n|---|---|---|---|---|---|\n"
             for _r in st.session_state["cfg_status_cache"]:
-                _md += f"| {_r['サイト']} | {_r['デザイン']} | {_r['画像設定']} | {_r['リンク設定']} | {_r['パーツ']} |\n"
+                _md += f"| {_r['サイト']} | {_r['デザイン']} | {_r['画像リンク']} | {_r['アフィリリンク']} | {_r['パーツ']} | {_r['ランキングブロック']} |\n"
             st.markdown(_md)
 
     sites_list = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
@@ -3815,7 +3818,7 @@ if tab_image_gen:
                             try:
                                 _ig_uc = _get_gcp_creds(sheets_creds_file)
                                 _igfk = "".join(c for c in _ig_proposal.get("filename_key", "").lower() if c.isalpha() or c == "-")
-                                _ig_fname = f"{_ig_slug.strip()}-{_igfk or f'img{_ig_di+1}'}.png"
+                                _ig_fname = f"{_ig_slug.strip()}-{_igfk or f'img{_ig_di+1}'}.webp"
                                 drive_uploader.upload_image(
                                     _ig_img_bytes, _ig_fname,
                                     _ig_site, _ig_slug.strip(),
@@ -3833,7 +3836,7 @@ if tab_image_gen:
                 if _ig_ar["bytes"]:
                     try:
                         _igafk = "".join(c for c in _ig_ar.get("proposal", {}).get("filename_key", "").lower() if c.isalpha() or c == "-")
-                        _ig_all_fname = f"{_ig_slug.strip()}-{_igafk or f'img{_ig_ai+1}'}.png"
+                        _ig_all_fname = f"{_ig_slug.strip()}-{_igafk or f'img{_ig_ai+1}'}.webp"
                         drive_uploader.upload_image(
                             _ig_ar["bytes"], _ig_all_fname,
                             _ig_site, _ig_slug.strip(),

@@ -502,32 +502,29 @@ def read_notation_rules(sheet_url: str, creds_data: dict, site_name: str) -> lis
 
 
 # ── サイト情報シート（新スプシ）────────────────────────────────────────────
+# 構造: A=カテゴリ, B=項目, C=値
+# カテゴリ種別: 基本情報 / 掲載条件 / 表記ゆれ
 
-# タブ内の固定行位置（1始まり）
-_SITE_INFO_NOTES_ROW       = 2   # A2: 注意事項テキスト
-_SITE_INFO_IMG_START_ROW   = 5   # B5: 画像ベースURL
-_SITE_INFO_AFFILI_START_ROW = 10 # B10: アフィリベースURL
-_SITE_INFO_NOTATION_HEADER_ROW = 15  # Row15: 表記ゆれヘッダー
-_SITE_INFO_NOTATION_DATA_ROW   = 16  # Row16+: 表記ゆれデータ
-
-_SITE_INFO_TEMPLATE = [
-    # row, col_A, col_B
-    (1,  "【注意事項】",        ""),
-    (2,  "",                    ""),   # 注意事項テキスト（A2）
-    (3,  "",                    ""),
-    (4,  "【画像リンク設定】",  "← ツールから自動反映"),
-    (5,  "ベースURL",           ""),
-    (6,  "拡張子",              ""),
-    (7,  "テンプレート",        ""),
-    (8,  "",                    ""),
-    (9,  "【アフィリリンク設定】", "← ツールから自動反映"),
-    (10, "ベースURL",           ""),
-    (11, "掲載位置",            ""),
-    (12, "形式",                ""),
-    (13, "",                    ""),
-    (14, "【表記ゆれ】",        ""),
-    (15, "誤表記",              "正表記"),
+_SITE_INFO_HEADER = ["カテゴリ", "項目", "値"]
+_SITE_INFO_BASIC_ROWS = [
+    ["基本情報", "アフィリURL",      ""],
+    ["基本情報", "アフィリ掲載位置", ""],
+    ["基本情報", "アフィリ形式",     ""],
+    ["基本情報", "画像ベースURL",    ""],
+    ["基本情報", "画像拡張子",       ""],
 ]
+_SITE_INFO_PLACEHOLDER_ROWS = [
+    ["掲載条件", "NG事項",           ""],
+    ["表記ゆれ", "誤表記・ゆれ表記", "正式表記"],
+]
+# B列のキー → (設定dict名, フィールド名)
+_SITE_INFO_WRITE_MAP = {
+    "アフィリURL":      ("link_settings",  "affili_base_url"),
+    "アフィリ掲載位置": ("link_settings",  "affili_param_positions"),
+    "アフィリ形式":     ("link_settings",  "affili_param_formats"),
+    "画像ベースURL":    ("image_settings", "base_url"),
+    "画像拡張子":       ("image_settings", "ext"),
+}
 
 
 def _get_client(creds_data: dict):
@@ -546,12 +543,9 @@ def _get_or_create_worksheet(spreadsheet, site_name: str):
 
 
 def _init_site_tab(ws) -> None:
-    """タブにテンプレート構造を書き込む。"""
-    data = [[""] * 2 for _ in range(max(r for r, _, _ in _SITE_INFO_TEMPLATE))]
-    for row, col_a, col_b in _SITE_INFO_TEMPLATE:
-        data[row - 1][0] = col_a
-        data[row - 1][1] = col_b
-    ws.update("A1", data)
+    """タブにヘッダー + 基本情報行 + プレースホルダー行を書き込む。"""
+    rows = [_SITE_INFO_HEADER] + _SITE_INFO_BASIC_ROWS + _SITE_INFO_PLACEHOLDER_ROWS
+    ws.update("A1", rows)
 
 
 def create_site_tab(sheet_url: str, creds_data: dict, site_name: str) -> bool:
@@ -599,21 +593,28 @@ def write_site_info_settings(
     image_settings: dict,
     link_settings: dict,
 ) -> bool:
-    """画像リンク設定・アフィリリンク設定をサイトタブに書き込む（ツール→シート反映）。"""
+    """画像リンク設定・アフィリリンク設定をサイトタブのC列に書き込む（ツール→シート反映）。
+    B列のキーを検索して対応するC列を更新する。
+    """
+    values = {
+        "アフィリURL":      link_settings.get("affili_base_url", ""),
+        "アフィリ掲載位置": link_settings.get("affili_param_positions", ""),
+        "アフィリ形式":     link_settings.get("affili_param_formats", ""),
+        "画像ベースURL":    image_settings.get("base_url", ""),
+        "画像拡張子":       image_settings.get("ext", ""),
+    }
     try:
         client = _get_client(creds_data)
         ss = client.open_by_url(sheet_url)
         ws = _get_or_create_worksheet(ss, site_name)
-        updates = [
-            (f"B{_SITE_INFO_IMG_START_ROW}",     image_settings.get("base_url", "")),
-            (f"B{_SITE_INFO_IMG_START_ROW + 1}",  image_settings.get("ext", "")),
-            (f"B{_SITE_INFO_IMG_START_ROW + 2}",  image_settings.get("template", "")),
-            (f"B{_SITE_INFO_AFFILI_START_ROW}",   link_settings.get("affili_base_url", "")),
-            (f"B{_SITE_INFO_AFFILI_START_ROW + 1}", link_settings.get("affili_param_positions", "")),
-            (f"B{_SITE_INFO_AFFILI_START_ROW + 2}", link_settings.get("affili_param_formats", "")),
-        ]
-        for cell, val in updates:
-            ws.update(cell, [[str(val)]])
+        all_rows = ws.get_all_values()
+        batch = []
+        for i, row in enumerate(all_rows, start=1):
+            item = row[1].strip() if len(row) > 1 else ""
+            if item in values:
+                batch.append({"range": f"C{i}", "values": [[str(values[item])]]})
+        if batch:
+            ws.batch_update(batch)
         return True
     except Exception as e:
         print(f"write_site_info_settings error ({site_name}): {e}")
@@ -621,7 +622,8 @@ def write_site_info_settings(
 
 
 def read_site_info(sheet_url: str, creds_data: dict, site_name: str) -> dict:
-    """サイトタブから注意事項・表記ゆれを読み取る。
+    """サイトタブから掲載条件・表記ゆれを読み取る。
+    A列カテゴリでフィルタ。
     Returns: {notes: str, notation_rules: list[{ng, ok, note}]}
     """
     try:
@@ -633,21 +635,21 @@ def read_site_info(sheet_url: str, creds_data: dict, site_name: str) -> dict:
             return {"notes": "", "notation_rules": []}
 
         all_rows = ws.get_all_values()
-
-        # 注意事項（A2）
-        notes = ""
-        if len(all_rows) >= _SITE_INFO_NOTES_ROW:
-            notes = all_rows[_SITE_INFO_NOTES_ROW - 1][0].strip() if all_rows[_SITE_INFO_NOTES_ROW - 1] else ""
-
-        # 表記ゆれ（Row16+）
+        notes_parts = []
         notation_rules = []
-        for row in all_rows[_SITE_INFO_NOTATION_DATA_ROW - 1:]:
-            ng = row[0].strip() if len(row) > 0 else ""
-            ok = row[1].strip() if len(row) > 1 else ""
-            if ng:
-                notation_rules.append({"ng": ng, "ok": ok, "note": ""})
+        for row in all_rows[1:]:  # 1行目はヘッダー
+            cat  = row[0].strip() if len(row) > 0 else ""
+            item = row[1].strip() if len(row) > 1 else ""
+            val  = row[2].strip() if len(row) > 2 else ""
+            if cat == "掲載条件" and item and val:
+                notes_parts.append(f"■ {item}：{val}")
+            elif cat == "表記ゆれ" and item and "入力" not in item and item != "誤表記・ゆれ表記":
+                notation_rules.append({"ng": item, "ok": val, "note": ""})
 
-        return {"notes": notes, "notation_rules": notation_rules}
+        return {
+            "notes": "\n".join(notes_parts),
+            "notation_rules": notation_rules,
+        }
     except Exception as e:
         print(f"read_site_info error ({site_name}): {e}")
         return {"notes": "", "notation_rules": []}

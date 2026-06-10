@@ -100,7 +100,7 @@ class OpenAIImageClient:
         prompt: str,
         reference_images: list[Image.Image] | None = None,
         aspect_ratio: str = "16:9",
-        format: str = "PNG",
+        format: str = "WEBP",
     ) -> tuple[bytes | None, str | None]:
         image, text = self.generate_image(
             prompt=prompt,

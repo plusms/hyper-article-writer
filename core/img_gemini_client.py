@@ -89,7 +89,7 @@ class GeminiImageClient:
         prompt: str,
         reference_images: list[Image.Image] | None = None,
         aspect_ratio: str = "16:9",
-        format: str = "PNG",
+        format: str = "WEBP",
     ) -> tuple[bytes | None, str | None]:
         """画像をbytes形式で返す"""
         image, text = self.generate_image(
