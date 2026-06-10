@@ -514,8 +514,8 @@ _SITE_INFO_BASIC_ROWS = [
     ["基本情報", "画像拡張子",       ""],
 ]
 _SITE_INFO_PLACEHOLDER_ROWS = [
-    ["掲載条件", "NG事項",           ""],
-    ["表記ゆれ", "誤表記・ゆれ表記", "正式表記"],
+    ["サイトルール", "NG事項",           ""],
+    ["表記ゆれ",     "誤表記・ゆれ表記", "正式表記"],
 ]
 # B列のキー → (設定dict名, フィールド名)
 _SITE_INFO_WRITE_MAP = {
@@ -647,7 +647,7 @@ def read_site_info(sheet_url: str, creds_data: dict, site_name: str) -> dict:
             cat  = row[0].strip() if len(row) > 0 else ""
             item = row[1].strip() if len(row) > 1 else ""
             val  = row[2].strip() if len(row) > 2 else ""
-            if cat == "掲載条件" and item and val:
+            if cat in ("サイトルール", "掲載条件") and item and val:
                 notes_parts.append(f"■ {item}：{val}")
             elif cat == "表記ゆれ" and item and "入力" not in item and item != "誤表記・ゆれ表記":
                 notation_rules.append({"ng": item, "ok": val, "note": ""})
