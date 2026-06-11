@@ -2387,6 +2387,23 @@ with _safe_tab(tab_settings):
         else:
             _current_site4 = _selected4
             _config4 = site_config_manager.load_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
+            # 参照画像適用後にDrive伝播遅延でフォームが更新されない問題を回避:
+            # apply_ds ボタンが保存した直後の config を session_state から取り出し、
+            # フォームのウィジェットキーをレンダリング前に上書きする
+            _ds_cache_key = f"config_cache_{_current_site4}"
+            if _ds_cache_key in st.session_state:
+                _config4 = st.session_state.pop(_ds_cache_key)
+                _new_ds4 = _config4.get("design_system", {})
+                _dr4 = _config4.get("design_rules", {}).get("colors", {})
+                st.session_state[f"ds_primary_{_current_site4}"]   = _new_ds4.get("primary_color") or _dr4.get("main", "")
+                st.session_state[f"ds_accent_{_current_site4}"]    = _new_ds4.get("accent_color") or _dr4.get("accent_red", "")
+                st.session_state[f"ds_bg_{_current_site4}"]        = _new_ds4.get("background_color") or _dr4.get("bg_white", "#FFFFFF")
+                st.session_state[f"ds_text_{_current_site4}"]      = _new_ds4.get("text_color") or _dr4.get("text", "#333333")
+                st.session_state[f"ds_secondary_{_current_site4}"] = _new_ds4.get("secondary_color", "")
+                st.session_state[f"ds_danger_{_current_site4}"]    = _new_ds4.get("danger_color", "")
+                st.session_state[f"ds_style_{_current_site4}"]     = _new_ds4.get("illustration_style", "flat minimal")
+                st.session_state[f"ds_prohibit_{_current_site4}"]  = _new_ds4.get("prohibited_elements", "")
+                st.session_state[f"ds_notes_{_current_site4}"]     = _new_ds4.get("additional_notes", "")
             st.markdown("---")
             if st.button("🗑️ このサイトを削除", key="cfg_del"):
                 site_config_manager.delete_site_config(_current_site4, _site_cfg_creds, _site_cfg_parent_folder)
@@ -2564,15 +2581,10 @@ with _safe_tab(tab_settings):
                     if not _save_ok:
                         st.error("❌ 保存に失敗しました。Drive認証を確認してください。")
                     else:
+                        # 更新済みconfigをcacheし、次レンダリングでフォームに流し込む
+                        st.session_state[f"config_cache_{_current_site4}"] = _cfg_apply
                         st.session_state.pop(_ds_analysis_key, None)
                         st.session_state.pop(f"ref_images_{_current_site4}", None)
-                        # フォームwidgetのセッションステートをクリアして新値で再描画させる
-                        for _fk in [f"ds_primary_{_current_site4}", f"ds_accent_{_current_site4}",
-                                     f"ds_bg_{_current_site4}", f"ds_text_{_current_site4}",
-                                     f"ds_secondary_{_current_site4}", f"ds_danger_{_current_site4}",
-                                     f"ds_style_{_current_site4}", f"ds_prohibit_{_current_site4}",
-                                     f"ds_notes_{_current_site4}"]:
-                            st.session_state.pop(_fk, None)
                         st.toast("✅ デザインシステムを保存しました", icon="✅")
                         st.rerun()
                 if _rc2.button("✕ 破棄", key=f"discard_ds_{_current_site4}"):
