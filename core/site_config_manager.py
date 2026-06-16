@@ -212,12 +212,14 @@ def list_sites(creds_data: dict | None = None, drive_parent_folder_id: str = "")
 
 def _normalize_components(components: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """componentsをFIXED_COMPONENT_SCHEMAの23スロットに正規化する。
-    スキーマ外の名前を除去し、順序をスキーマに合わせる。既存のpattern/activeは保持。"""
+    スキーマ外の名前を持つカスタムコンポーネントは末尾に保持。既存のpattern/activeは保持。"""
     existing = {c["name"]: c for c in components}
-    return [
+    normalized = [
         existing.get(slot, {"name": slot, "pattern": "", "active": True})
         for slot in FIXED_COMPONENT_SCHEMA
     ]
+    extra = [c for c in components if c["name"] not in set(FIXED_COMPONENT_SCHEMA)]
+    return normalized + extra
 
 
 def load_site_config(site_name: str, creds_data: dict | None = None, drive_parent_folder_id: str = "") -> Dict[str, Any]:
