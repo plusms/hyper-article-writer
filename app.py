@@ -2696,6 +2696,9 @@ with _safe_tab(tab_settings):
                     if _is_new_site and _site_info_sheet_url_default and _site_cfg_creds:
                         create_site_tab(_site_info_sheet_url_default, _site_cfg_creds, _current_site4)
                     st.success(f"「{_current_site4}」の設定を保存しました。")
+                    # rerun後もwidgetのsession_stateが残り新規パーツが重複登録されるのを防ぐ
+                    st.session_state.pop(f"new_comp_name_{_current_site4}", None)
+                    st.session_state.pop(f"new_comp_pattern_{_current_site4}", None)
                     st.rerun()
                 else:
                     st.error("保存に失敗しました。")
