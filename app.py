@@ -2117,17 +2117,20 @@ with _safe_tab(tab_qual):
             st.error("HTMLを貼り付けてください")
         else:
             with st.spinner("チェック中..."):
-                result = quality_check(
-                    html_input, check_type, check_main_kw,
-                    [k.strip() for k in check_sub_kw.split(",") if k.strip()],
-                    claude_key,
-                    gemini_api_key=gemini_key,
-                    article_provider=article_provider,
-                    check_mode=check_mode,
-                    title=check_title,
-                    meta=check_meta,
-                )
-                st.markdown(result)
+                try:
+                    result = quality_check(
+                        html_input, check_type, check_main_kw,
+                        [k.strip() for k in check_sub_kw.split(",") if k.strip()],
+                        claude_key,
+                        gemini_api_key=gemini_key,
+                        article_provider=article_provider,
+                        check_mode=check_mode,
+                        title=check_title,
+                        meta=check_meta,
+                    )
+                    st.markdown(result)
+                except Exception as _e:
+                    st.error(f"エラー ({type(_e).__name__}): {_e}")
 
     st.divider()
     st.subheader("見出し構成チェック")
@@ -2140,14 +2143,17 @@ with _safe_tab(tab_qual):
             st.error("見出し構成を貼り付けてください")
         else:
             with st.spinner("チェック中..."):
-                heading_result = heading_structure_check(
-                    heading_outline, check_type, check_main_kw,
-                    [k.strip() for k in check_sub_kw.split(",") if k.strip()],
-                    claude_key,
-                    gemini_api_key=gemini_key,
-                    article_provider=article_provider,
-                )
-                st.markdown(heading_result)
+                try:
+                    heading_result = heading_structure_check(
+                        heading_outline, check_type, check_main_kw,
+                        [k.strip() for k in check_sub_kw.split(",") if k.strip()],
+                        claude_key,
+                        gemini_api_key=gemini_key,
+                        article_provider=article_provider,
+                    )
+                    st.markdown(heading_result)
+                except Exception as _e:
+                    st.error(f"エラー ({type(_e).__name__}): {_e}")
 
 
 # ════════════════════════════════════════════════════════
