@@ -788,7 +788,7 @@ def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, clau
             return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": p}])
         client = anthropic.Anthropic(api_key=claude_api_key)
         msg = client.messages.create(
-            model="claude-sonnet-4-6", max_tokens=4096,
+            model="claude-sonnet-4-6", max_tokens=16000,
             messages=[{"role": "user", "content": p}],
         )
         return msg.content[0].text
@@ -925,7 +925,7 @@ QH〇, QH〇 …（問題なしの項目番号を列挙）
         return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": prompt}])
     client = anthropic.Anthropic(api_key=claude_api_key)
     msg = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=4096,
+        model="claude-sonnet-4-6", max_tokens=16000,
         messages=[{"role": "user", "content": prompt}],
     )
     return msg.content[0].text

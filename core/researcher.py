@@ -376,7 +376,7 @@ def _lp_images_claude(image_bytes_list: list[bytes], name: str, claude_api_key: 
     client = anthropic.Anthropic(api_key=claude_api_key)
     msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=4096,
+        max_tokens=16000,
         messages=[{"role": "user", "content": image_contents}],
     )
     return msg.content[0].text

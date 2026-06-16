@@ -372,7 +372,7 @@ def _regenerate_h2_block(
     client = _ant.Anthropic(api_key=claude_key)
     msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=4096,
+        max_tokens=16000,
         messages=[{"role": "user", "content": prompt}],
     )
     return msg.content[0].text.strip()

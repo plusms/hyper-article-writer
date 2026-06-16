@@ -7,7 +7,7 @@ def _claude_call(api_key: str, prompt: str) -> str:
         client = anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=4096,
+            max_tokens=16000,
             messages=[{"role": "user", "content": prompt}],
         )
         return msg.content[0].text
