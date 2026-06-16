@@ -38,31 +38,46 @@ FIXED_COMPONENT_SCHEMA: List[str] = [
     "CTAボタン",
 ]
 
-# スロット → (name内の必須KW, name内の除外KW, textarea内から抜き出すタグ/クラス名)
-_SLOT_RULES: Dict[str, tuple] = {
-    "H2":                           (["大見出し"], [],             "h2"),
-    "H3":                           (["大見出し"], [],             "h3"),
-    "小見出し":                      (["大見出し"], [],             "subhead"),
-    "箇条書き（リスト）":             (["番号なし"], [],             None),
-    "箇条書き（チェックリスト）":      (["チェック"], [],             None),
-    "箇条書き（数字）":               (["番号付き"], [],             None),
-    "ボックス①（枠のみ、背景色なし）": (["ボーダー"], [],             None),
-    "ボックス②（背景色あり）":        (["背景色あり"], [],           None),
-    "補足ボックス":                   (["補足"],    [],             None),
-    "まとめボックス":                 (["まとめ"],  ["調査"],        None),
-    "右寄せリンク":                   (["右寄せ"],  [],             None),
-    "ナンバリングパーツ":             (["ナンバリング"], [],          None),
-    "ステップパーツ・フローパーツ":    (["フロー"],  [],             None),
-    "画像":                           (["コンテンツ幅"], [],         None),
-    "メリット・デメリット":           (["メリット"], [],             None),
-    "口コミ":                         (["口コミ"],  [],             None),
-    "マーカー":                       (["文字装飾"], [],            "marker"),
-    "太文字":                         (["文字装飾"], [],            "bold"),
-    "小文字":                         (["文字装飾"], [],            "text-small"),
-    "テーブル":                       (["テーブル"], ["スクロール", "タブ"], None),
-    "スクロールテーブル":             (["スクロール", "通常"], [],   None),
-    "タブ切り替えテーブル":           (["タブ切り替え"], [],         None),
-    "CTAボタン":                     (["CTA"],     [],             None),
+# スロット → 代替ルールのリスト。各要素は (name内の必須KW, name内の除外KW, 抽出セレクタ, match_index)
+# match_index: rawの中で何番目にマッチしたエントリを使うか（0=最初）。省略時は0。
+# 複数の代替ルールは順番に試し、最初にpatternが得られた時点で採用する。
+_SLOT_RULES: Dict[str, List[tuple]] = {
+    "H2":                           [(["大見出し"], [],                    "h2",    0)],
+    "H3":                           [(["大見出し"], [],                    "h3",    0)],
+    "小見出し":                      [(["大見出し"], [],                    "subhead", 0)],
+    "箇条書き（リスト）":             [(["番号なし"], [],                    None,    0)],
+    "箇条書き（チェックリスト）":      [(["チェック"], [],                    None,    0)],
+    "箇条書き（数字）":               [(["番号付き"], [],                    None,    0)],
+    "ボックス①（枠のみ、背景色なし）": [
+        (["ボーダー"],          [],                   None, 0),
+        (["ボックス"],          ["スクロール", "タブ"], None, 0),
+    ],
+    "ボックス②（背景色あり）":        [
+        (["背景色あり"],        [],                   None, 0),
+        (["ボックス"],          ["スクロール", "タブ"], None, 1),
+    ],
+    "補足ボックス":                   [(["補足"],         [],                None,    0)],
+    "まとめボックス":                 [(["まとめ"],       ["調査"],           None,    0)],
+    "右寄せリンク":                   [(["右寄せ"],       [],                None,    0)],
+    "ナンバリングパーツ":             [(["ナンバリング"], [],                 None,    0)],
+    "ステップパーツ・フローパーツ":    [
+        (["フロー"],            [],                   None, 0),
+        (["ステップ"],          [],                   None, 0),
+    ],
+    "画像":                           [(["コンテンツ幅"], [],                None,    0)],
+    "メリット・デメリット":           [(["メリット"],     [],                None,    0)],
+    "口コミ":                         [(["口コミ"],       [],                None,    0)],
+    "マーカー":                       [(["文字装飾"],     [],                "marker",    0)],
+    "太文字":                         [(["文字装飾"],     [],                "bold",      0)],
+    "小文字":                         [(["文字装飾"],     [],                "text-small", 0)],
+    "テーブル":                       [(["テーブル"],     ["スクロール", "タブ"], None, 0)],
+    "スクロールテーブル":             [
+        (["スクロール", "通常"], [],                   None, 0),
+        (["スクロール"],         ["スティッキー", "タブ", "切り替え"], None, 0),
+        (["スクロール"],         [],                   None, 0),
+    ],
+    "タブ切り替えテーブル":           [(["タブ切り替え"], [],                None,    0)],
+    "CTAボタン":                     [(["CTA"],          [],                None,    0)],
 }
 
 
@@ -345,6 +360,14 @@ def parse_parts_page(html_content: str) -> List[Dict[str, Any]]:
             continue
 
         if h3_positions:
+            # h3より前にあるtextareaはh2の基本名で登録する（スクロールテーブル等の対応）
+            first_h3_idx = h3_positions[0][0]
+            for ta_i, ta in ta_positions:
+                if ta_i < first_h3_idx:
+                    pat = ta.get_text().strip()
+                    if pat and not pat.startswith("ソースを簡素化"):
+                        raw.append((h2_name, pat))
+                    break
             for hi, (h3_idx, h3_tag) in enumerate(h3_positions):
                 next_h3_idx = h3_positions[hi + 1][0] if hi + 1 < len(h3_positions) else len(block)
                 ta_in_range = [ta for ta_i, ta in ta_positions if h3_idx < ta_i < next_h3_idx]
@@ -359,19 +382,27 @@ def parse_parts_page(html_content: str) -> List[Dict[str, Any]]:
                     raw.append((h2_name, pat))
                     break
 
-    # Step2: 固定スロットごとにベストマッチを探す
+    # Step2: 固定スロットごとにベストマッチを探す（代替ルールを順番に試す）
     components = []
     for slot in FIXED_COMPONENT_SCHEMA:
         pattern = ""
         if slot in _SLOT_RULES:
-            required, excluded, extract_sel = _SLOT_RULES[slot]
-            for name, pat in raw:
-                if not all(kw in name for kw in required):
-                    continue
-                if any(kw in name for kw in excluded):
-                    continue
-                pattern = _extract_element(pat, extract_sel) if extract_sel else pat
-                break
+            for alt in _SLOT_RULES[slot]:
+                required, excluded, extract_sel, *rest = alt
+                match_index = rest[0] if rest else 0
+                match_count = 0
+                for name, pat in raw:
+                    if not all(kw in name for kw in required):
+                        continue
+                    if any(kw in name for kw in excluded):
+                        continue
+                    if match_count < match_index:
+                        match_count += 1
+                        continue
+                    pattern = _extract_element(pat, extract_sel) if extract_sel else pat
+                    break
+                if pattern:
+                    break
         components.append({"name": slot, "pattern": pattern, "active": True})
 
     return components
