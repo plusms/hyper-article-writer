@@ -85,7 +85,7 @@ with st.sidebar:
     st.header("カテゴリ")
     st.radio(
         "セクション",
-        ["📝 コンテンツ作成", "🗄️ データ・設定", "🖼️ 画像生成", "❓ ヘルプ"],
+        ["📝 コンテンツ作成", "🗄️ データ・設定", "❓ ヘルプ"],
         key="main_nav",
         label_visibility="collapsed",
     )
@@ -181,16 +181,13 @@ if _main_nav == "📝 コンテンツ作成":
     tab_batch, tab_custom, tab_rank, tab_qual, tab_writing_chat = st.tabs([
         "📋 一括作成", "📝 カスタム作成", "🏥 ランキングブロック", "✅ 品質チェック", "✍️ 執筆チャット",
     ])
-    tab_cases = tab_settings = tab_help = tab_image_gen = None
+    tab_cases = tab_settings = tab_help = None
 elif _main_nav == "🗄️ データ・設定":
     tab_cases, tab_settings = st.tabs(["🗄️ 商品データベース", "⚙️ サイト設定"])
-    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_help = tab_image_gen = None
-elif _main_nav == "🖼️ 画像生成":
-    tab_image_gen = True  # タブなしで直接描画
-    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_cases = tab_settings = tab_help = None
+    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_help = None
 else:  # ❓ ヘルプ
     tab_help = True  # タブなしで直接描画
-    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_cases = tab_settings = tab_image_gen = None
+    tab_batch = tab_custom = tab_rank = tab_qual = tab_writing_chat = tab_cases = tab_settings = None
 
 
 # ════════════════════════════════════════════════════════
@@ -518,9 +515,11 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             if is_bulk:
                 write_output_row_knowhow_bulk(ws, row_num, _out)
                 write_status_knowhow_bulk(ws, row_num, "完了")
-                # ── 画像生成（design_system が登録されているサイトのみ）──
+                # ── 画像生成（トグルON かつ design_system 登録サイトのみ）──
                 _bulk_slug = row.get("slug", "").strip()
-                if not _bulk_slug:
+                if not st.session_state.get("bulk_gen_images", False):
+                    st.caption(f"　⏭️ 画像OFF（記事のみ生成・画像は画像生成ツールで別途）: {kw}")
+                elif not _bulk_slug:
                     st.caption(f"　⏭️ 画像スキップ（スラッグ未設定）: {kw}")
                 elif not _batch_site_name:
                     st.caption(f"　⏭️ 画像スキップ（サイト名未設定）: {kw}")
@@ -604,6 +603,10 @@ with _safe_tab(tab_batch):
         _bnk_site_opts = ["指定なし"] + site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
         bulk_site_name = _bulk_col1.selectbox("サイト名（全行共通）", _bnk_site_opts, key="bulk_site_name")
         bulk_genre     = _bulk_col2.text_input("ジャンル（全行共通）", key="bulk_genre")
+        st.checkbox(
+            "画像も一緒に生成する（既定OFF・通常は画像生成ツールで別途生成）",
+            value=False, key="bulk_gen_images",
+        )
 
     batch_row_filter = st.text_input(
         "行を絞り込む（空白=全未処理行、例: 3,5,8 または 3-10）",
@@ -3736,157 +3739,6 @@ with _safe_tab(tab_cases):
                                         except Exception as _rr_e:
                                             _upd_st.update(label="❌ エラー", state="error")
                                             st.error(f"エラー: {_rr_e}")
-
-
-# ════════════════════════════════════════════════════════
-#  画像生成セクション
-# ════════════════════════════════════════════════════════
-if tab_image_gen:
-    st.title("🖼️ 画像生成")
-    st.caption("記事HTMLを貼り付けてH2ごとに画像を生成し、Driveにアップロードします。")
-
-    _ig_sites = site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
-    _ig_col1, _ig_col2 = st.columns([2, 2])
-    _ig_site = _ig_col1.selectbox("サイト *", ["-- 選択 --"] + _ig_sites, key="ig_site")
-    _ig_slug = _ig_col2.text_input("スラッグ *", key="ig_slug", placeholder="aga-treatment-tokyo")
-    _ig_html = st.text_area("記事HTML *", height=200, key="ig_html",
-                             placeholder="<h1>...</h1>\n<h2>AGAとは</h2>\n<p>...</p>")
-
-    if st.button("🖼️ 画像を生成", type="primary", key="ig_gen_all"):
-        _ig_errs = []
-        if _ig_site == "-- 選択 --":
-            _ig_errs.append("サイトを選択してください")
-        if not _ig_slug.strip():
-            _ig_errs.append("スラッグを入力してください")
-        if not _ig_html.strip():
-            _ig_errs.append("記事HTMLを入力してください")
-        if not gemini_key:
-            _ig_errs.append("Gemini API Key が未設定です（画像案の生成に使用）")
-        for _ig_e in _ig_errs:
-            st.error(_ig_e)
-
-        if not _ig_errs:
-            _ig_sc = site_config_manager.load_site_config(_ig_site, _site_cfg_creds, _site_cfg_parent_folder)
-            if not _ig_sc.get("design_system"):
-                st.error(f"「{_ig_site}」にデザインシステムが未登録です。サイト設定で登録してください。")
-            else:
-                _ig_creds = _get_gcp_creds(sheets_creds_file)
-                with st.status("画像を生成中...", expanded=True) as _ig_status:
-                    try:
-                        # 参照画像をキャッシュから取得
-                        _ig_ref_key = f"ref_images_{_ig_site}"
-                        if _ig_ref_key not in st.session_state:
-                            st.write("☁️ 参照画像をDriveから読み込み中...")
-                            st.session_state[_ig_ref_key] = image_generator.load_reference_images_from_drive(
-                                _ig_site, _ig_creds, _drive_folder_id,
-                            ) if _ig_creds else []
-                        _ig_ref_imgs = st.session_state[_ig_ref_key]
-                        st.write(f"　→ 参照画像: {len(_ig_ref_imgs)} 枚")
-
-                        st.write("💡 画像案を生成中（Gemini）...")
-                        _ig_results = image_generator.generate_images_for_article(
-                            article_text=_ig_html,
-                            site_config=_ig_sc,
-                            reference_images=_ig_ref_imgs,
-                            provider=image_provider,
-                            gemini_api_key=gemini_key,
-                            openai_api_key=openai_key,
-                        )
-                        st.write(f"　→ {len(_ig_results)} 案を生成")
-
-                        st.session_state["ig_results"] = _ig_results
-                        _ig_status.update(label="✅ 生成完了", state="complete")
-                    except Exception as _ig_ge:
-                        _ig_status.update(label="❌ エラー", state="error")
-                        st.error(str(_ig_ge))
-
-    # ── 生成結果表示 ──────────────────────────────────────────
-    if st.session_state.get("ig_results"):
-        st.divider()
-        st.subheader("生成結果")
-        _ig_disp = st.session_state["ig_results"]
-
-        for _ig_di, _ig_dr in enumerate(_ig_disp):
-            _ig_proposal = _ig_dr["proposal"]
-            _ig_img_bytes = _ig_dr["bytes"]
-            with st.expander(
-                f"📷 {_ig_di + 1}. {_ig_proposal.get('placement', '不明')}",
-                expanded=True,
-            ):
-                _ig_rc1, _ig_rc2 = st.columns([1, 1])
-                with _ig_rc1:
-                    if _ig_img_bytes:
-                        st.image(_ig_img_bytes)
-                    else:
-                        st.info("画像の生成に失敗しました")
-                with _ig_rc2:
-                    st.caption(f"**目的**: {_ig_proposal.get('purpose', '')}")
-                    st.caption(f"**構図**: {_ig_proposal.get('layout_type', '')}")
-                    _ig_instr = st.text_input(
-                        "修正指示（任意）", key=f"ig_instr_{_ig_di}",
-                        placeholder="もっと明るいトーンで / 比較表レイアウトで",
-                    )
-                    _ig_bc1, _ig_bc2 = st.columns(2)
-
-                    if _ig_bc1.button("🔄 再生成", key=f"ig_regen_{_ig_di}", use_container_width=True):
-                        _ig_sc_regen = site_config_manager.load_site_config(_ig_site, _site_cfg_creds, _site_cfg_parent_folder)
-                        _ig_ds_regen = image_generator.build_design_system(_ig_sc_regen)
-                        _ig_ref_regen = st.session_state.get(f"ref_images_{_ig_site}", [])
-                        _regen_proposal = dict(_ig_proposal)
-                        if _ig_instr.strip():
-                            _regen_proposal["additional_instruction"] = _ig_instr.strip()
-                        _regen_prompt = image_generator.build_generation_prompt(
-                            _ig_ds_regen, _regen_proposal, "16:9", bool(_ig_ref_regen)
-                        )
-                        if _ig_instr.strip():
-                            _regen_prompt += f"\n\n修正指示: {_ig_instr.strip()}"
-                        with st.spinner("再生成中..."):
-                            try:
-                                _regen_bytes = image_generator.generate_image_bytes(
-                                    _regen_prompt,
-                                    reference_images=_ig_ref_regen or None,
-                                    provider=image_provider,
-                                    gemini_api_key=gemini_key,
-                                    openai_api_key=openai_key,
-                                )
-                                st.session_state["ig_results"][_ig_di]["bytes"] = _regen_bytes
-                                st.rerun()
-                            except Exception as _regen_e:
-                                st.error(f"再生成エラー: {_regen_e}")
-
-                    if _ig_img_bytes:
-                        if _ig_bc2.button("⬆️ アップロード", key=f"ig_upload_{_ig_di}", use_container_width=True):
-                            try:
-                                _ig_uc = _get_gcp_creds(sheets_creds_file)
-                                _igfk = "".join(c for c in _ig_proposal.get("filename_key", "").lower() if c.isalpha() or c == "-")
-                                _ig_fname = f"{_ig_slug.strip()}-{_igfk or f'img{_ig_di+1}'}.webp"
-                                drive_uploader.upload_image(
-                                    _ig_img_bytes, _ig_fname,
-                                    _ig_site, _ig_slug.strip(),
-                                    _ig_uc, _drive_folder_id,
-                                )
-                                st.success(f"✅ {_ig_fname} をアップロードしました")
-                            except Exception as _ig_ue:
-                                st.error(f"アップロードエラー: {_ig_ue}")
-
-        st.divider()
-        if st.button("⬆️ 全件アップロード", key="ig_upload_all", type="primary", use_container_width=True):
-            _ig_all_creds = _get_gcp_creds(sheets_creds_file)
-            _ig_all_ok = 0
-            for _ig_ai, _ig_ar in enumerate(st.session_state.get("ig_results", [])):
-                if _ig_ar["bytes"]:
-                    try:
-                        _igafk = "".join(c for c in _ig_ar.get("proposal", {}).get("filename_key", "").lower() if c.isalpha() or c == "-")
-                        _ig_all_fname = f"{_ig_slug.strip()}-{_igafk or f'img{_ig_ai+1}'}.webp"
-                        drive_uploader.upload_image(
-                            _ig_ar["bytes"], _ig_all_fname,
-                            _ig_site, _ig_slug.strip(),
-                            _ig_all_creds, _drive_folder_id,
-                        )
-                        _ig_all_ok += 1
-                    except Exception as _ig_ae:
-                        st.warning(f"エラー (img{_ig_ai+1}): {_ig_ae}")
-            st.success(f"✅ {_ig_all_ok} 件アップロード完了")
 
 
 # ════════════════════════════════════════════════════════
