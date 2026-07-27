@@ -728,6 +728,62 @@ with _safe_tab(tab_custom):
 
     st.divider()
 
+    # ── 保存した構成から再開 ──────────────────────────────────
+    with st.expander("💾 保存した構成から再開", expanded=False):
+        st.caption("見出し確認フェーズで保存した構成を読み込み、修正・追加指示のうえ本文生成に進めます。本文生成が完了した構成は自動で削除されます。")
+        if st.button("🔄 保存済みの構成を一覧表示", key="t2_draft_list_btn"):
+            _dl_creds = _get_gcp_creds(sheets_creds_file)
+            if not _dl_creds:
+                st.warning("GCP認証が設定されていません")
+            else:
+                try:
+                    st.session_state["_t2_draft_files"] = drive_uploader.list_json_files(
+                        "構成ドラフト", _dl_creds, _drive_folder_id,
+                    )
+                except Exception as _dle:
+                    st.error(f"一覧取得エラー: {_dle}")
+        _draft_files = st.session_state.get("_t2_draft_files")
+        if _draft_files is not None:
+            if not _draft_files:
+                st.info("保存済みの構成はありません")
+            else:
+                _draft_labels = {
+                    f"{_df.get('name', '')}｜{_df.get('createdTime', '')[:16].replace('T', ' ')}": _df["id"]
+                    for _df in _draft_files
+                }
+                _sel_draft = st.selectbox("読み込む構成", list(_draft_labels.keys()), key="t2_draft_sel")
+                _dc1, _dc2 = st.columns(2)
+                if _dc1.button("📂 この構成で再開", key="t2_draft_load_btn", type="primary"):
+                    _dl_creds2 = _get_gcp_creds(sheets_creds_file)
+                    try:
+                        _loaded = drive_uploader.download_json(_draft_labels[_sel_draft], _dl_creds2)
+                        st.session_state["t2_draft"] = {
+                            "structure":   _loaded["structure"],
+                            "comp":        _loaded.get("comp", {}),
+                            "clinics":     _loaded.get("clinics", []),
+                            "all_clinics": _loaded.get("all_clinics", []),
+                            "inputs":      _loaded["inputs"],
+                            "site_parts":  _loaded.get("site_parts", ""),
+                            "site_config": _loaded.get("site_config", {}),
+                            "_draft_file_id": _draft_labels[_sel_draft],
+                        }
+                        st.session_state.pop("t2_last", None)
+                        st.session_state.pop("t2_structure_edit", None)
+                        st.session_state.pop("_t2_draft_files", None)
+                        st.success("✅ 構成を読み込みました。下の見出し確認フェーズで続きから作業できます")
+                        st.rerun()
+                    except Exception as _dle2:
+                        st.error(f"読み込みエラー: {_dle2}")
+                if _dc2.button("🗑 この構成を削除", key="t2_draft_del_btn"):
+                    _dl_creds3 = _get_gcp_creds(sheets_creds_file)
+                    _ok, _err = drive_uploader.delete_file(_draft_labels[_sel_draft], _dl_creds3)
+                    if _ok:
+                        st.session_state.pop("_t2_draft_files", None)
+                        st.success("削除しました")
+                        st.rerun()
+                    else:
+                        st.error(f"削除エラー: {_err}")
+
     # ── スプシ行番号復元データを受け取ってフォームに展開 ─────────────────
     if "_t2_restore_data" in st.session_state:
         _rrd = st.session_state.pop("_t2_restore_data")
@@ -1256,16 +1312,13 @@ with _safe_tab(tab_custom):
     )
 
     st.divider()
-    if article_type != "ノウハウ":
-        gen_mode = st.radio(
-            "生成モード",
-            ["一括生成", "見出し確認あり"],
-            horizontal=True,
-            key="t_gen_mode",
-            help="「見出し確認あり」を選ぶと、見出し確認・修正後に本文を生成できます。",
-        )
-    else:
-        gen_mode = "一括生成"
+    gen_mode = st.radio(
+        "生成モード",
+        ["一括生成", "見出し確認あり"],
+        horizontal=True,
+        key="t_gen_mode",
+        help="「見出し確認あり」を選ぶと、見出し確認・修正後に本文を生成できます。構成を保存して後で再開することもできます。",
+    )
     # ── 入力の一時保存ボタン ─────────────────────────────────────
     if st.button("📥 入力を一時保存（スプシに書き込む）", key="t2_save_input", use_container_width=True):
         _save_creds = _get_gcp_creds(sheets_creds_file)
@@ -1442,6 +1495,7 @@ with _safe_tab(tab_custom):
                             "site_parts":  _single_site_parts,
                             "site_config": _single_site_config,
                         }
+                        st.session_state.pop("t2_structure_edit", None)
                         s.update(label="✅ 見出し生成完了 — 下で確認してください", state="complete")
                     else:
                         _provider_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
@@ -1539,21 +1593,49 @@ with _safe_tab(tab_custom):
     if _t2_draft:
         st.divider()
         st.subheader("📐 見出し確認・修正")
-        st.caption("内容を確認して、修正指示があれば入力してください。問題なければそのまま本文を生成できます。")
+        st.caption("見出しは直接編集できます。AIに直させたい時は修正指示、ターゲットや入れる情報を足したい時は追加指示を使ってください。")
 
-        with st.expander("タイトル案・見出し一覧", expanded=True):
-            st.code(_t2_draft["structure"]["structure_text"], language=None)
+        st.caption(f"タイトル案：{_t2_draft['structure'].get('title', '')}")
+        # 構成が作り直された/読み込まれた直後はwidgetを再初期化（キー破棄で value を再シード）
+        if "t2_structure_edit" not in st.session_state:
+            st.session_state["t2_structure_edit"] = _t2_draft["structure"]["structure_text"]
+        _edited_structure = st.text_area(
+            "見出し構成（直接編集できます）",
+            key="t2_structure_edit",
+            height=340,
+        )
+        # 手動編集を反映した構成dict（各操作の起点にする）
+        _manual_struct = {**_t2_draft["structure"], "structure_text": _edited_structure}
+        _has_manual_edit = _edited_structure != _t2_draft["structure"]["structure_text"]
+        if _has_manual_edit:
+            st.caption("✏️ 手動編集あり。保存・本文生成・修正反映の各操作にこの内容が使われます")
 
         if st.session_state.pop("_t2_revision_clear", False):
             st.session_state["t2_revision_input"] = ""
         _rev_note = st.text_area(
-            "修正指示（任意）",
+            "修正指示（任意・AIに見出しを直させる）",
             key="t2_revision_input",
             placeholder="例：費用のH2は後ろに移動して\n例：クリニック紹介を5件にして\n例：「副作用リスク」のH2を追加して",
-            height=100,
+            height=90,
         )
 
-        _rbtn1, _rbtn2 = st.columns(2)
+        if st.session_state.pop("_t2_addnote_clear", False):
+            st.session_state["t2_addnote_input"] = ""
+        _add_note = st.text_area(
+            "追加指示（任意・ターゲットや入れる情報を足す）",
+            key="t2_addnote_input",
+            placeholder="例：30代で薬に不安がある層をメインターゲットに\n例：副作用の頻度データは必ず入れる",
+            height=90,
+        )
+
+        def _save_manual_edit():
+            """手動編集をdraftに書き戻す（本文生成・保存の直前に呼ぶ）。"""
+            if _has_manual_edit:
+                st.session_state["t2_draft"] = {
+                    **st.session_state["t2_draft"], "structure": _manual_struct,
+                }
+
+        _rbtn1, _rbtn_add1, _rbtn_add2 = st.columns(3)
         if _rbtn1.button("✏️ 修正を反映", key="t2_revise_btn", disabled=not (_rev_note or "").strip()):
             with st.spinner("構成を修正中..."):
                 try:
@@ -1561,9 +1643,10 @@ with _safe_tab(tab_custom):
                     _new_struct = generate_structure(
                         _rv_inputs, _t2_draft["comp"], _t2_draft["clinics"],
                         claude_key, gemini_api_key=gemini_key, article_provider=article_provider,
-                        base_structure=_t2_draft["structure"].get("structure_text", ""),
+                        base_structure=_manual_struct.get("structure_text", ""),
                     )
                     st.session_state["t2_draft"] = {**_t2_draft, "structure": _new_struct}
+                    st.session_state.pop("t2_structure_edit", None)
                     st.session_state["_t2_revision_clear"] = True
                     # Drive に構成修正ログを保存（失敗してもメインフローは止めない）
                     _struct_log_creds = _get_gcp_creds(sheets_creds_file)
@@ -1579,7 +1662,7 @@ with _safe_tab(tab_custom):
                                     "article_type": _sl_atype,
                                     "main_kw": _t2_draft["inputs"].get("main_kw", ""),
                                     "instruction": _rev_note.strip(),
-                                    "before_structure": _t2_draft["structure"]["structure_text"],
+                                    "before_structure": _manual_struct["structure_text"],
                                     "after_structure": _new_struct["structure_text"],
                                 },
                                 f"struct_{_sl_ts}_{_sl_kw}.json",
@@ -1593,7 +1676,68 @@ with _safe_tab(tab_custom):
                 except Exception as _re:
                     st.error(f"修正エラー: {_re}")
 
-        if _rbtn2.button("✍️ この見出しで本文を生成", key="t2_gen_body_btn", type="primary"):
+        def _fold_add_note(_inputs: dict, _note: str) -> dict:
+            """追加指示をinputsのcustom_blockに追記して以降の生成に効かせる。"""
+            _merged = "\n\n".join(filter(None, [_inputs.get("custom_block", ""), f"【追加指示】\n{_note}"]))
+            return {**_inputs, "custom_block": _merged}
+
+        if _rbtn_add1.button("➕ 追加指示を構成に反映", key="t2_add_struct_btn", disabled=not (_add_note or "").strip()):
+            with st.spinner("追加指示を反映して構成を作り直し中..."):
+                try:
+                    _new_inputs = _fold_add_note(_t2_draft["inputs"], _add_note.strip())
+                    _rv_inputs = {**_new_inputs, "_revision_note": _add_note.strip()}
+                    _new_struct = generate_structure(
+                        _rv_inputs, _t2_draft["comp"], _t2_draft["clinics"],
+                        claude_key, gemini_api_key=gemini_key, article_provider=article_provider,
+                        base_structure=_manual_struct.get("structure_text", ""),
+                    )
+                    st.session_state["t2_draft"] = {**_t2_draft, "structure": _new_struct, "inputs": _new_inputs}
+                    st.session_state.pop("t2_structure_edit", None)
+                    st.session_state["_t2_addnote_clear"] = True
+                    st.rerun()
+                except Exception as _ae:
+                    st.error(f"追加指示エラー: {_ae}")
+
+        if _rbtn_add2.button("➕ 追加指示を本文だけに反映", key="t2_add_body_btn", disabled=not (_add_note or "").strip()):
+            _new_inputs = _fold_add_note(_t2_draft["inputs"], _add_note.strip())
+            st.session_state["t2_draft"] = {**_t2_draft, "structure": _manual_struct, "inputs": _new_inputs}
+            st.session_state["_t2_addnote_clear"] = True
+            st.success("✅ 追加指示を本文生成の前提に反映しました。見出しはそのままです")
+            st.rerun()
+
+        _sbtn1, _sbtn2 = st.columns([1, 1])
+        if _sbtn1.button("💾 構成を保存して中断", key="t2_draft_save_btn"):
+            _save_manual_edit()
+            _sv_draft = st.session_state["t2_draft"]
+            _sv_creds = _get_gcp_creds(sheets_creds_file)
+            if not _sv_creds:
+                st.warning("GCP認証が設定されていません")
+            else:
+                try:
+                    _sv_ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    _sv_kw = _sv_draft["inputs"].get("main_kw", "")[:20].replace(" ", "_")
+                    _sv_link = drive_uploader.upload_json(
+                        {
+                            "structure":   _sv_draft["structure"],
+                            "comp":        _sv_draft.get("comp", {}),
+                            "clinics":     _sv_draft.get("clinics", []),
+                            "all_clinics": _sv_draft.get("all_clinics", []),
+                            "inputs":      _sv_draft["inputs"],
+                            "site_parts":  _sv_draft.get("site_parts", ""),
+                            "site_config": _sv_draft.get("site_config", {}),
+                        },
+                        f"draft_{_sv_ts}_{_sv_kw}.json",
+                        "構成ドラフト",
+                        _sv_creds,
+                        _drive_folder_id,
+                    )
+                    st.success("✅ 構成を保存しました。上部の「保存した構成から再開」で続きから戻れます")
+                except Exception as _sve:
+                    st.error(f"保存エラー: {_sve}")
+
+        if _sbtn2.button("✍️ この見出しで本文を生成", key="t2_gen_body_btn", type="primary"):
+            _save_manual_edit()
+            _t2_draft = st.session_state["t2_draft"]
             _prov_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
             with st.status(f"本文生成中（{_prov_label}）...", expanded=True) as _bs:
                 try:
@@ -1644,7 +1788,15 @@ with _safe_tab(tab_custom):
                     }
                     _bs.update(label="✅ 完了", state="complete")
                     _save_output_cache(_di.get("main_kw", ""), st.session_state["t2_last"])
+                    # 再開元の保存済み構成ドラフトを自動削除（本文生成まで到達したため）
+                    _done_file_id = _t2_draft.get("_draft_file_id")
+                    if _done_file_id:
+                        try:
+                            drive_uploader.delete_file(_done_file_id, _get_gcp_creds(sheets_creds_file))
+                        except Exception:
+                            pass
                     st.session_state.pop("t2_draft", None)
+                    st.session_state.pop("t2_structure_edit", None)
                     st.session_state.pop(f"t2_sheet_hist_{_di.get('article_type', '')}", None)
                 except Exception as _be:
                     _bs.update(label="❌ エラー", state="error")

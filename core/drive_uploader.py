@@ -216,6 +216,64 @@ def delete_reference_image(
         return False, str(e)
 
 
+def list_json_files(
+    folder_name,
+    credentials_dict: dict,
+    parent_folder_id: str,
+) -> list[dict]:
+    """指定フォルダ配下のJSONファイル一覧を新しい順で返す（id・name・createdTime）。
+    フォルダが無ければ空リスト。folder_name は str（1階層）または list（複数階層）。
+    """
+    service = _get_service(credentials_dict)
+    # フォルダを辿る（作成はしない＝無ければ空）
+    current = parent_folder_id
+    names = folder_name if isinstance(folder_name, list) else [folder_name]
+    for name in names:
+        query = (
+            f"name='{name}' and mimeType='application/vnd.google-apps.folder' "
+            f"and '{current}' in parents and trashed=false"
+        )
+        res = service.files().list(
+            q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True,
+        ).execute()
+        if not res.get("files"):
+            return []
+        current = res["files"][0]["id"]
+    res = service.files().list(
+        q=f"'{current}' in parents and trashed=false and mimeType='application/json'",
+        fields="files(id, name, createdTime)",
+        orderBy="createdTime desc",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+    ).execute()
+    return res.get("files", [])
+
+
+def download_json(file_id: str, credentials_dict: dict) -> dict:
+    """DriveのJSONファイルをDLしてdictで返す。"""
+    service = _get_service(credentials_dict)
+    request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+    buf = io.BytesIO()
+    downloader = MediaIoBaseDownload(buf, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    buf.seek(0)
+    return _json_lib.loads(buf.read().decode("utf-8"))
+
+
+def delete_file(file_id: str, credentials_dict: dict) -> tuple[bool, str]:
+    """Driveのファイルをゴミ箱に移動（永久削除はOrganizer権限が必要なためtrashを使用）。"""
+    try:
+        service = _get_service(credentials_dict)
+        service.files().update(
+            fileId=file_id, body={"trashed": True}, supportsAllDrives=True,
+        ).execute()
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
 def upload_json(
     data: dict,
     filename: str,
