@@ -27,7 +27,7 @@ from core.sheets import (
     write_status_knowhow, write_output_row_knowhow, write_full_row_knowhow,
     read_input_rows_knowhow_bulk, write_status_knowhow_bulk, write_output_row_knowhow_bulk,
     COL_TITLE, COL_TITLE_KNOWHOW, read_notation_rules,
-    write_input_only_row, read_row_by_index,
+    write_input_only_row, write_input_only_row_knowhow, read_row_by_index,
     read_site_info, write_site_info_settings, create_site_tab, init_site_info_sheet,
 )
 from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
@@ -1326,8 +1326,6 @@ with _safe_tab(tab_custom):
             st.error("サイドバーでスプシURLを設定してください")
         elif output_tab_sel == "（書き込まない）":
             st.error("スプシ書き込み先タブを選択してください（「書き込まない」以外）")
-        elif article_type == "ノウハウ":
-            st.warning("ノウハウ記事の一時保存は非対応です")
         elif not _save_creds:
             st.error("GCP認証が設定されていません")
         elif not main_kw:
@@ -1358,7 +1356,10 @@ with _safe_tab(tab_custom):
                         "recommended":    _save_clinics[0]["recommended"] if _save_clinics else "",
                         "related_kw":     related_kw,
                     }
-                    write_input_only_row(_save_ws, _save_row, _save_inputs)
+                    if output_tab_sel == "ノウハウ":
+                        write_input_only_row_knowhow(_save_ws, _save_row, _save_inputs)
+                    else:
+                        write_input_only_row(_save_ws, _save_row, _save_inputs)
                     st.success(f"✅ [{output_tab_sel}] 行{_save_row}に保存しました（復元時はこの行番号を使用）")
                     st.session_state.pop(_hist_cache_key, None)
                 except Exception as _se:

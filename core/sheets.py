@@ -252,6 +252,28 @@ def write_input_only_row(ws: gspread.Worksheet, row_index: int, input_data: dict
     )
 
 
+def write_input_only_row_knowhow(ws: gspread.Worksheet, row_index: int, input_data: dict) -> None:
+    """ノウハウ入力データのみをA-I列に書き込む（一時保存用）。出力列（J-M）には触れない。"""
+    sub_kw_val = input_data.get("sub_kw", "")
+    if isinstance(sub_kw_val, list):
+        sub_kw_val = ", ".join(sub_kw_val)
+    comp_str = ", ".join(input_data.get("competitor_urls", []))
+    ws.update(
+        f"A{row_index}:I{row_index}",
+        [[
+            input_data.get("site_name", ""),
+            input_data.get("genre", ""),
+            input_data.get("article_type", "ノウハウ"),
+            input_data.get("main_kw", ""),
+            sub_kw_val,
+            comp_str,
+            input_data.get("custom_block", ""),
+            input_data.get("related_kw", ""),
+            "入力保存中",
+        ]]
+    )
+
+
 def read_row_by_index(ws: gspread.Worksheet, row_index: int) -> dict | None:
     """指定行のデータをread_recent_input_rowsと同じ形式で返す。"""
     all_values = ws.get_all_values()
