@@ -10,7 +10,7 @@ import streamlit as st
 
 from core.config import TOPICS
 from core.researcher import (
-    analyze_competitors, collect_clinic_info,
+    analyze_competitors,
     discover_clinics_from_competitors, auto_discover_clinics,
     crawl_site, fetch_page_text, extract_clinic_info_from_content,
     extract_text_from_lp_images, build_content_with_lp,
@@ -30,7 +30,7 @@ from core.sheets import (
     write_input_only_row, write_input_only_row_knowhow, read_row_by_index,
     read_site_info, write_site_info_settings, create_site_tab, init_site_info_sheet,
 )
-from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager
+from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, output_check
 
 st.set_page_config(page_title="CV Article Writer", layout="wide", page_icon="✍️")
 
@@ -487,11 +487,16 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                     inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"], gemini_api_key=gemini_key, research_provider=research_provider
                 )
                 inputs["clinics"] = inputs["clinics"] + discovered
-            _batch_db_cache = clinic_db_manager.build_db_cache(
-                [c["name"] for c in inputs["clinics"]],
-                genre=inputs.get("genre", ""), creds_data=creds_data, sheet_url=db_sheet_url,
+            clinics, _batch_registered, _batch_failed = clinic_db_manager.collect_via_db(
+                inputs["clinics"], inputs.get("genre", ""), claude_key,
+                db_type=DB_TYPE_CLINIC, gemini_api_key=gemini_key,
+                research_provider=research_provider,
+                creds_data=creds_data, sheet_url=db_sheet_url,
             )
-            clinics   = collect_clinic_info(inputs["clinics"], inputs["genre"], claude_key, inputs.get("article_type", ""), db_cache=_batch_db_cache, db_type=DB_TYPE_CLINIC, gemini_api_key=gemini_key, research_provider=research_provider)
+            if _batch_registered:
+                st.write(f"　→ 案件DBに新規登録: {', '.join(_batch_registered)}")
+            if _batch_failed:
+                st.warning("案件DBに登録できなかったため、この案件の情報は使いません: " + ", ".join(_batch_failed))
             structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
             _batch_site_info = {}
             if _batch_site_name and _site_info_sheet_url_default:
@@ -1478,12 +1483,18 @@ with _safe_tab(tab_custom):
                     st.write("🔍 案件情報収集中...")
                     _t2_db_creds = _get_gcp_creds(sheets_creds_file)
                     _t2_active_db_url = db_sheet_url if custom_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
-                    _t2_db_cache = clinic_db_manager.build_db_cache([c["name"] for c in all_clinics], genre=genre, creds_data=_t2_db_creds, sheet_url=_t2_active_db_url)
-                    if _t2_db_cache:
-                        st.write(f"　→ DB参照: {len(_t2_db_cache)} 案件（スクレイピングスキップ）")
-                    else:
-                        st.write(f"　→ DBヒット: 0件（スクレイピングで取得）")
-                    clinics = collect_clinic_info(all_clinics, genre, claude_key, article_type, db_cache=_t2_db_cache, db_type=custom_db_type, gemini_api_key=gemini_key, research_provider=research_provider)
+                    clinics, _t2_registered, _t2_failed = clinic_db_manager.collect_via_db(
+                        all_clinics, genre, claude_key,
+                        db_type=custom_db_type, gemini_api_key=gemini_key,
+                        research_provider=research_provider,
+                        creds_data=_t2_db_creds, sheet_url=_t2_active_db_url,
+                        progress=st.write,
+                    )
+                    st.write(f"　→ 案件DBから取得: {len(clinics)} 案件")
+                    if _t2_registered:
+                        st.write(f"　→ 案件DBに新規登録: {', '.join(_t2_registered)}")
+                    if _t2_failed:
+                        st.warning("案件DBに登録できなかったため、この案件の情報は使いません: " + ", ".join(_t2_failed))
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
                     if gen_mode == "見出し確認あり":
@@ -2265,6 +2276,35 @@ with _safe_tab(tab_qual):
     check_title = _chk_col1.text_input("タイトル（任意）", key="chk_title")
     check_meta  = _chk_col2.text_input("メタディスクリプション（任意）", key="chk_meta")
     html_input  = st.text_area("HTMLを貼り付け", height=300, key="chk_html")
+    _chk_source = st.text_area(
+        "照合元データ（任意）", height=120, key="chk_source",
+        help="案件DBの情報を貼ると、記事内の金額・割合が入力データに存在するかを照合します",
+    )
+
+    if st.button("機械チェック実行", key="run_machine_check"):
+        if not html_input.strip():
+            st.error("HTMLを貼り付けてください")
+        else:
+            _mc = output_check.run_checks(html_input, _chk_source)
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                st.markdown("**AIに直させる指摘**")
+                if _mc["fix"]:
+                    st.error(output_check.format_findings(_mc["fix"]))
+                    st.text_area(
+                        "修正指示文（コピーして使う）",
+                        output_check.build_fix_instruction(_mc["fix"]),
+                        height=200, key="chk_fix_instruction",
+                    )
+                else:
+                    st.success("指摘なし")
+            with _c2:
+                st.markdown("**人が確認する指摘**")
+                if _mc["human"]:
+                    st.warning(output_check.format_findings(_mc["human"]))
+                    st.caption("入力データとのズレなのでAIに直させない。直させると辻褄合わせで嘘を作る")
+                else:
+                    st.success("指摘なし")
 
     if st.button("チェック実行", type="primary", key="run_check"):
         if not claude_key:
@@ -3091,6 +3131,10 @@ with _safe_tab(tab_rank):
     _cb_sub_kw  = _cb_kw_col2.text_input("サブKW（カンマ区切り）", key="cb_sub_kw")
     _cb_article_type = st.radio("記事タイプ", ["地域", "比較"], horizontal=True, key="cb_article_type")
     _cb_db_type = st.selectbox("DBタイプ", [DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE], key="cb_db_type")
+    _cb_genre = st.text_input(
+        "ジャンル", key="cb_genre",
+        help="案件DBのタブ名になります。未入力だとDB未登録の案件を登録できません",
+    )
     _rb_uploaded = st.file_uploader(
         "📤 本文作成データをアップロード（任意）",
         type=["txt"],
@@ -3312,23 +3356,27 @@ with _safe_tab(tab_rank):
                         try:
                             _t5_db_creds = _get_gcp_creds(sheets_creds_file)
                             _t5_active_db_url = db_sheet_url if _cb_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
-                            _t5_db_cache = clinic_db_manager.build_db_cache([_cbc["name"]], genre="", creds_data=_t5_db_creds, sheet_url=_t5_active_db_url)
-                            if _t5_db_cache:
-                                st.write(f"　→ DB参照")
                             # lp_plan が未入力ならDBのlp_infoをフォールバックとして使う
                             if not _lp_plan:
                                 _db_lp_plan, _ = clinic_db_manager.get_clinic_lp_info(_cbc["name"], _t5_db_creds, _t5_active_db_url)
                                 if _db_lp_plan:
                                     _lp_plan = _db_lp_plan
                                     st.write(f"　→ lp_info を最訴求プランに使用")
-                            _scraped = collect_clinic_info(
+                            _t5_info, _t5_registered, _t5_failed = clinic_db_manager.collect_via_db(
                                 [{"name": _cbc["name"], "domain": _clinic_url or _cbc["name"]}],
-                                "", claude_key, db_cache=_t5_db_cache, db_type=_cb_db_type,
+                                _cb_genre, claude_key, db_type=_cb_db_type,
                                 gemini_api_key=gemini_key, research_provider=research_provider,
+                                creds_data=_t5_db_creds, sheet_url=_t5_active_db_url,
+                                progress=st.write,
                             )
-                            _scraped_text = _scraped.get(_cbc["name"], "（取得失敗）")
+                            if _t5_registered:
+                                st.write(f"　→ 案件DBに新規登録")
+                            _scraped_text = _t5_info.get(_cbc["name"], "")
+                            if not _scraped_text:
+                                st.warning(f"{_cbc['name']} は案件DBに情報がありません。先に案件DBへ登録してください")
+                                _scraped_text = "（案件DB未登録）"
                         except Exception:
-                            _scraped_text = "（取得失敗）"
+                            _scraped_text = "（案件DB未登録）"
 
                         st.write(f"✍️ {_r}位: {_cbc['name']} のブロックを生成中...")
                         _cbb_texts   = [b["text"].strip()   for b in st.session_state.get("cb_extra_blocks", []) if b["text"].strip()]

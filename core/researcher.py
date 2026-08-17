@@ -189,34 +189,6 @@ TCB東京中央美容外科::tcb.net
     return discovered[:5]
 
 
-def _find_price_pages(base_url: str, genre: str, max_pages: int = 2) -> list[str]:
-    """トップページのリンクから料金・メニュー系ページのURLを抽出する。"""
-    price_keywords = ["price", "料金", "費用", "プラン", "plan", "menu", "メニュー", "cost", "ryokin"]
-    if genre:
-        price_keywords.append(genre[:4])
-    try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        r = requests.get(base_url, headers=headers, timeout=15)
-        soup = BeautifulSoup(r.text, "html.parser")
-        base_domain = urlparse(base_url).netloc
-        seen, links = set(), []
-        for a in soup.find_all("a", href=True):
-            href = urljoin(base_url, a["href"])
-            if urlparse(href).netloc != base_domain:
-                continue
-            if href in seen or href == base_url:
-                continue
-            link_text = (a.get_text(strip=True) + " " + href).lower()
-            if any(kw.lower() in link_text for kw in price_keywords if kw):
-                seen.add(href)
-                links.append(href)
-                if len(links) >= max_pages:
-                    break
-        return links
-    except Exception:
-        return []
-
-
 def crawl_site(start_url: str, genre: str, max_pages: int = 20, restrict_path: bool = True) -> str:
     """指定URLから同ドメイン内をBFSクロールし、収集ページのテキストを結合して返す。
     restrict_path=False のとき、path_prefix 制約を外してドメイン全体をたどる。
@@ -462,28 +434,30 @@ def extract_clinic_names_from_article(article_text: str, claude_api_key: str, ge
     return [ln.strip() for ln in result.splitlines() if ln.strip() and not ln.startswith("[")]
 
 
-def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_type: str = "", db_cache: dict | None = None, full_crawl: bool = False, db_type: str = DB_TYPE_CLINIC, gemini_api_key: str = "", research_provider: str = "claude") -> dict:
+def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, db_type: str = DB_TYPE_CLINIC, gemini_api_key: str = "", research_provider: str = "claude") -> dict:
+    """案件DBへ登録するための情報を1院ずつ全ページクロールして抽出する。
+
+    記事生成から直接呼ばない。呼び出し元は clinic_db_manager.collect_via_db に統一する。
+    記事ごとに事実を取り直すと、同じ案件でも記事ごとに値がズレるため。
+    """
     if not clinics:
         return {}
 
-    db_cache = db_cache or {}
-    db_results = {c["name"]: db_cache[c["name"]] for c in clinics if c["name"] in db_cache}
-    clinics_to_scrape = [c for c in clinics if c["name"] not in db_cache]
-
-    if not clinics_to_scrape:
-        return db_results
-
     scraped_results = {}
+    fields = _get_fields(db_type)
 
-    if full_crawl:
-        # DB事前収集用：1院ずつクロール → 個別抽出
-        for clinic in clinics_to_scrape:
-            name = clinic["name"]
-            domain_or_url = clinic["domain"]
-            start_url = domain_or_url if domain_or_url.startswith("http") else f"https://{domain_or_url}"
-            content = crawl_site(start_url, genre, max_pages=20)
-            fields = _get_fields(db_type)
-            prompt = f"""以下の{name}のWebサイト内容から情報を抽出してください。
+    for clinic in clinics:
+        name = clinic["name"]
+        domain_or_url = clinic.get("domain", "")
+        if not domain_or_url:
+            scraped_results[name] = ""
+            continue
+        start_url = domain_or_url if domain_or_url.startswith("http") else f"https://{domain_or_url}"
+        content = crawl_site(start_url, genre, max_pages=20)
+        if not content.strip():
+            scraped_results[name] = ""
+            continue
+        prompt = f"""以下の{name}のWebサイト内容から情報を抽出してください。
 取得できない項目は「[要確認]」と記載してください。補完・推測は一切しないでください。
 
 {content[:30000]}
@@ -492,65 +466,6 @@ def collect_clinic_info(clinics: list, genre: str, claude_api_key: str, article_
 
 【{name}】
 {fields}"""
-            scraped_results[name] = _research_call(prompt, claude_api_key, gemini_api_key, research_provider, max_tokens=8192)
-    else:
-        # 記事生成時：従来通り main + 料金ページのみ、一括抽出
-        fetched = {}
-        for clinic in clinics_to_scrape:
-            name = clinic["name"]
-            domain_or_url = clinic["domain"]
+        scraped_results[name] = _research_call(prompt, claude_api_key, gemini_api_key, research_provider, max_tokens=8192)
 
-            if domain_or_url.startswith("http"):
-                main_url = domain_or_url
-                content = fetch_page_text(main_url)
-            else:
-                main_url = None
-                content = "[取得失敗]"
-                for prefix in ["https://", "https://www."]:
-                    result = fetch_page_text(f"{prefix}{domain_or_url}")
-                    if not result.startswith("[取得失敗"):
-                        main_url = f"{prefix}{domain_or_url}"
-                        content = result
-                        break
-
-            if main_url:
-                extra_pages = _find_price_pages(main_url, genre)
-                for extra_url in extra_pages:
-                    extra = fetch_page_text(extra_url)
-                    if not extra.startswith("[取得失敗"):
-                        content += f"\n\n--- 追加ページ: {extra_url} ---\n{extra}"
-
-            fetched[name] = content
-
-        fields = _get_fields(db_type)
-        clinic_blocks = "\n\n".join(
-            f"【{name}】\nWebサイト内容：\n{content[:6000]}\n\n{fields}"
-            for name, content in fetched.items()
-        )
-        prompt = f"""以下の各クリニックについて、提供されたWebサイト内容から情報を抽出してください。
-取得できない項目は「[要確認]」と記載してください。補完・推測は一切しないでください。
-
-{clinic_blocks}
-
-各クリニックの出力は「【クリニック名】」の見出しで始めてください。"""
-        result_text = _research_call(prompt, claude_api_key, gemini_api_key, research_provider)
-
-        for clinic in clinics_to_scrape:
-            name = clinic["name"]
-            marker = f"【{name}】"
-            if marker not in result_text:
-                scraped_results[name] = "[要確認]"
-                continue
-            start = result_text.index(marker)
-            next_pos = len(result_text)
-            for other in clinics_to_scrape:
-                if other["name"] == name:
-                    continue
-                other_marker = f"【{other['name']}】"
-                if other_marker in result_text:
-                    pos = result_text.index(other_marker)
-                    if pos > start:
-                        next_pos = min(next_pos, pos)
-            scraped_results[name] = result_text[start:next_pos].strip()
-
-    return {**db_results, **scraped_results}
+    return scraped_results

@@ -187,6 +187,85 @@ def build_db_cache(clinic_names: list, genre: str = "", creds_data=None, sheet_u
     return result
 
 
+def collect_via_db(
+    clinics: list,
+    genre: str,
+    claude_api_key: str,
+    db_type: str = "",
+    gemini_api_key: str = "",
+    research_provider: str = "claude",
+    creds_data=None,
+    sheet_url=None,
+    progress=None,
+) -> tuple[dict, list, list]:
+    """案件DBを唯一の事実の入口として案件情報を返す。
+
+    DB未登録の案件は1院ずつ全ページクロール→抽出→DBへ書き込み、そのあとDBから
+    読み直した値だけを記事生成に渡す。クロール結果を直接本文に流さないのは、
+    記事ごとに事実を取り直すと同じ案件でも記事ごとに値がズレるため。
+
+    Returns: ({name: info_str}, 新規登録した案件名, DBに入らなかった案件名)
+    """
+    from core.researcher import collect_clinic_info
+
+    def _log(msg: str) -> None:
+        if progress:
+            progress(msg)
+
+    names = [c["name"] for c in clinics]
+    cached = build_db_cache(names, genre=genre, creds_data=creds_data, sheet_url=sheet_url)
+    missing = [c for c in clinics if c["name"] not in cached]
+    if not missing:
+        return cached, [], []
+
+    registered: list = []
+    failed: list = []
+    for clinic in missing:
+        name = clinic["name"]
+        _log(f"　→ DB未登録: {name} をクロールして登録します")
+        try:
+            crawled = collect_clinic_info(
+                [{"name": name, "domain": clinic.get("domain", "")}],
+                genre, claude_api_key, db_type=db_type,
+                gemini_api_key=gemini_api_key, research_provider=research_provider,
+            )
+        except Exception as e:
+            _log(f"　→ {name} のクロールに失敗: {type(e).__name__}")
+            failed.append(name)
+            continue
+
+        info = (crawled.get(name) or "").strip()
+        if not info or info.startswith("[情報取得失敗") or info == "[要確認]":
+            _log(f"　→ {name} は情報を取得できませんでした")
+            failed.append(name)
+            continue
+        if not genre:
+            _log(f"　→ {name} はジャンル未指定のためDBに登録できません")
+            failed.append(name)
+            continue
+
+        try:
+            upsert_clinic(
+                name, clinic.get("domain", ""), genre, info,
+                creds_data=creds_data, sheet_url=sheet_url,
+            )
+            registered.append(name)
+        except Exception as e:
+            _log(f"　→ {name} のDB登録に失敗: {type(e).__name__}")
+            failed.append(name)
+
+    if registered:
+        reread = build_db_cache(registered, genre=genre, creds_data=creds_data, sheet_url=sheet_url)
+        for name in registered:
+            if name in reread:
+                cached[name] = reread[name]
+            else:
+                _log(f"　→ {name} をDBから読み戻せませんでした")
+                failed.append(name)
+
+    return cached, registered, failed
+
+
 def _load_local() -> dict:
     if not os.path.exists(DB_PATH):
         return {}
