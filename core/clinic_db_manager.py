@@ -51,7 +51,10 @@ REQUIRED_FOR_GENERATION = [
     "比較優位性1", "比較優位性2", "比較優位性3",
 ]
 # 空でないことを成功にしない。状態を表す運用列のうち、これが通らない行は生成に使わない。
-REQUIRED_OPERATION = ["料金確認済み", "優位性の人承認"]
+# 「未」「要確認。〜」のように、埋まっていても通過していない値が入るため、
+# 合格を表す語で始まるかどうかで判定する。
+REQUIRED_OPERATION = ["料金確認済み", "優位性の人承認", "料金の検算結果"]
+OPERATION_PASS_PREFIXES = ("済", "OK", "ok", "完了", "承認", "正常", "確認済", "合格", "問題なし")
 # 値としてこれが入っていたら失敗として弾く。
 # 「不可」「なし」のような本文で普通に使う語は入れない。誤って弾くほうが害が大きい。
 FAILURE_MARKERS = [
@@ -373,8 +376,8 @@ def validate_record(record: dict, required: list | None = None) -> list[str]:
         value = str(record.get(col, "")).strip()
         if not value:
             reasons.append(f"{col} が未記入")
-        elif _has_failure_marker(value):
-            reasons.append(f"{col} が未通過（{value}）")
+        elif not value.startswith(OPERATION_PASS_PREFIXES):
+            reasons.append(f"{col} が未通過（{value[:40]}）")
     return reasons
 
 
