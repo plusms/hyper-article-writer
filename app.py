@@ -30,7 +30,7 @@ from core.sheets import (
     write_input_only_row, write_input_only_row_knowhow, read_row_by_index,
     read_site_info, write_site_info_settings, create_site_tab, init_site_info_sheet,
 )
-from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, output_check
+from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, facility_db, output_check
 
 st.set_page_config(page_title="CV Article Writer", layout="wide", page_icon="✍️")
 
@@ -449,6 +449,30 @@ def _parse_batch_row_filter(filter_str: str) -> set | None:
     return indices or None
 
 
+def _attach_facilities(clinic_info: dict, inputs: dict, creds_data, sheet_url, log=None) -> dict:
+    """地域記事なら、その地域の院情報を案件情報に足して返す。
+
+    診療時間・所在地・院数は地域で変わるので案件タブには置かない。院タブから
+    メインキーワードに含まれる地域名で引く。
+    """
+    if inputs.get("article_type") != "地域" or not (creds_data and sheet_url):
+        return clinic_info
+    rows = facility_db.load_facilities(creds_data, sheet_url)
+    if not rows:
+        return clinic_info
+    region = facility_db.pick_region(inputs.get("main_kw", ""), facility_db.list_regions(rows))
+    if not region:
+        if log:
+            log("　→ 院タブに一致する地域がありません。院情報なしで生成します")
+        return clinic_info
+    ok, blocked = facility_db.select_for_article(rows, region, list(clinic_info.keys()))
+    if log:
+        log(f"　→ 院タブ（{region}）: {len(ok)} 案件ぶんの院情報を使います")
+        for _name, _reasons in blocked.items():
+            log(f"　→ 院情報が使えません: {_name}（{' / '.join(_reasons)}）")
+    return facility_db.attach_to_clinic_info(clinic_info, ok)
+
+
 def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
     progress   = st.progress(0)
     status_msg = st.empty()
@@ -487,16 +511,15 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                     inputs["main_kw"], inputs["genre"], claude_key, inputs["clinics"], gemini_api_key=gemini_key, research_provider=research_provider
                 )
                 inputs["clinics"] = inputs["clinics"] + discovered
-            clinics, _batch_registered, _batch_failed = clinic_db_manager.collect_via_db(
-                inputs["clinics"], inputs.get("genre", ""), claude_key,
-                db_type=DB_TYPE_CLINIC, gemini_api_key=gemini_key,
-                research_provider=research_provider,
+            clinics, _batch_registered, _batch_blocked = clinic_db_manager.collect_via_db(
+                inputs["clinics"], inputs.get("genre", ""),
                 creds_data=creds_data, sheet_url=db_sheet_url,
             )
-            if _batch_registered:
-                st.write(f"　→ 案件DBに新規登録: {', '.join(_batch_registered)}")
-            if _batch_failed:
-                st.warning("案件DBに登録できなかったため、この案件の情報は使いません: " + ", ".join(_batch_failed))
+            if _batch_blocked:
+                st.warning("案件DBの照合を通らなかったため記事に載せません（人のキューへ）:\n- " + "\n- ".join(_batch_blocked))
+            clinics = _attach_facilities(clinics, inputs, creds_data, db_sheet_url, log=st.write)
+            if not clinics and inputs["clinics"]:
+                raise RuntimeError("案件DBに使える案件が1件もありません。案件DBを埋めてから実行してください")
             structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
             _batch_site_info = {}
             if _batch_site_name and _site_info_sheet_url_default:
@@ -1483,18 +1506,18 @@ with _safe_tab(tab_custom):
                     st.write("🔍 案件情報収集中...")
                     _t2_db_creds = _get_gcp_creds(sheets_creds_file)
                     _t2_active_db_url = db_sheet_url if custom_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
-                    clinics, _t2_registered, _t2_failed = clinic_db_manager.collect_via_db(
-                        all_clinics, genre, claude_key,
-                        db_type=custom_db_type, gemini_api_key=gemini_key,
-                        research_provider=research_provider,
+                    clinics, _t2_registered, _t2_blocked = clinic_db_manager.collect_via_db(
+                        all_clinics, genre,
                         creds_data=_t2_db_creds, sheet_url=_t2_active_db_url,
                         progress=st.write,
                     )
                     st.write(f"　→ 案件DBから取得: {len(clinics)} 案件")
-                    if _t2_registered:
-                        st.write(f"　→ 案件DBに新規登録: {', '.join(_t2_registered)}")
-                    if _t2_failed:
-                        st.warning("案件DBに登録できなかったため、この案件の情報は使いません: " + ", ".join(_t2_failed))
+                    if _t2_blocked:
+                        st.warning("案件DBの照合を通らなかったため記事に載せません（人のキューへ）:\n- " + "\n- ".join(_t2_blocked))
+                    clinics = _attach_facilities(clinics, inputs, _t2_db_creds, _t2_active_db_url, log=st.write)
+                    if not clinics and all_clinics:
+                        st.error("案件DBに使える案件が1件もありません。案件DBを埋めてから実行してください")
+                        st.stop()
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
                     if gen_mode == "見出し確認あり":
@@ -3362,18 +3385,15 @@ with _safe_tab(tab_rank):
                                 if _db_lp_plan:
                                     _lp_plan = _db_lp_plan
                                     st.write(f"　→ lp_info を最訴求プランに使用")
-                            _t5_info, _t5_registered, _t5_failed = clinic_db_manager.collect_via_db(
+                            _t5_info, _t5_registered, _t5_blocked = clinic_db_manager.collect_via_db(
                                 [{"name": _cbc["name"], "domain": _clinic_url or _cbc["name"]}],
-                                _cb_genre, claude_key, db_type=_cb_db_type,
-                                gemini_api_key=gemini_key, research_provider=research_provider,
+                                _cb_genre,
                                 creds_data=_t5_db_creds, sheet_url=_t5_active_db_url,
                                 progress=st.write,
                             )
-                            if _t5_registered:
-                                st.write(f"　→ 案件DBに新規登録")
                             _scraped_text = _t5_info.get(_cbc["name"], "")
                             if not _scraped_text:
-                                st.warning(f"{_cbc['name']} は案件DBに情報がありません。先に案件DBへ登録してください")
+                                st.warning(f"{_cbc['name']} は案件DBの照合を通りません。先に案件DBを埋めてください: " + " / ".join(_t5_blocked))
                                 _scraped_text = "（案件DB未登録）"
                         except Exception:
                             _scraped_text = "（案件DB未登録）"
@@ -3522,6 +3542,40 @@ with _safe_tab(tab_cases):
         elif clinic_db_manager.last_load_error and _ck not in st.session_state:
             st.warning(f"⚠️ Sheets読込エラー: {clinic_db_manager.last_load_error}")
 
+    # ── 列形式のジャンルを判定 ──────────────────────────────
+    # 列形式のタブはツールから書かない。取得はブラウザを持つAIが行い、スプレッドシートに
+    # 列で入れる。ツールは読んで照合するだけにする（両方から書くと二重管理になる）。
+    _col_genres = {
+        _g for _g, _entries in st.session_state.get(_ck, {}).items()
+        if isinstance(_entries, dict) and any(_e.get("_column_format") for _e in _entries.values())
+    }
+
+    # ── 生成前の照合 ────────────────────────────────────────
+    with st.expander("✅ 生成前の照合（この案件で記事を作れるか）", expanded=bool(_col_genres)):
+        st.caption("必須列が空・取得失敗や材料不足が入っている・運用列が未通過の案件は記事に載せません。人のキューへ回します。")
+        _chk_genres = list(st.session_state.get(_ck, {}).keys())
+        if not _chk_genres:
+            st.info("案件DBが空です。")
+        else:
+            _chk_genre = st.selectbox("ジャンル", _chk_genres, key="db_check_genre")
+            _chk_entries = st.session_state.get(_ck, {}).get(_chk_genre, {})
+            _chk_names = sorted(_chk_entries.keys())
+            _chk_ok, _chk_blocked = clinic_db_manager.validate_for_generation(_chk_entries, _chk_names)
+            _c_ok, _c_ng = st.columns(2)
+            _c_ok.metric("記事に使える", len(_chk_ok))
+            _c_ng.metric("人のキューへ", len(_chk_blocked))
+            if _chk_blocked:
+                st.dataframe(
+                    [{"案件": _n, "弾いた理由": " / ".join(_r)} for _n, _r in _chk_blocked.items()],
+                    use_container_width=True, hide_index=True,
+                )
+        if _active_db_url and _db_creds:
+            if st.button("🏥 院タブを用意する（無ければ作成）", key="db_ensure_facility_tab"):
+                if facility_db.ensure_tab(_db_creds, _active_db_url):
+                    st.success("院タブを確認しました。地域・クリニック名・診療時間などはスプレッドシートに直接入れてください")
+                else:
+                    st.error("院タブを作れませんでした。スプレッドシートURLと認証を確認してください")
+
     # ── 新規追加フォーム ──────────────────────────────────
     st.subheader("＋ 新規追加")
 
@@ -3559,6 +3613,8 @@ with _safe_tab(tab_cases):
 
     if _db_add_now:
         _errs_db = []
+        if _db_new_genre.strip() in _col_genres:
+            _errs_db.append(f"「{_db_new_genre}」は列形式のタブです。ツールからは書き込みません。スプレッドシートに直接1行足してください")
         if not _db_new_name.strip():
             _errs_db.append("案件名を入力してください")
         if not _db_new_domain.strip() and not _db_new_lp_images:
@@ -3665,7 +3721,9 @@ with _safe_tab(tab_cases):
             use_container_width=True,
         ):
             _target_names = [n.strip() for n in _art_clinics_edited.splitlines() if n.strip()]
-            if not _art_genre.strip():
+            if _art_genre.strip() in _col_genres:
+                st.error(f"「{_art_genre}」は列形式のタブです。ツールからは書き込みません。スプレッドシートに直接入れてください")
+            elif not _art_genre.strip():
                 st.error("ジャンルを選択してください")
             elif not claude_key:
                 st.error("Claude API Key が未設定です")
@@ -3717,6 +3775,25 @@ with _safe_tab(tab_cases):
                 _g_c1, _g_c2 = st.columns([4, 1])
                 with _g_c2:
                     st.metric("登録件数", len(_g_entries))
+
+                if _g_name in _col_genres:
+                    st.info(
+                        "列形式のタブです。ツールは読むだけで、取得も編集もしません。"
+                        "値の追加・修正はスプレッドシートで行ってください。"
+                    )
+                    _col_rows = []
+                    for _cn in sorted(_g_entries):
+                        _cr = _g_entries[_cn]
+                        _cr_reasons = clinic_db_manager.validate_record(_cr)
+                        _col_rows.append({
+                            "案件": _cn,
+                            "判定": "使える" if not _cr_reasons else "人のキューへ",
+                            "理由": " / ".join(_cr_reasons),
+                            "更新日": _cr.get("転記元DBの更新日", ""),
+                        })
+                    if _col_rows:
+                        st.dataframe(_col_rows, use_container_width=True, hide_index=True)
+                    continue
 
                 # ── 一括再取得 ────────────────────────────────
                 if _g_entries:
