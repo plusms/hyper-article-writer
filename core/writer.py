@@ -17,17 +17,21 @@ def extract_affiliate_links(clinic_info: dict) -> dict:
     return links
 
 
-def build_affiliate_link_block(clinic_info: dict) -> str:
+def build_affiliate_link_block(clinic_info: dict, slug: str = "") -> str:
     """送客リンクを案件DBの値に固定させる指示を作る。"""
     links = extract_affiliate_links(clinic_info)
     if not links:
         return ""
     lines = "\n".join(f"- {name}: {url}" for name, url in links.items())
+    param_note = (
+        f"パラメータはこのURLの末尾に ?{slug}_[場所]_[形式] の形で付ける。\n"
+        if slug else "パラメータを付ける場合は、このURLの末尾に付ける。\n"
+    )
     return (
         "\n【送客リンク（案件ごとに確定・厳守）】\n"
         "各案件の送客リンクは以下で確定している。href にはこのURLを使う。\n"
         "リンクルールのベースURLから組み立てない。URL本体を書き換えない。\n"
-        "パラメータを付ける場合は、このURLの末尾に付ける。\n"
+        + param_note +
         "一覧にない案件には送客リンクを張らない。\n"
         f"{lines}\n"
     )
@@ -613,7 +617,7 @@ def _build_body_prompt(
 
 【クリニック情報（このデータのみ使用・補完・推測禁止）】
 {clinic_info_text[:12000] if clinic_info_text else "（情報なし）"}
-{build_affiliate_link_block(clinic_info)}
+{build_affiliate_link_block(clinic_info, inputs.get("slug", ""))}
 
 {WRITING_RULES}
 {build_notation_rules_note(notation_rules or [])}

@@ -28,6 +28,7 @@ from core.sheets import (
     read_input_rows_knowhow_bulk, write_status_knowhow_bulk, write_output_row_knowhow_bulk,
     COL_TITLE, COL_TITLE_KNOWHOW, read_notation_rules,
     write_input_only_row, write_input_only_row_knowhow, read_row_by_index,
+    read_input_rows_mass, write_status_mass, write_output_row_mass,
     read_site_info, write_site_info_settings, create_site_tab, init_site_info_sheet,
 )
 from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, facility_db, output_check, article_review
@@ -414,6 +415,9 @@ def build_inputs_from_row(row: dict, defaults: dict | None = None) -> dict:
         "clinics":         clinics,
         "competitor_urls": [u.strip() for u in row.get("competitor_urls_raw", "").split(",") if u.strip()],
         "selected_topics": None,  # バッチは全トピック使用
+        # 量産タブのみ。院タブの引き当てと送客リンクのパラメータに使う
+        "region":          row.get("region", ""),
+        "slug":            row.get("slug", ""),
     }
 
 
@@ -538,7 +542,10 @@ def _attach_facilities(clinic_info: dict, inputs: dict, creds_data, sheet_url, l
     rows = facility_db.load_facilities(creds_data, sheet_url)
     if not rows:
         return clinic_info
-    region = facility_db.pick_region(inputs.get("main_kw", ""), facility_db.list_regions(rows))
+    # 量産タブは地域名を列で持つ。無ければメインキーワードから拾う
+    region = inputs.get("region", "").strip()
+    if not region:
+        region = facility_db.pick_region(inputs.get("main_kw", ""), facility_db.list_regions(rows))
     if not region:
         if log:
             log("　→ 院タブに一致する地域がありません。院情報なしで生成します")
@@ -563,6 +570,8 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             _write_status = write_status_knowhow_bulk
         elif tab_name == "ノウハウ":
             _write_status = write_status_knowhow
+        elif tab_name == "量産":
+            _write_status = write_status_mass
         else:
             _write_status = write_status
         _write_status(ws, row_num, "処理中")
@@ -678,6 +687,9 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             elif tab_name == "ノウハウ":
                 write_output_row_knowhow(ws, row_num, _out)
                 write_status_knowhow(ws, row_num, "完了")
+            elif tab_name == "量産":
+                write_output_row_mass(ws, row_num, {**_out, "clinics": inputs["clinics"]})
+                write_status_mass(ws, row_num, "完了")
             else:
                 write_output_row(ws, row_num, {**_out, "clinics": inputs["clinics"]})
                 write_status(ws, row_num, "完了")
@@ -791,6 +803,8 @@ with _safe_tab(tab_batch):
                 rows = read_input_rows_knowhow_bulk(ws, site_name=_b_site, genre=_b_genre)
             elif batch_tab_sel == "ノウハウ":
                 rows = read_input_rows_knowhow(ws)
+            elif batch_tab_sel == "量産":
+                rows = read_input_rows_mass(ws)
             else:
                 rows = read_input_rows(ws, default_article_type=batch_tab_sel)
             pending = [r for r in rows if not r.get("status") or r.get("status") == "処理中"]

@@ -67,6 +67,13 @@ _HEADERS: dict[str, list[str]] = {
         "掲載案件", "競合URL", "追加指示", "最訴求プラン（1院目）", "関連KW",
         "ステータス", "タイトル", "メタ", "HTML", "要確認", "掲載案件一覧",
     ],
+    # 地域記事の量産用。案件は案件DBから引くので掲載案件・最訴求プランの列を持たない。
+    # 院タブを引くための地域名と、送客リンクのパラメータに使う記事スラッグを持つ。
+    "量産": [
+        "サイト名", "ジャンル", "記事タイプ", "メインKW*", "サブKW*",
+        "地域名*", "記事スラッグ*", "追加指示",
+        "ステータス", "タイトル", "メタ", "HTML", "要確認", "掲載案件一覧",
+    ],
 }
 _HEADER_DEFAULT = [
     "サイト名", "ジャンル", "記事タイプ", "メインKW", "サブKW",
@@ -74,7 +81,23 @@ _HEADER_DEFAULT = [
     "ステータス", "タイトル", "メタ", "HTML", "要確認", "掲載案件一覧",
 ]
 
-ARTICLE_TABS = ["ノウハウ一括", "ノウハウ", "地域", "比較", "商標"]
+ARTICLE_TABS = ["量産", "ノウハウ一括", "ノウハウ", "地域", "比較", "商標"]
+
+# 量産専用 列マッピング（14列: A〜N）
+COL_IN_MASS = {
+    "site_name":    0,  # A
+    "genre":        1,  # B
+    "article_type": 2,  # C
+    "main_kw":      3,  # D
+    "sub_kw":       4,  # E
+    "region":       5,  # F
+    "slug":         6,  # G
+    "custom_block": 7,  # H
+    "status":       8,  # I
+}
+COL_STATUS_MASS    = 8   # I
+COL_OUT_START_MASS = 9   # J〜N（タイトル・メタ・HTML・要確認・掲載案件一覧）
+COL_TITLE_MASS     = 9   # J
 
 # ノウハウ一括専用 列マッピング（11列: A〜K）
 COL_IN_KNOWHOW_BULK = {
@@ -155,6 +178,53 @@ def write_output_row(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
     )
     ws.update(
         f"L{row_index}:P{row_index}",
+        [[
+            data.get("title", ""),
+            data.get("meta", ""),
+            data.get("html", ""),
+            data.get("todo_list", ""),
+            clinic_list_str,
+        ]]
+    )
+    _reset_row_height(ws, row_index)
+
+
+def read_input_rows_mass(ws: gspread.Worksheet) -> list:
+    """量産タブの2行目以降を読む。案件は案件DBから引くので入力しない。"""
+    all_values = ws.get_all_values()
+    rows = []
+    for i, row in enumerate(all_values[1:], start=2):
+        padded = list(row) + [""] * (len(COL_IN_MASS) - len(row))
+        rows.append({
+            "row_index":           i,
+            "site_name":           padded[COL_IN_MASS["site_name"]],
+            "genre":               padded[COL_IN_MASS["genre"]],
+            "article_type":        padded[COL_IN_MASS["article_type"]] or "地域",
+            "main_kw":             padded[COL_IN_MASS["main_kw"]],
+            "sub_kw":              padded[COL_IN_MASS["sub_kw"]],
+            "region":              padded[COL_IN_MASS["region"]],
+            "slug":                padded[COL_IN_MASS["slug"]],
+            "custom_block":        padded[COL_IN_MASS["custom_block"]],
+            "status":              padded[COL_IN_MASS["status"]],
+            "clinics_raw":         "",
+            "competitor_urls_raw": "",
+            "recommended":         "",
+            "related_kw":          "",
+        })
+    return [r for r in rows if r["main_kw"]]
+
+
+def write_status_mass(ws: gspread.Worksheet, row_index: int, status: str) -> None:
+    ws.update_cell(row_index, COL_STATUS_MASS + 1, status)
+
+
+def write_output_row_mass(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
+    clinics = data.get("clinics", [])
+    clinic_list_str = ", ".join(
+        f"{c['name']}::{c.get('domain', '')}" for c in clinics if c.get("name")
+    )
+    ws.update(
+        f"J{row_index}:N{row_index}",
         [[
             data.get("title", ""),
             data.get("meta", ""),
