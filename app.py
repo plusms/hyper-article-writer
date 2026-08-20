@@ -714,7 +714,10 @@ with _safe_tab(tab_batch):
     if not article_sheet_url:
         st.warning("サイドバーで「記事スプレッドシートURL」を設定してください。")
 
-    batch_tab_sel = "ノウハウ一括"
+    batch_tab_sel = st.selectbox(
+        "対象タブ", ARTICLE_TABS, key="batch_tab_sel",
+        help="記事スプレッドシートのどのタブを読むか。量産は地域記事を週まとめて回す用",
+    )
 
     # ノウハウ一括はサイト名・ジャンルを列に持たないのでUIで入力
     _batch_is_bulk = batch_tab_sel == "ノウハウ一括"
