@@ -114,8 +114,12 @@ def get_reference_html(record: dict, column: str) -> str:
     return record.get(column, "").strip()
 
 
-def build_reference_block(record: dict, columns: list | None = None, limit: int = 20000) -> str:
-    """本文生成に渡す見本ブロック。長いので使う列を絞れるようにする。"""
+def build_reference_block(record: dict, columns: list | None = None, limit: int = 20000, log=None) -> str:
+    """本文生成に渡す見本ブロック。長いので使う列を絞れるようにする。
+
+    上限に収まらない列は渡さない。黙って落とすと型を登録したのに効いていない状態に
+    気づけないので、落とした列を必ず log に出す。
+    """
     if not record:
         return ""
     parts = []
@@ -123,11 +127,17 @@ def build_reference_block(record: dict, columns: list | None = None, limit: int 
     for col in (columns or REFERENCE_COLUMNS):
         value = record.get(col, "").strip()
         if not value:
+            if log:
+                log(f"　→ 型タブの見本が空です: {col}")
             continue
         if used + len(value) > limit:
+            if log:
+                log(f"　→ 型タブの見本を渡していません: {col}（{len(value)}字。上限{limit}字に収まらない）")
             continue
         parts.append(f"■ {col}\n{value}")
         used += len(value)
+    if log and parts:
+        log(f"　→ 型タブの見本を渡しました: {len(parts)}列・{used}字")
     if not parts:
         return ""
     return (

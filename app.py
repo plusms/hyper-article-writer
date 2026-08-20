@@ -674,7 +674,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                     pass
             # 紹介ブロックは別工程で作るので、本文には比較表と選び方の見本だけ渡す
             _batch_ref = article_type_db.build_reference_block(
-                _batch_type, columns=["比較表の列構成", "選び方H2の作り"],
+                _batch_type, columns=["比較表の列構成", "選び方H2の作り"], log=st.write,
             )
             _batch_parts = "\n\n".join(filter(None, [_batch_site_parts, _batch_ref]))
             output    = generate_body(inputs, structure, clinics, claude_key, comp,
