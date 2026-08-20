@@ -631,6 +631,13 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             if _batch_site_name and _batch_site_name in site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder):
                 _sc = site_config_manager.load_site_config(_batch_site_name, _site_cfg_creds, _site_cfg_parent_folder)
                 _batch_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
+                # リンクの規則も渡す。案件DBの送客リンクは本体だけで、末尾のパラメータは
+                # サイト設定が持っている。渡さないとパラメータなしのリンクが出る。
+                _batch_link_rule = site_config_manager.format_link_settings(_sc.get("link_settings", {}))
+                if _batch_link_rule:
+                    _batch_site_parts = "\n\n".join(filter(None, [_batch_site_parts, _batch_link_rule]))
+            elif _batch_site_name:
+                st.warning(f"⚠️ サイト設定に「{_batch_site_name}」が未登録です。パーツとリンクの規則なしで生成します")
 
             comp = analyze_competitors(inputs["competitor_urls"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
             if is_kh:
