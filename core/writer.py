@@ -41,7 +41,8 @@ def _gemini_call_messages(api_key: str, messages: list) -> str:
             {"role": "user" if m["role"] == "user" else "model", "parts": [{"text": m["content"]}]}
             for m in messages
         ]
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=contents)
+        from core.config import GEMINI_TEXT_MODEL
+        response = client.models.generate_content(model=GEMINI_TEXT_MODEL, contents=contents)
         return response.text
     except Exception as e:
         return f"[生成失敗: {e}]"

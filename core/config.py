@@ -1,3 +1,6 @@
+# 本文・構成・検品で使うGeminiのモデル。1箇所で持って全経路を揃える。
+GEMINI_TEXT_MODEL = "gemini-2.5-flash"
+
 TOPICS = {
     "地域": [
         {"key": "intro",            "label": "★ 冒頭（冒頭文 + 比較表）",           "fixed": True,  "default": True},

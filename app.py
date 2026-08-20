@@ -18,7 +18,7 @@ from core.researcher import (
     DB_TYPE_CLINIC, DB_TYPE_LIFESTYLE,
 )
 from core.planner import generate_structure
-from core.writer import generate_body, quality_check, heading_structure_check, extract_criteria_summary, inject_images_into_html
+from core.writer import generate_body, quality_check, heading_structure_check, extract_criteria_summary, inject_images_into_html, WRITING_RULES
 from core.sheets import (
     read_input_rows, write_output_row, write_full_row, write_status, get_sheet,
     get_settings_sheet, read_defaults, ARTICLE_TABS,
@@ -30,7 +30,7 @@ from core.sheets import (
     write_input_only_row, write_input_only_row_knowhow, read_row_by_index,
     read_site_info, write_site_info_settings, create_site_tab, init_site_info_sheet,
 )
-from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, facility_db, output_check
+from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, facility_db, output_check, article_review
 
 st.set_page_config(page_title="CV Article Writer", layout="wide", page_icon="✍️")
 
@@ -2329,6 +2329,64 @@ with _safe_tab(tab_qual):
                 else:
                     st.success("指摘なし")
 
+    st.divider()
+    st.subheader("複数AIチェックと自動修正")
+    st.caption(
+        "書いた側と別のモデルが本文と規則だけを見て指摘し、書いた側が指摘箇所だけを直します。"
+        "原文が本文に見つからない指摘は捨てます。事実と出典の指摘はAIに直させず人のキューへ回します。"
+    )
+    _rv_writer = st.radio(
+        "この記事を書いたモデル",
+        ["claude", "gemini"],
+        format_func=lambda x: "Claude" if x == "claude" else "Gemini",
+        horizontal=True, key="rv_writer_provider",
+        index=0 if article_provider == "claude" else 1,
+    )
+    st.caption(f"見る側: {'Gemini' if _rv_writer == 'claude' else 'Claude'}")
+    _rv_rounds = st.number_input("修正の上限周回", min_value=1, max_value=3, value=2, key="rv_rounds")
+
+    if st.button("複数AIチェックを実行", type="primary", key="run_review_loop"):
+        if not html_input.strip():
+            st.error("HTMLを貼り付けてください")
+        elif not claude_key or not gemini_key:
+            st.error("書く側と見る側で別のモデルを使うため、Claude と Gemini の両方のAPIキーが必要です")
+        else:
+            with st.status("複数AIチェック中...", expanded=True) as _rv_status:
+                try:
+                    _rv = article_review.run_review_loop(
+                        html_input, WRITING_RULES,
+                        writer_provider=_rv_writer,
+                        claude_api_key=claude_key, gemini_api_key=gemini_key,
+                        article_type=check_type, main_kw=check_main_kw,
+                        source_text=_chk_source,
+                        max_rounds=int(_rv_rounds),
+                        progress=st.write,
+                    )
+                    st.session_state["rv_result"] = _rv
+                    _rv_status.update(label=f"✅ 完了（修正 {_rv['rounds']} 周）", state="complete")
+                except Exception as _rv_e:
+                    _rv_status.update(label="❌ エラー", state="error")
+                    st.error(f"エラー ({type(_rv_e).__name__}): {_rv_e}")
+
+    _rv_done = st.session_state.get("rv_result")
+    if _rv_done:
+        _rv_c1, _rv_c2 = st.columns(2)
+        with _rv_c1:
+            st.markdown("**人が確認する指摘**")
+            if _rv_done["human"]:
+                st.warning(output_check.format_findings(_rv_done["human"]))
+                st.caption("入力データとのズレなのでAIに直させない。直させると辻褄合わせで嘘を作る")
+            else:
+                st.success("指摘なし")
+        with _rv_c2:
+            st.markdown("**上限周回で消えなかった指摘**")
+            if _rv_done["remaining"]:
+                st.error(output_check.format_findings(_rv_done["remaining"]))
+            else:
+                st.success("すべて解消")
+        st.text_area("修正後のHTML", _rv_done["html"], height=300, key="rv_fixed_html")
+
+    st.divider()
     if st.button("チェック実行", type="primary", key="run_check"):
         if not claude_key:
             st.error("Claude API Key が未設定です")

@@ -19,7 +19,8 @@ def _gemini_call(api_key: str, prompt: str) -> str:
     try:
         from google import genai as _genai
         client = _genai.Client(api_key=api_key)
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        from core.config import GEMINI_TEXT_MODEL
+        response = client.models.generate_content(model=GEMINI_TEXT_MODEL, contents=prompt)
         return response.text
     except Exception as e:
         return f"[生成失敗: {e}]"
