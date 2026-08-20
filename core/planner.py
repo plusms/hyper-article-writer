@@ -32,7 +32,7 @@ def _llm_call(claude_api_key: str, prompt: str, gemini_api_key: str = "", provid
     return _claude_call(claude_api_key, prompt)
 
 
-def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude", base_structure: str = "") -> dict:
+def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dict, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude", base_structure: str = "", type_constraints: str = "") -> dict:
     article_type = inputs["article_type"]
     clinics_list_parts = []
     for c in inputs["clinics"]:
@@ -187,8 +187,11 @@ def generate_structure(inputs: dict, competitor_analysis: dict, clinic_info: dic
     else:
         topics_note = ""
 
+    # 型の制約。数で縛らないとH2が膨らんで型が溶ける。
+    type_note_block = f"\n{type_constraints}\n見出しの本数・文字数はこの数の範囲を守る。範囲外の構成を出さない。\n" if type_constraints else ""
+
     prompt = f"""あなたはSEO記事の構成設計の専門家です。
-{topics_note}
+{topics_note}{type_note_block}
 以下の競合分析・クリニック情報を踏まえて、最適な記事構成（H1/H2/H3）を設計してください。
 
 【競合分析結果】

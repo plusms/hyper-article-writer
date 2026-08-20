@@ -31,7 +31,7 @@ from core.sheets import (
     read_input_rows_mass, write_status_mass, write_output_row_mass,
     read_site_info, write_site_info_settings, create_site_tab, init_site_info_sheet,
 )
-from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, facility_db, output_check, article_review
+from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, facility_db, article_type_db, output_check, article_review
 
 st.set_page_config(page_title="CV Article Writer", layout="wide", page_icon="✍️")
 
@@ -459,7 +459,20 @@ def _parse_batch_row_filter(filter_str: str) -> set | None:
     return indices or None
 
 
-def _review_constraints(inputs: dict, clinic_info: dict) -> str:
+def _load_article_type(inputs: dict, creds_data, sheet_url) -> dict:
+    """案件DBの型タブから、この記事型・ジャンルの型を1件返す。"""
+    if not (creds_data and sheet_url):
+        return {}
+    try:
+        rows = article_type_db.load_types(creds_data, sheet_url)
+    except Exception:
+        return {}
+    return article_type_db.pick_type(
+        rows, inputs.get("article_type", ""), inputs.get("genre", "")
+    )
+
+
+def _review_constraints(inputs: dict, clinic_info: dict, type_record: dict | None = None) -> str:
     """構成の検品に渡す制約。案件DBにある案件しか使えないことを明示する。"""
     lines = [
         f"記事タイプ: {inputs.get('article_type', '')}",
@@ -471,17 +484,20 @@ def _review_constraints(inputs: dict, clinic_info: dict) -> str:
         lines.append(f"紹介できる案件: {', '.join(names)}（このリスト以外は紹介しない）")
     else:
         lines.append("案件の紹介ブロックは設けない")
+    constraints = article_type_db.build_constraints(type_record or {})
+    if constraints:
+        lines.append(constraints)
     return "\n".join(lines)
 
 
-def _auto_review_structure(structure: dict, inputs: dict, clinic_info: dict, log=None) -> dict:
+def _auto_review_structure(structure: dict, inputs: dict, clinic_info: dict, log=None, type_record: dict | None = None) -> dict:
     """構成を作った直後に別モデルで検品して直す。失敗しても生成は止めない。"""
     if not st.session_state.get("auto_review") or not (claude_key and gemini_key):
         return structure
     try:
         result = article_review.run_structure_review_loop(
             structure.get("structure_text", ""),
-            _review_constraints(inputs, clinic_info),
+            _review_constraints(inputs, clinic_info, type_record),
             writer_provider=article_provider,
             claude_api_key=claude_key, gemini_api_key=gemini_key,
             article_type=inputs.get("article_type", ""),
@@ -607,8 +623,15 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             clinics = _attach_facilities(clinics, inputs, creds_data, db_sheet_url, log=st.write)
             if not clinics and inputs["clinics"]:
                 raise RuntimeError("案件DBに使える案件が1件もありません。案件DBを埋めてから実行してください")
-            structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
-            structure = _auto_review_structure(structure, inputs, clinics, log=st.write)
+            _batch_type = _load_article_type(inputs, creds_data, db_sheet_url)
+            if _batch_type:
+                st.write(f"　→ 型を適用: {inputs.get('article_type', '')}／{inputs.get('genre', '')}")
+            structure = generate_structure(
+                inputs, comp, clinics, claude_key, gemini_api_key=gemini_key,
+                article_provider=article_provider,
+                type_constraints=article_type_db.build_constraints(_batch_type),
+            )
+            structure = _auto_review_structure(structure, inputs, clinics, log=st.write, type_record=_batch_type)
             _batch_site_info = {}
             if _batch_site_name and _site_info_sheet_url_default:
                 try:
@@ -617,8 +640,13 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                         _batch_site_info = read_site_info(_site_info_sheet_url_default, _si_creds, _batch_site_name)
                 except Exception:
                     pass
+            # 紹介ブロックは別工程で作るので、本文には比較表と選び方の見本だけ渡す
+            _batch_ref = article_type_db.build_reference_block(
+                _batch_type, columns=["比較表の列構成", "選び方H2の作り"],
+            )
+            _batch_parts = "\n\n".join(filter(None, [_batch_site_parts, _batch_ref]))
             output    = generate_body(inputs, structure, clinics, claude_key, comp,
-                                      site_parts=_batch_site_parts, gemini_api_key=gemini_key, article_provider=article_provider,
+                                      site_parts=_batch_parts, gemini_api_key=gemini_key, article_provider=article_provider,
                                       notation_rules=_batch_site_info.get("notation_rules"),
                                       site_notes=_batch_site_info.get("notes", ""))
             output = _auto_review_body(output, inputs, clinics, log=st.write)
@@ -1616,8 +1644,15 @@ with _safe_tab(tab_custom):
                         st.error("案件DBに使える案件が1件もありません。案件DBを埋めてから実行してください")
                         st.stop()
                     st.write("📐 構成生成中...")
-                    structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
-                    structure = _auto_review_structure(structure, inputs, clinics, log=st.write)
+                    _t2_type = _load_article_type(inputs, _t2_db_creds, _t2_active_db_url)
+                    if _t2_type:
+                        st.write(f"　→ 型を適用: {inputs.get('article_type', '')}／{inputs.get('genre', '')}")
+                    structure = generate_structure(
+                        inputs, comp, clinics, claude_key, gemini_api_key=gemini_key,
+                        article_provider=article_provider,
+                        type_constraints=article_type_db.build_constraints(_t2_type),
+                    )
+                    structure = _auto_review_structure(structure, inputs, clinics, log=st.write, type_record=_t2_type)
                     if gen_mode == "見出し確認あり":
                         st.session_state["t2_draft"] = {
                             "structure":   structure,
