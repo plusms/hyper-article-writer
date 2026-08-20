@@ -54,6 +54,11 @@ REQUIRED_FOR_GENERATION = [
 # 「未」「要確認。〜」のように、埋まっていても通過していない値が入るため、
 # 合格を表す語で始まるかどうかで判定する。
 REQUIRED_OPERATION = ["料金確認済み", "優位性の人承認", "料金の検算結果"]
+# 推し順位4位以降は紹介文だけでリンクもCTAも出さない。送客しないので比較優位性の
+# 人承認まで求めない。ここを上位と同じ基準にすると、載せるだけの院に承認作業が要る。
+LOWER_RANK_FROM = 4
+REQUIRED_FOR_GENERATION_LOWER = [DOMAIN_COL, "料金プラン"]
+REQUIRED_OPERATION_LOWER = ["料金確認済み"]
 OPERATION_PASS_PREFIXES = ("済", "OK", "ok", "完了", "承認", "正常", "確認済", "合格", "問題なし")
 # 値としてこれが入っていたら失敗として弾く。
 # 「不可」「なし」のような本文で普通に使う語は入れない。誤って弾くほうが害が大きい。
@@ -362,8 +367,16 @@ def validate_record(record: dict, required: list | None = None) -> list[str]:
             return ["info が空"]
         return []
 
+    try:
+        rank = int(str(record.get("推し順位", "")).strip())
+    except (TypeError, ValueError):
+        rank = 0
+    is_lower = rank >= LOWER_RANK_FROM
+    required_cols = required or (REQUIRED_FOR_GENERATION_LOWER if is_lower else REQUIRED_FOR_GENERATION)
+    required_ops = REQUIRED_OPERATION_LOWER if is_lower else REQUIRED_OPERATION
+
     reasons = []
-    for col in (required or REQUIRED_FOR_GENERATION):
+    for col in required_cols:
         value = str(record.get(col, "")).strip()
         if col not in record:
             reasons.append(f"{col} の列がない")
@@ -373,7 +386,7 @@ def validate_record(record: dict, required: list | None = None) -> list[str]:
             marker = _has_failure_marker(value)
             if marker:
                 reasons.append(f"{col} に「{marker}」が入っている")
-    for col in REQUIRED_OPERATION:
+    for col in required_ops:
         value = str(record.get(col, "")).strip()
         if not value:
             reasons.append(f"{col} が未記入")
