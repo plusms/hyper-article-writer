@@ -22,7 +22,9 @@ HEADERS = [
 ]
 
 # 取得成否にこれが入っている行は記事に使わない。
-FAILURE_MARKERS = ["取得失敗", "読取失敗", "候補なし", "該当なし", "未取得", "材料不足", "要確認"]
+# 取得Taskは項目が1つでも欠けたら「一部失敗」と書く。所在地・アクセス・診療時間が
+# 欠けたまま紹介ブロックを書かせるとAIが埋めて嘘になるので、ここで弾いて人のキューへ回す。
+FAILURE_MARKERS = ["取得失敗", "一部失敗", "読取失敗", "候補なし", "該当なし", "未取得", "材料不足", "要確認"]
 # 院そのものが無い地域は失敗ではない。記事側で「この地域に院はない」と書ける。
 NO_FACILITY_VALUES = {"院なし", "なし"}
 
@@ -113,6 +115,21 @@ def _is_failed(row: dict) -> str:
         if marker in value:
             return marker
     return ""
+
+
+def has_real_facility(rows: list[dict]) -> bool:
+    """その地域に実際の院があるか。院なしの行しかなければ False。
+
+    地域記事は来院が前提なので、院がない案件を紹介しても読者は通えない。
+    掲載対象から落とす判断にここを使う。
+    """
+    for row in rows:
+        if row.get("院名", "").strip() in NO_FACILITY_VALUES:
+            continue
+        if row.get("取得成否", "").strip() in NO_FACILITY_VALUES:
+            continue
+        return True
+    return False
 
 
 def select_for_article(rows: list[dict], region: str, clinic_names: list) -> tuple[dict, dict]:

@@ -567,11 +567,42 @@ def _attach_facilities(clinic_info: dict, inputs: dict, creds_data, sheet_url, l
             log("　→ 院タブに一致する地域がありません。院情報なしで生成します")
         return clinic_info
     ok, blocked = facility_db.select_for_article(rows, region, list(clinic_info.keys()))
+    # その地域に院がない案件は掲載対象から落とす。来院できない案件を紹介しても意味がない。
+    dropped: dict = {}
+    for _name in clinic_info:
+        _rows = ok.get(_name, [])
+        if not _rows:
+            dropped[_name] = blocked.get(_name, ["院タブに行がない"])
+        elif not facility_db.has_real_facility(_rows):
+            dropped[_name] = [f"{region}に院がない"]
+    for _name in dropped:
+        ok.pop(_name, None)
+    kept = {n: t for n, t in clinic_info.items() if n not in dropped}
     if log:
         log(f"　→ 院タブ（{region}）: {len(ok)} 案件ぶんの院情報を使います")
-        for _name, _reasons in blocked.items():
-            log(f"　→ 院情報が使えません: {_name}（{' / '.join(_reasons)}）")
-    return facility_db.attach_to_clinic_info(clinic_info, ok)
+        for _name, _reasons in dropped.items():
+            log(f"　→ 記事に載せません: {_name}（{' / '.join(_reasons)}）")
+    return facility_db.attach_to_clinic_info(kept, ok)
+
+
+def _sync_clinic_list(inputs: dict, clinic_info: dict, log=None) -> None:
+    """記事に載せる案件だけを inputs["clinics"] に残す。
+
+    照合で弾いた案件・その地域に院がない案件が一覧に残っていると、詳細を持たないまま
+    名前だけが構成と本文に出る。掲載数もここで実数に合わせ、空の紹介ブロックを作らせない。
+    """
+    before = inputs.get("clinics", [])
+    if not before:
+        return
+    after = [c for c in before if c.get("name") in clinic_info]
+    if len(after) == len(before):
+        return
+    removed = [c.get("name", "") for c in before if c.get("name") not in clinic_info]
+    inputs["clinics"] = after
+    if inputs.get("clinic_count", 0) > len(after):
+        inputs["clinic_count"] = len(after)
+    if log:
+        log(f"　→ 掲載案件から外しました: {'、'.join(removed)}（残り {len(after)} 案件）")
 
 
 def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
@@ -623,6 +654,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             clinics = _attach_facilities(clinics, inputs, creds_data, db_sheet_url, log=st.write)
             if not clinics and inputs["clinics"]:
                 raise RuntimeError("案件DBに使える案件が1件もありません。案件DBを埋めてから実行してください")
+            _sync_clinic_list(inputs, clinics, log=st.write)
             _batch_type = _load_article_type(inputs, creds_data, db_sheet_url)
             if _batch_type:
                 st.write(f"　→ 型を適用: {inputs.get('article_type', '')}／{inputs.get('genre', '')}")
@@ -1643,6 +1675,8 @@ with _safe_tab(tab_custom):
                     if not clinics and all_clinics:
                         st.error("案件DBに使える案件が1件もありません。案件DBを埋めてから実行してください")
                         st.stop()
+                    _sync_clinic_list(inputs, clinics, log=st.write)
+                    all_clinics = inputs["clinics"]
                     st.write("📐 構成生成中...")
                     _t2_type = _load_article_type(inputs, _t2_db_creds, _t2_active_db_url)
                     if _t2_type:
