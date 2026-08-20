@@ -3246,6 +3246,26 @@ with _safe_tab(tab_rank):
 
     if _cb_clinics:
         st.caption(f"読み込み完了: {len(_cb_clinics)} 案件")
+
+        # 送客リンクは案件DBの列を正にする。中継ファイルが案件ごとに違うため、
+        # サイト設定のベースURLから組み立てると全案件が同じリンクになる。
+        _cb_db_links = {}
+        try:
+            _cb_link_creds = _get_gcp_creds(sheets_creds_file)
+            _cb_link_db_url = db_sheet_url if _cb_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
+            _cb_link_records = clinic_db_manager.build_db_records(
+                [c["name"] for c in _cb_clinics], genre=_cb_genre.strip(),
+                creds_data=_cb_link_creds, sheet_url=_cb_link_db_url,
+            )
+            _cb_db_links = {
+                _n: _rec.get("送客リンク", "").strip()
+                for _n, _rec in _cb_link_records.items() if _rec.get("送客リンク", "").strip()
+            }
+        except Exception:
+            _cb_db_links = {}
+        if _cb_db_links:
+            st.caption(f"案件DBから送客リンクを読み込み: {len(_cb_db_links)} 案件")
+
         st.divider()
         st.subheader("各案件の入力情報")
 
@@ -3273,14 +3293,17 @@ with _safe_tab(tab_rank):
                         _cbc_metarif = ""
                         _auto_link = ""
 
-                    _default_link_val = st.session_state.get(f"cb_link_{_r}") or _auto_link or _cbc_url
+                    _db_link = _cb_db_links.get(_cbc["name"], "")
+                    _default_link_val = st.session_state.get(f"cb_link_{_r}") or _db_link or _auto_link or _cbc_url
                     _cbc_link = st.text_input(
                         "リンクURL（LP等）",
                         value=_default_link_val,
                         key=f"cb_link_{_r}",
                         placeholder="CTAボタン・見出しリンクのリンク先URL（パラメータは ?スラッグ_場所_形式 で追記）",
                     )
-                    if _auto_link:
+                    if _db_link:
+                        st.caption(f"↑ 案件DBの送客リンク: `{_db_link}`")
+                    elif _auto_link:
                         st.caption(f"↑ アフィリURL候補: `{_auto_link}`")
                     _cbc_lp = st.text_area(
                         "LP掲載プラン",

@@ -410,6 +410,7 @@ def parse_parts_page(html_content: str) -> List[Dict[str, Any]]:
 
 _POSITION_LABELS = {
     "top": "冒頭",
+    "hikaku": "冒頭の比較表",
     "rank": "ランキング",
     "matome": "まとめ",
     "ryokin": "料金",
