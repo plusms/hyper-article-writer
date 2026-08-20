@@ -130,6 +130,12 @@ with st.sidebar:
         horizontal=True,
         key="article_provider",
     )
+    auto_review = st.checkbox(
+        "生成中に複数AIチェックを回す",
+        value=True,
+        key="auto_review",
+        help="構成を作った直後と本文を作った直後に、書いた側と別のモデルが検品して指摘箇所だけを直します。両方のAPIキーが要ります",
+    )
 
     _gcp_in_secrets = _secret("gcp_service_account.type") or _secret("GCP_SERVICE_ACCOUNT_JSON")
     if _gcp_in_secrets:
@@ -449,6 +455,78 @@ def _parse_batch_row_filter(filter_str: str) -> set | None:
     return indices or None
 
 
+def _review_constraints(inputs: dict, clinic_info: dict) -> str:
+    """構成の検品に渡す制約。案件DBにある案件しか使えないことを明示する。"""
+    lines = [
+        f"記事タイプ: {inputs.get('article_type', '')}",
+        f"メインキーワード: {inputs.get('main_kw', '')}",
+        f"サブキーワード: {', '.join(inputs.get('sub_kw', []) or []) or '（なし）'}",
+    ]
+    names = list(clinic_info.keys())
+    if names:
+        lines.append(f"紹介できる案件: {', '.join(names)}（このリスト以外は紹介しない）")
+    else:
+        lines.append("案件の紹介ブロックは設けない")
+    return "\n".join(lines)
+
+
+def _auto_review_structure(structure: dict, inputs: dict, clinic_info: dict, log=None) -> dict:
+    """構成を作った直後に別モデルで検品して直す。失敗しても生成は止めない。"""
+    if not st.session_state.get("auto_review") or not (claude_key and gemini_key):
+        return structure
+    try:
+        result = article_review.run_structure_review_loop(
+            structure.get("structure_text", ""),
+            _review_constraints(inputs, clinic_info),
+            writer_provider=article_provider,
+            claude_api_key=claude_key, gemini_api_key=gemini_key,
+            article_type=inputs.get("article_type", ""),
+            main_kw=inputs.get("main_kw", ""),
+            sub_kw=inputs.get("sub_kw", []),
+            max_rounds=1,
+            progress=log,
+        )
+    except Exception as e:
+        if log:
+            log(f"　→ 構成の検品に失敗しました（{type(e).__name__}）。構成はそのまま使います")
+        return structure
+    structure = dict(structure)
+    structure["structure_text"] = result["structure_text"]
+    structure["review_human"] = result["human"]
+    structure["review_remaining"] = result["remaining"]
+    return structure
+
+
+def _auto_review_body(output: dict, inputs: dict, clinic_info: dict, log=None) -> dict:
+    """本文を作った直後に別モデルで検品して直す。失敗しても生成は止めない。"""
+    if not st.session_state.get("auto_review") or not (claude_key and gemini_key):
+        return output
+    source_text = "\n\n".join(clinic_info.values()) if clinic_info else ""
+    try:
+        result = article_review.run_review_loop(
+            output.get("html", ""), WRITING_RULES,
+            writer_provider=article_provider,
+            claude_api_key=claude_key, gemini_api_key=gemini_key,
+            article_type=inputs.get("article_type", ""),
+            main_kw=inputs.get("main_kw", ""),
+            source_text=source_text,
+            max_rounds=2,
+            progress=log,
+        )
+    except Exception as e:
+        if log:
+            log(f"　→ 本文の検品に失敗しました（{type(e).__name__}）。本文はそのまま使います")
+        return output
+    output = dict(output)
+    output["html"] = result["html"]
+    output["review_human"] = result["human"]
+    output["review_remaining"] = result["remaining"]
+    _human = article_review.output_check.format_findings(result["human"]) if result["human"] else ""
+    if _human:
+        output["todo_list"] = (output.get("todo_list", "") + "\n\n【人が確認する指摘】\n" + _human).strip()
+    return output
+
+
 def _attach_facilities(clinic_info: dict, inputs: dict, creds_data, sheet_url, log=None) -> dict:
     """地域記事なら、その地域の院情報を案件情報に足して返す。
 
@@ -521,6 +599,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             if not clinics and inputs["clinics"]:
                 raise RuntimeError("案件DBに使える案件が1件もありません。案件DBを埋めてから実行してください")
             structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
+            structure = _auto_review_structure(structure, inputs, clinics, log=st.write)
             _batch_site_info = {}
             if _batch_site_name and _site_info_sheet_url_default:
                 try:
@@ -533,6 +612,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                                       site_parts=_batch_site_parts, gemini_api_key=gemini_key, article_provider=article_provider,
                                       notation_rules=_batch_site_info.get("notation_rules"),
                                       site_notes=_batch_site_info.get("notes", ""))
+            output = _auto_review_body(output, inputs, clinics, log=st.write)
 
             _out = {
                 "title":     structure["title"],
@@ -1520,6 +1600,7 @@ with _safe_tab(tab_custom):
                         st.stop()
                     st.write("📐 構成生成中...")
                     structure = generate_structure(inputs, comp, clinics, claude_key, gemini_api_key=gemini_key, article_provider=article_provider)
+                    structure = _auto_review_structure(structure, inputs, clinics, log=st.write)
                     if gen_mode == "見出し確認あり":
                         st.session_state["t2_draft"] = {
                             "structure":   structure,
@@ -1548,6 +1629,7 @@ with _safe_tab(tab_custom):
                                               article_provider=article_provider,
                                               notation_rules=_t2_site_info.get("notation_rules"),
                                               site_notes=_t2_site_info.get("notes", ""))
+                        output = _auto_review_body(output, inputs, clinics, log=st.write)
                         st.write("📝 選び方コンテンツ抽出中...")
                         _criteria_summary = extract_criteria_summary(output["html"], claude_key)
                         st.session_state["t2_last"] = {
@@ -1796,6 +1878,7 @@ with _safe_tab(tab_custom):
                         notation_rules=_draft_site_info.get("notation_rules"),
                         site_notes=_draft_site_info.get("notes", ""),
                     )
+                    output = _auto_review_body(output, _di, _t2_draft["clinics"], log=st.write)
                     st.session_state["t2_last"] = {
                         "html":           output["html"],
                         "title":          _ds["title"],

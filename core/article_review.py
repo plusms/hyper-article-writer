@@ -168,6 +168,138 @@ def build_fix_prompt(html: str, findings: list[dict]) -> str:
 """
 
 
+def build_structure_review_prompt(structure_text: str, constraints: str,
+                                  article_type: str = "", main_kw: str = "", sub_kw: list | None = None) -> str:
+    return f"""あなたは公開前の記事構成を検品する担当者です。この構成を作ったのはあなたではありません。
+
+次の見出し構成が、下の制約に反していないかを見てください。
+
+【記事タイプ】{article_type or "（指定なし）"}
+【メインキーワード】{main_kw or "（指定なし）"}
+【サブキーワード】{', '.join(sub_kw or []) or "（指定なし）"}
+
+【制約】
+{constraints}
+
+【見出し構成】
+{structure_text[:20000]}
+
+【見る観点】
+- メインキーワードとサブキーワードに答えるH2があるか
+- 同じことを書くH2・H3が重複していないか。隣り合う見出しで中身が衝突していないか
+- 記事タイプに必要な固定H2が揃っているか
+- 見出しに禁止ワード・断定表現が入っていないか
+- 案件DBに無い情報を前提にした見出しがないか
+
+【出し方】
+- 違反を見つけた箇所だけを挙げる。良い点・全体の講評は書かない
+- 1件につき、構成から一字一句そのまま抜き出した見出しを原文として添える
+- 原文が抜き出せない指摘は挙げない
+- 種別は次から選ぶ。構成／表現／事実
+- 出力はJSONの配列だけ。前後に説明文を書かない
+
+[
+  {{"種別": "構成", "規則": "サブキーワードに答えるH2がない", "原文": "構成からそのまま抜いた見出し", "理由": "何がどう反しているか1文"}}
+]
+"""
+
+
+def build_structure_fix_prompt(structure_text: str, findings: list[dict]) -> str:
+    lines = "\n".join(f"- [{f['rule']}] {f['text']}\n　{f['detail']}" for f in findings)
+    return f"""次の見出し構成について、以下の指摘箇所だけを直してください。
+
+指摘のない見出しは1文字も変更しないでください。構成全体を作り直すと、通っていた
+見出しまで変わって収束しません。見出しの階層と並び順は変えないでください。
+
+【指摘】
+{lines}
+
+【見出し構成】
+{structure_text}
+
+【出し方】
+- 修正後の見出し構成をそのまま出力する
+- 説明・前置き・変更点の要約を書かない
+"""
+
+
+def review_structure(structure_text: str, constraints: str, provider: str,
+                     claude_api_key: str = "", gemini_api_key: str = "",
+                     article_type: str = "", main_kw: str = "", sub_kw: list | None = None) -> list[dict]:
+    raw = _call_model(
+        provider, build_structure_review_prompt(structure_text, constraints, article_type, main_kw, sub_kw),
+        claude_api_key=claude_api_key, gemini_api_key=gemini_api_key,
+    )
+    return keep_locatable(parse_findings(raw), structure_text)
+
+
+def apply_structure_fixes(structure_text: str, findings: list[dict], provider: str,
+                          claude_api_key: str = "", gemini_api_key: str = "") -> str:
+    if not findings:
+        return structure_text
+    fixed = _call_model(
+        provider, build_structure_fix_prompt(structure_text, findings),
+        claude_api_key=claude_api_key, gemini_api_key=gemini_api_key,
+    ).strip()
+    if not fixed or len(fixed) < len(structure_text) * 0.7:
+        return structure_text
+    return fixed
+
+
+def run_structure_review_loop(
+    structure_text: str,
+    constraints: str,
+    writer_provider: str = "claude",
+    claude_api_key: str = "",
+    gemini_api_key: str = "",
+    article_type: str = "",
+    main_kw: str = "",
+    sub_kw: list | None = None,
+    max_rounds: int = 1,
+    progress=None,
+) -> dict:
+    """構成を別モデルに見せ、構成・表現の指摘だけ直す。
+
+    事実の指摘は人のキューへ回す。Returns: {"structure_text", "rounds", "human", "remaining"}
+    """
+    def _log(msg: str) -> None:
+        if progress:
+            progress(msg)
+
+    reviewer = pick_reviewer_provider(writer_provider)
+    _log(f"　→ 構成の検品: {reviewer}")
+
+    current = structure_text
+    human: list[dict] = []
+    remaining: list[dict] = []
+    rounds = 0
+
+    for round_no in range(1, max_rounds + 2):
+        findings = review_structure(
+            current, constraints, reviewer,
+            claude_api_key=claude_api_key, gemini_api_key=gemini_api_key,
+            article_type=article_type, main_kw=main_kw, sub_kw=sub_kw,
+        )
+        fix, human_now = split_by_owner(findings)
+        for f in human_now:
+            if f not in human:
+                human.append(f)
+        _log(f"　→ 構成 {round_no}回目の検品: 直す指摘 {len(fix)}件 ／ 人のキュー {len(human_now)}件")
+        if not fix:
+            remaining = []
+            break
+        if round_no > max_rounds:
+            remaining = fix
+            break
+        current = apply_structure_fixes(
+            current, fix, writer_provider,
+            claude_api_key=claude_api_key, gemini_api_key=gemini_api_key,
+        )
+        rounds = round_no
+
+    return {"structure_text": current, "rounds": rounds, "human": human, "remaining": remaining}
+
+
 def review_once(html: str, rules: str, provider: str, claude_api_key: str = "",
                 gemini_api_key: str = "", article_type: str = "", main_kw: str = "") -> list[dict]:
     """1周ぶんの検品。場所が特定できた指摘だけ返す。"""
