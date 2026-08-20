@@ -611,6 +611,84 @@ def _sync_clinic_list(inputs: dict, clinic_info: dict, log=None) -> None:
         log(f"　→ 掲載案件から外しました: {'、'.join(removed)}（残り {len(after)} 案件）")
 
 
+# writer が地域・比較記事で埋め込むプレースホルダ。空白の揺れを拾えるようにする
+_CLINIC_BLOCK_RE = re.compile(r"<!--\s*クリニック紹介ブロック入る\s*-->")
+
+
+def _push_rank(record: dict) -> int:
+    try:
+        return int(str(record.get("推し順位", "")).strip())
+    except (TypeError, ValueError):
+        return 999
+
+
+def _fill_clinic_blocks(html, clinic_info, records, inputs, type_record, site_parts, claude_key, log=None) -> str:
+    """本文のプレースホルダを紹介ブロックで置き換える。
+
+    地域・比較記事は本文生成で紹介H2の中身を書かない。ここを人手でやると量産に
+    ならないので、1院1コールで作って差し込む。まとめて1コールにすると出力上限で切れる。
+    """
+    if not _CLINIC_BLOCK_RE.search(html) or not clinic_info:
+        return html
+    criteria = extract_criteria_summary(html, claude_key)
+    reference = article_type_db.get_reference_html(type_record or {}, "紹介ブロックの並び")
+    trim = article_type_db.get_reference_html(type_record or {}, "紹介ブロックで削るもの")
+    slug = inputs.get("slug", "").strip()
+    ordered = sorted(
+        clinic_info.items(),
+        key=lambda kv: _push_rank(records.get(kv[0], {})),
+    )
+    blocks = []
+    for rank, (name, info) in enumerate(ordered, start=1):
+        record = records.get(name, {})
+        base_link = str(record.get("送客リンク", "")).strip()
+        link_rule = ""
+        if base_link and slug:
+            link_rule = (
+                "【リンクのパラメータ】\n"
+                f"- 見出し・本文中のテキストリンク: {base_link}?{slug}_rank_txt\n"
+                f"- 画像のリンク: {base_link}?{slug}_rank_bn\n"
+                f"- CTAボタン: {base_link}?{slug}_rank_bt\n"
+            )
+        instruction = "\n".join(filter(None, [
+            ("【見本から削るもの・残すもの】\n" + trim) if trim else "",
+            link_rule,
+        ]))
+        if log:
+            log(f"　🏥 {rank}位 {name} の紹介ブロックを生成中...")
+        try:
+            block = clinic_block_writer.generate_clinic_block(
+                name=name,
+                rank=rank,
+                scraped_info=info,
+                price_data=str(record.get("紹介ブロックに出すプラン", "")).strip(),
+                extra_notes="",
+                link_url=base_link,
+                lp_plan=str(record.get("比較表に出すプラン", "")).strip(),
+                main_kw=inputs.get("main_kw", ""),
+                sub_kw=inputs.get("sub_kw", []),
+                criteria_text=criteria,
+                claude_api_key=claude_key,
+                site_parts=site_parts,
+                reference_html=reference,
+                extra_instruction=instruction,
+                article_type=inputs.get("article_type", ""),
+            )
+        except Exception as e:
+            if log:
+                log(f"　→ {rank}位 {name} で失敗: {e}")
+            continue
+        blocks.append(block)
+        # 2院目以降は1院目の出力に揃える。型の見本より実際の出力のほうが揃う
+        reference = block
+    if not blocks:
+        return html
+    filled = _CLINIC_BLOCK_RE.sub(lambda _m: "\n".join(blocks), html, count=1)
+    if _CLINIC_BLOCK_RE.search(filled) and log:
+        log("　→ 紹介ブロックの差し込み口が2つ以上あります。1つ目だけ埋めました")
+    return filled
+
+
 def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
     progress   = st.progress(0)
     status_msg = st.empty()
@@ -695,6 +773,14 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                                       notation_rules=_batch_site_info.get("notation_rules"),
                                       site_notes=_batch_site_info.get("notes", ""))
             output = _auto_review_body(output, inputs, clinics, log=st.write)
+            _batch_records = clinic_db_manager.build_db_records(
+                list(clinics.keys()), genre=inputs.get("genre", ""),
+                creds_data=creds_data, sheet_url=db_sheet_url,
+            ) if clinics else {}
+            output["html"] = _fill_clinic_blocks(
+                output["html"], clinics, _batch_records, inputs, _batch_type,
+                _batch_site_parts, claude_key, log=st.write,
+            )
 
             _out = {
                 "title":     structure["title"],

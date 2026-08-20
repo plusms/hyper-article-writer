@@ -71,19 +71,22 @@ def generate_clinic_block(
     extra_notes: str,
     link_url: str,
     lp_plan: str,
-    template: dict,
-    main_kw: str,
-    sub_kw: list,
-    criteria_text: str,
-    claude_api_key: str,
+    template: dict | None = None,
+    main_kw: str = "",
+    sub_kw: list | None = None,
+    criteria_text: str = "",
+    claude_api_key: str = "",
     site_parts: str = "",
     reference_html: str = "",
     extra_instruction: str = "",
     article_type: str = "",
 ) -> str:
+    # テンプレート設定は任意。型タブの見本HTMLがあれば、そちらが構成の正になる。
+    template = template or {}
+    sub_kw = sub_kw or []
     is_top3 = rank <= 3
-    heading_type = template.get("heading_type", 1)
-    component_order = template.get("component_order", ["intro_text", "basic_info"])
+    heading_type = template.get("heading_type")
+    component_order = template.get("component_order") or []
     basic_info_fields = template.get("basic_info_fields", [])
     basic_info_html_sample = template.get("basic_info_html_sample", "")
     show_rank_in_heading = template.get("show_rank_in_heading", True)
@@ -98,8 +101,8 @@ def generate_clinic_block(
         3: f'小見出しパーツを使用: {name}',
         4: f'専用パーツ（コメント先行型）: [コメント]{name}',
     }
-    heading_instruction = heading_map.get(heading_type, heading_map[1])
-    if not show_rank_in_heading:
+    heading_instruction = heading_map.get(heading_type, "") if heading_type else ""
+    if heading_instruction and not show_rank_in_heading:
         heading_instruction += "\n※見出し・小見出しに「1位」「2位」などの順位番号を含めない"
 
     price_section = ""
@@ -199,16 +202,28 @@ def generate_clinic_block(
                 top3_section += f'- CTAボタン設置: href="{link_url}"（サイトパーツのCTAボタンHTMLを使用すること。汎用<a>タグで代替しない）\n'
             if lp_plan:
                 top3_section += f'- LP掲載プランを記載: {lp_plan}\n'
+        if not top3_link_placements and link_url:
+            # テンプレート設定なしで見本だけを頼りにする場合。見本のURLをそのまま
+            # 使われるとよそのクリニック・よその記事のリンクが出るので明示する。
+            top3_section += (
+                f'- リンク先は {link_url} を使う。パラメータの付け方は追加指示に従う\n'
+                "- 見本HTMLに書かれているURLをそのまま使わない\n"
+            )
+            if lp_plan:
+                top3_section += f'- LP掲載プランを記載: {lp_plan}\n'
     else:
         top3_section = f"【4位以下ルール（{rank}位）】\n- クリニック紹介文は2〜3段落\n- リンク・CTAボタンなし\n"
 
     components_str = " → ".join(COMPONENT_LABELS.get(c, c) for c in active_components)
 
+    # 見本は切らずに全文渡す。テンプレート設定を置かない運用では、この見本だけが
+    # ブロックの作りを決める。切ると後半のテーブル・CTAが落ちて再現できない。
     reference_section = (
-        "【フォーマット参照（1院目のHTML）】\n"
-        "以下は同じ記事内の別の院で生成済みのHTMLです。\n"
-        "テーブルの列数・列名・小見出しの位置・コンポーネントの順序・書き方を完全に統一してください。\n"
-        f"{reference_html[:3000]}\n"
+        "【見本HTML（この作りをそのまま踏襲する）】\n"
+        "同じ記事で使う1院分の見本です。テーブルの列数と列名・小見出しの位置・"
+        "コンポーネントの並び・タグ構造・クラス名をそのまま真似してください。\n"
+        "中身はこのクリニックの情報で埋め直します。取れない項目は[要確認]と書きます。\n"
+        f"{reference_html}\n"
     ) if reference_html else ""
 
     prompt = f"""あなたはSEO記事のおすすめクリニック紹介ブロック専門ライターです。
@@ -230,11 +245,8 @@ def generate_clinic_block(
 【追加メモ・補足情報】
 {extra_notes or '（なし）'}
 
-【コンポーネント構成と出力順序】
-{components_str}
-
-【見出しの形式】
-{heading_instruction}
+{f"【コンポーネント構成と出力順序】{chr(10)}{components_str}{chr(10)}" if components_str else ""}
+{f"【見出しの形式】{chr(10)}{heading_instruction}{chr(10)}" if heading_instruction else ""}
 
 {article_type_section}
 {price_section}
