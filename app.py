@@ -3576,7 +3576,17 @@ with _safe_tab(tab_rank):
                     _cb_site_parts = site_config_manager.format_site_parts(_cb_site_cfg.get("components", []))
 
                 _cb_results = []
-                _cb_reference_html = ""  # 1院目のHTMLをフォーマット参照として後続院に渡す
+                # 1院目には型タブの紹介ブロックの見本を渡す。2院目以降は1院目の出力を参照にする
+                _cb_type_creds = _get_gcp_creds(sheets_creds_file)
+                _cb_type_db_url = db_sheet_url if _cb_db_type == DB_TYPE_CLINIC else lifestyle_sheet_url
+                _cb_type = _load_article_type(
+                    {"article_type": _cb_article_type, "genre": _cb_genre.strip()},
+                    _cb_type_creds, _cb_type_db_url,
+                )
+                _cb_reference_html = article_type_db.get_reference_html(_cb_type, "紹介ブロックの並び")
+                _cb_type_trim = article_type_db.get_reference_html(_cb_type, "紹介ブロックで削るもの")
+                if _cb_reference_html:
+                    st.caption(f"型タブの紹介ブロックの見本を1院目に渡します（{len(_cb_reference_html)}字）")
                 _cb_clinics_to_gen = _cb_clinics
                 # link_settings をサイトパーツに追記
                 _cb_link_rule_str = site_config_manager.format_link_settings(_cb_link_settings)
@@ -3618,6 +3628,10 @@ with _safe_tab(tab_rank):
                         _cbb_texts   = [b["text"].strip()   for b in st.session_state.get("cb_extra_blocks", []) if b["text"].strip()]
                         _cbb_intents = [b["intent"].strip() for b in st.session_state.get("cb_extra_blocks", []) if b["intent"].strip()]
                         _cb_instr_val = "\n".join(filter(None, _cbb_texts + (["【意図】" + "\n".join(_cbb_intents)] if _cbb_intents else [])))
+                        if _cb_type_trim:
+                            _cb_instr_val = "\n".join(filter(None, [
+                                _cb_instr_val, "【見本から削るもの・残すもの】\n" + _cb_type_trim,
+                            ]))
                         try:
                             _html = clinic_block_writer.generate_clinic_block(
                                 name=_cbc["name"],
@@ -3638,6 +3652,9 @@ with _safe_tab(tab_rank):
                                 extra_instruction=_cb_instr_val,
                             )
                             if not _cb_reference_html:
+                                _cb_reference_html = _html
+                            elif _cbc is _cb_clinics_to_gen[0]:
+                                # 1院目は型の見本を参照した。2院目以降は実際の出力に揃える
                                 _cb_reference_html = _html
                             _cb_results.append({"rank": _r, "name": _cbc["name"], "html": _html})
                         except Exception as _e:
