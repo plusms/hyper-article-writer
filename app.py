@@ -567,6 +567,12 @@ def _attach_facilities(clinic_info: dict, inputs: dict, creds_data, sheet_url, l
             log("　→ 院タブに一致する地域がありません。院情報なしで生成します")
         return clinic_info
     ok, blocked = facility_db.select_for_article(rows, region, list(clinic_info.keys()))
+    # 1件も当たらないのは、そのジャンルの院をまだ院タブに入れていない状態。
+    # 地域名だけ他ジャンルと一致した場合にここへ来る。落とすと記事が作れなくなるので何もしない。
+    if not ok:
+        if log:
+            log(f"　→ 院タブに{region}の該当案件がありません。院情報なしで生成します")
+        return clinic_info
     # その地域に院がない案件は掲載対象から落とす。来院できない案件を紹介しても意味がない。
     dropped: dict = {}
     for _name in clinic_info:
