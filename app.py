@@ -797,6 +797,13 @@ with _safe_tab(tab_batch):
             "画像も一緒に生成する（既定OFF・通常は画像生成ツールで別途生成）",
             value=False, key="bulk_gen_images",
         )
+    # 量産はサイト名をツールで選ぶ。全行同じなので毎行シートに書かせない
+    if batch_tab_sel == "量産":
+        _mass_site_opts = ["指定なし"] + site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
+        st.selectbox(
+            "サイト名（全行共通）", _mass_site_opts, key="mass_site_name",
+            help="ここで選んだサイトのパーツとリンクの規則を全行に使います。シートのサイト名列より優先します",
+        )
 
     batch_row_filter = st.text_input(
         "行を絞り込む（空白=全未処理行、例: 3,5,8 または 3-10）",
@@ -874,7 +881,8 @@ with _safe_tab(tab_batch):
             elif batch_tab_sel == "ノウハウ":
                 rows = read_input_rows_knowhow(ws)
             elif batch_tab_sel == "量産":
-                rows = read_input_rows_mass(ws)
+                _m_site = st.session_state.get("mass_site_name", "指定なし")
+                rows = read_input_rows_mass(ws, site_name="" if _m_site == "指定なし" else _m_site)
             else:
                 rows = read_input_rows(ws, default_article_type=batch_tab_sel)
             pending = [r for r in rows if not r.get("status") or r.get("status") == "処理中"]

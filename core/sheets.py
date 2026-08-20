@@ -70,7 +70,7 @@ _HEADERS: dict[str, list[str]] = {
     # 地域記事の量産用。案件は案件DBから引くので掲載案件・最訴求プランの列を持たない。
     # 院タブを引くための地域名と、送客リンクのパラメータに使う記事スラッグを持つ。
     "量産": [
-        "サイト名*", "ジャンル*", "記事タイプ*", "メインKW*", "サブKW*",
+        "サイト名", "ジャンル*", "記事タイプ*", "メインKW*", "サブKW*",
         "地域名*", "記事スラッグ*", "追加指示",
         "ステータス", "タイトル", "メタ", "HTML", "要確認", "掲載案件一覧",
     ],
@@ -189,15 +189,19 @@ def write_output_row(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
     _reset_row_height(ws, row_index)
 
 
-def read_input_rows_mass(ws: gspread.Worksheet) -> list:
-    """量産タブの2行目以降を読む。案件は案件DBから引くので入力しない。"""
+def read_input_rows_mass(ws: gspread.Worksheet, site_name: str = "") -> list:
+    """量産タブの2行目以降を読む。案件は案件DBから引くので入力しない。
+
+    サイト名はツール側で選ぶ。渡されたらシートの値より優先する。
+    週に20行書くのに毎行同じサイト名を打たせない。
+    """
     all_values = ws.get_all_values()
     rows = []
     for i, row in enumerate(all_values[1:], start=2):
         padded = list(row) + [""] * (len(COL_IN_MASS) - len(row))
         rows.append({
             "row_index":           i,
-            "site_name":           padded[COL_IN_MASS["site_name"]],
+            "site_name":           site_name or padded[COL_IN_MASS["site_name"]],
             "genre":               padded[COL_IN_MASS["genre"]],
             "article_type":        padded[COL_IN_MASS["article_type"]] or "地域",
             "main_kw":             padded[COL_IN_MASS["main_kw"]],
