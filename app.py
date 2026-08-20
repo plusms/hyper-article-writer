@@ -797,13 +797,26 @@ with _safe_tab(tab_batch):
             "画像も一緒に生成する（既定OFF・通常は画像生成ツールで別途生成）",
             value=False, key="bulk_gen_images",
         )
-    # 量産はサイト名をツールで選ぶ。全行同じなので毎行シートに書かせない
+    # 量産はサイト名・ジャンルをツールで選ぶ。全行同じなので毎行シートに書かせない
     if batch_tab_sel == "量産":
+        _mass_col1, _mass_col2 = st.columns(2)
         _mass_site_opts = ["指定なし"] + site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder)
-        st.selectbox(
+        _mass_col1.selectbox(
             "サイト名（全行共通）", _mass_site_opts, key="mass_site_name",
-            help="ここで選んだサイトのパーツとリンクの規則を全行に使います。シートのサイト名列より優先します",
+            help="ここで選んだサイトのパーツとリンクの規則を全行に使います",
         )
+        try:
+            _mass_genre_opts = clinic_db_manager.list_genre_tabs(_get_gcp_creds(sheets_creds_file), db_sheet_url)
+        except Exception:
+            _mass_genre_opts = []
+        if _mass_genre_opts:
+            _mass_col2.selectbox(
+                "ジャンル（全行共通）", _mass_genre_opts, key="mass_genre_sel",
+                help="案件DBのどのジャンルタブから案件を引くか",
+            )
+        else:
+            _mass_col2.text_input("ジャンル（全行共通）", key="mass_genre_txt")
+        st.caption("記事タイプは地域で固定です。量産タブは地域記事専用です")
 
     batch_row_filter = st.text_input(
         "行を絞り込む（空白=全未処理行、例: 3,5,8 または 3-10）",
@@ -882,7 +895,12 @@ with _safe_tab(tab_batch):
                 rows = read_input_rows_knowhow(ws)
             elif batch_tab_sel == "量産":
                 _m_site = st.session_state.get("mass_site_name", "指定なし")
-                rows = read_input_rows_mass(ws, site_name="" if _m_site == "指定なし" else _m_site)
+                _m_genre = st.session_state.get("mass_genre_sel") or st.session_state.get("mass_genre_txt", "")
+                rows = read_input_rows_mass(
+                    ws,
+                    site_name="" if _m_site == "指定なし" else _m_site,
+                    genre=_m_genre,
+                )
             else:
                 rows = read_input_rows(ws, default_article_type=batch_tab_sel)
             pending = [r for r in rows if not r.get("status") or r.get("status") == "処理中"]
