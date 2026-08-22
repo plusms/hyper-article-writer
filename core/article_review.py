@@ -50,7 +50,7 @@ def _call_model(provider: str, prompt: str, claude_api_key: str = "", gemini_api
     import anthropic
     client = anthropic.Anthropic(api_key=claude_api_key)
     msg = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=config.CLAUDE_WRITER_MODEL,
         max_tokens=8000,
         messages=[{"role": "user", "content": prompt}],
     )

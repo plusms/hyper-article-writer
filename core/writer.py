@@ -1,6 +1,7 @@
 import re
 
 import anthropic
+from core import config
 
 # 案件DBの「送客リンク」列。案件ごとに中継ファイルが違うので、サイト設定の
 # ベースURLから組み立てさせるとリンクが全部同じになる。案件ごとの値を正にする。
@@ -750,7 +751,7 @@ def generate_body(
             return _gemini_call_messages(gemini_api_key, messages)
         client = anthropic.Anthropic(api_key=claude_api_key)
         msg = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=config.CLAUDE_WRITER_MODEL,
             max_tokens=16000,
             messages=messages,
         )
@@ -850,7 +851,7 @@ def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, clau
             return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": p}])
         client = anthropic.Anthropic(api_key=claude_api_key)
         msg = client.messages.create(
-            model="claude-sonnet-4-6", max_tokens=16000,
+            model=config.CLAUDE_WRITER_MODEL, max_tokens=16000,
             messages=[{"role": "user", "content": p}],
         )
         return msg.content[0].text
@@ -990,7 +991,7 @@ QH〇, QH〇 …（問題なしの項目番号を列挙）
         return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": prompt}])
     client = anthropic.Anthropic(api_key=claude_api_key)
     msg = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=16000,
+        model=config.CLAUDE_WRITER_MODEL, max_tokens=16000,
         messages=[{"role": "user", "content": prompt}],
     )
     return msg.content[0].text
@@ -1001,7 +1002,7 @@ def extract_criteria_summary(html: str, claude_api_key: str) -> str:
     try:
         client = anthropic.Anthropic(api_key=claude_api_key)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=config.CLAUDE_RESEARCH_MODEL,
             max_tokens=800,
             messages=[{
                 "role": "user",

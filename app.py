@@ -118,24 +118,15 @@ with st.sidebar:
         horizontal=True,
         key="image_provider",
     )
-    # ChatGPTを文章生成に使うためのモデル選択。モデルIDは推測せずAPIの一覧から取る
-    _openai_model = ""
-    if openai_key:
-        @st.cache_data(show_spinner=False)
-        def _openai_models(key: str) -> list:
+    # モデルは core/config.py で固定する。選べるようにすると担当者ごとに精度がぶれる。
+    config.set_openai(openai_key)
+    if openai_key and not config.OPENAI_TEXT_MODEL:
+        with st.expander("ChatGPTのモデルが未設定", expanded=False):
+            st.caption("core/config.py の OPENAI_TEXT_MODEL に入れると選択肢に出ます。このキーで使えるモデル:")
             try:
-                return config.list_openai_text_models(key)
-            except Exception:
-                return []
-        _oa_models = _openai_models(openai_key)
-        if _oa_models:
-            _openai_model = st.selectbox(
-                "ChatGPTのモデル", _oa_models, key="openai_text_model",
-                help="このキーで使えるモデルの一覧です。選ぶとリサーチAI・記事生成AIでChatGPTを選べます",
-            )
-        else:
-            st.caption("ChatGPTのモデル一覧を取得できませんでした。文章生成の選択肢に出ません")
-    config.set_openai(openai_key, _openai_model)
+                st.code("\n".join(config.list_openai_text_models(openai_key)) or "（取得できませんでした）")
+            except Exception as _oa_e:
+                st.caption(f"一覧の取得に失敗しました: {type(_oa_e).__name__}")
 
     _provider_labels = {
         "claude": "Claude",
@@ -401,7 +392,7 @@ def _regenerate_h2_block(
 """
     client = _ant.Anthropic(api_key=claude_key)
     msg = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=config.CLAUDE_WRITER_MODEL,
         max_tokens=16000,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -2902,7 +2893,7 @@ with _safe_tab(tab_writing_chat):
                 _wc_response = ""
                 _wc_placeholder = st.empty()
                 with _wc_client.messages.stream(
-                    model="claude-sonnet-4-6",
+                    model=config.CLAUDE_WRITER_MODEL,
                     max_tokens=2048,
                     system=_wc_system,
                     messages=[
@@ -4581,7 +4572,7 @@ if tab_help:
                 with st.spinner("考え中..."):
                     _help_client = _ant_help.Anthropic(api_key=claude_key)
                     _help_resp = _help_client.messages.create(
-                        model="claude-haiku-4-5-20251001",
+                        model=config.CLAUDE_RESEARCH_MODEL,
                         max_tokens=1024,
                         system=_HELP_SYSTEM,
                         messages=[

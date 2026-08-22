@@ -3,6 +3,7 @@ import requests
 import anthropic
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
+from core import config
 
 
 def fetch_page_text(url: str) -> str:
@@ -30,7 +31,9 @@ def fetch_page_text(url: str) -> str:
         return f"[取得失敗: {e}]"
 
 
-def _claude_call(api_key: str, prompt: str, max_tokens: int = 4096, model: str = "claude-haiku-4-5-20251001") -> str:
+def _claude_call(api_key: str, prompt: str, max_tokens: int = 4096, model: str = "") -> str:
+    from core import config
+    model = model or config.CLAUDE_RESEARCH_MODEL
     try:
         client = anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
@@ -47,8 +50,9 @@ def _gemini_call(api_key: str, prompt: str) -> str:
     try:
         from google import genai as _genai
         client = _genai.Client(api_key=api_key)
+        from core.config import GEMINI_RESEARCH_MODEL
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=GEMINI_RESEARCH_MODEL,
             contents=prompt,
         )
         return response.text
@@ -336,7 +340,8 @@ def _lp_images_gemini(image_bytes_list: list[bytes], name: str, gemini_api_key: 
         mime = "image/jpeg" if img_bytes[:2] == b"\xff\xd8" else "image/png"
         parts.append(_gtypes.Part.from_bytes(data=img_bytes, mime_type=mime))
     parts.append(f"上記は「{name}」のランディングページ（LP）のスクリーンショットです。\n{_LP_IMAGE_PROMPT}")
-    response = client.models.generate_content(model="gemini-2.0-flash", contents=parts)
+    from core.config import GEMINI_RESEARCH_MODEL
+    response = client.models.generate_content(model=GEMINI_RESEARCH_MODEL, contents=parts)
     return response.text
 
 
@@ -355,7 +360,7 @@ def _lp_images_claude(image_bytes_list: list[bytes], name: str, claude_api_key: 
     })
     client = anthropic.Anthropic(api_key=claude_api_key)
     msg = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=config.CLAUDE_WRITER_MODEL,
         max_tokens=16000,
         messages=[{"role": "user", "content": image_contents}],
     )

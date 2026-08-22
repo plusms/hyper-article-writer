@@ -1,18 +1,24 @@
-# 本文・構成・検品で使うGeminiのモデル。1箇所で持って全経路を揃える。
+# ── 使うモデル ─────────────────────────────────────────────
+# 全部ここで固定する。人が選べるようにすると出力の精度が担当者ごとにぶれる。
+# 変えるときはこのファイルだけを直す。
+#
+# 書く工程（構成・本文・紹介ブロック・検品・品質チェック）は上位モデル。
+# 調べる工程（競合分析・案件探索・選び方の要約）は軽いモデル。
+CLAUDE_WRITER_MODEL = "claude-sonnet-4-6"
+CLAUDE_RESEARCH_MODEL = "claude-haiku-4-5-20251001"
 GEMINI_TEXT_MODEL = "gemini-2.5-flash"
+GEMINI_RESEARCH_MODEL = "gemini-2.5-flash"
 
 # ── OpenAI をテキスト生成に使うときの設定 ───────────────────────
-# モデルIDは書き手が推測しない。APIの一覧から取ってユーザーが選んだものを入れる。
-# 存在しないIDを既定値に置くと、選んだ瞬間に全工程が落ちる。
-OPENAI_API_KEY = ""
 OPENAI_TEXT_MODEL = ""
+OPENAI_API_KEY = ""
 
 
 def set_openai(api_key: str = "", model: str = "") -> None:
-    """app.py が起動時に呼ぶ。各モジュールの分岐はここを見る。"""
+    """app.py が起動時にキーを入れる。モデルは上の定数で固定する。"""
     global OPENAI_API_KEY, OPENAI_TEXT_MODEL
     OPENAI_API_KEY = api_key or ""
-    OPENAI_TEXT_MODEL = model or ""
+    OPENAI_TEXT_MODEL = model or OPENAI_TEXT_MODEL
 
 
 def openai_ready() -> bool:
@@ -20,7 +26,10 @@ def openai_ready() -> bool:
 
 
 def list_openai_text_models(api_key: str) -> list:
-    """そのキーで使えるモデルのうち、文章生成に使うものを返す。"""
+    """そのキーで使えるモデルのうち、文章生成に使うものを返す。
+
+    モデルを固定するときの候補確認に使う。画面の選択肢には出さない。
+    """
     from openai import OpenAI
     client = OpenAI(api_key=api_key)
     skip = ("image", "audio", "realtime", "transcribe", "tts", "embedding", "moderation")

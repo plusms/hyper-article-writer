@@ -1,5 +1,6 @@
 import re
 import anthropic
+from core import config
 
 
 def _claude_call(api_key: str, prompt: str) -> str:
@@ -8,7 +9,7 @@ def _claude_call(api_key: str, prompt: str) -> str:
         msg = client.messages.create(
             # 構成と本文は同じモデルで作る。構成で浅い判断をすると本文がそれを前提に
             # 書くので、ここだけ軽いモデルにすると記事全体の質が構成に引きずられる。
-            model="claude-sonnet-4-6",
+            model=config.CLAUDE_WRITER_MODEL,
             max_tokens=16000,
             messages=[{"role": "user", "content": prompt}],
         )
