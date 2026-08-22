@@ -5,6 +5,9 @@ import anthropic
 def _call_model(prompt: str, claude_api_key: str, gemini_api_key: str = "",
                 provider: str = "claude", max_tokens: int = 8192) -> str:
     """紹介ブロックの生成に使うモデル。構成・本文と同じ選択に従う。"""
+    from core import config
+    if provider == "openai" and config.openai_ready():
+        return config.call_openai(prompt, max_tokens=max_tokens).strip()
     if provider == "gemini" and gemini_api_key:
         from google import genai as _genai
         from core.config import GEMINI_TEXT_MODEL

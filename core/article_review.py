@@ -30,7 +30,7 @@ _JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
 
 def pick_reviewer_provider(writer_provider: str) -> str:
     """書いた側と別のモデルを返す。"""
-    return "claude" if writer_provider == "gemini" else "gemini"
+    return "gemini" if writer_provider == "claude" else "claude"
 
 
 def _strip_tags(html: str) -> str:
@@ -38,6 +38,9 @@ def _strip_tags(html: str) -> str:
 
 
 def _call_model(provider: str, prompt: str, claude_api_key: str = "", gemini_api_key: str = "") -> str:
+    from core import config
+    if provider == "openai" and config.openai_ready():
+        return config.call_openai(prompt, max_tokens=8000)
     if provider == "gemini" and gemini_api_key:
         from google import genai as _genai
         client = _genai.Client(api_key=gemini_api_key)

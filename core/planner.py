@@ -29,6 +29,12 @@ def _gemini_call(api_key: str, prompt: str) -> str:
 
 
 def _llm_call(claude_api_key: str, prompt: str, gemini_api_key: str = "", provider: str = "claude") -> str:
+    from core import config
+    if provider == "openai" and config.openai_ready():
+        try:
+            return config.call_openai(prompt, max_tokens=16000)
+        except Exception as e:
+            return f"[生成失敗: {e}]"
     if provider == "gemini" and gemini_api_key:
         return _gemini_call(gemini_api_key, prompt)
     return _claude_call(claude_api_key, prompt)

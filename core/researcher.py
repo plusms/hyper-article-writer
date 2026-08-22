@@ -63,6 +63,14 @@ def _research_call(
     provider: str = "claude",
     max_tokens: int = 4096,
 ) -> str:
+    from core import config
+    if provider == "openai" and config.openai_ready():
+        try:
+            return config.call_openai(prompt, max_tokens=max_tokens)
+        except Exception as e:
+            if claude_api_key:
+                return _claude_call(claude_api_key, prompt, max_tokens)
+            return f"[情報取得失敗: {e}]"
     if provider == "gemini" and gemini_api_key:
         result = _gemini_call(gemini_api_key, prompt)
         # 503/502等の一時的な障害時はClaudeにフォールバック

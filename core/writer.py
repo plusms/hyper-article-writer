@@ -743,6 +743,9 @@ def generate_body(
     use_clinic_placeholder = inputs.get("article_type") in ("地域", "比較")
 
     def _call(messages: list) -> str:
+        from core import config
+        if article_provider == "openai" and config.openai_ready():
+            return config.call_openai_messages(messages, max_tokens=16000)
         if article_provider == "gemini" and gemini_api_key:
             return _gemini_call_messages(gemini_api_key, messages)
         client = anthropic.Anthropic(api_key=claude_api_key)
@@ -840,6 +843,9 @@ def generate_body(
 
 def quality_check(html: str, article_type: str, main_kw: str, sub_kw: list, claude_api_key: str, gemini_api_key: str = "", article_provider: str = "claude", check_mode: str = "standard", title: str = "", meta: str = "") -> str:
     def _call_llm(p: str) -> str:
+        from core import config
+        if article_provider == "openai" and config.openai_ready():
+            return config.call_openai(p, max_tokens=16000)
         if article_provider == "gemini" and gemini_api_key:
             return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": p}])
         client = anthropic.Anthropic(api_key=claude_api_key)
@@ -977,6 +983,9 @@ def heading_structure_check(outline: str, article_type: str, main_kw: str, sub_k
 ### ✅ 問題なし
 QH〇, QH〇 …（問題なしの項目番号を列挙）
 """
+    from core import config
+    if article_provider == "openai" and config.openai_ready():
+        return config.call_openai(prompt, max_tokens=16000)
     if article_provider == "gemini" and gemini_api_key:
         return _gemini_call_messages(gemini_api_key, [{"role": "user", "content": prompt}])
     client = anthropic.Anthropic(api_key=claude_api_key)

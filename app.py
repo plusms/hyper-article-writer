@@ -8,6 +8,7 @@ import time
 import contextlib
 import streamlit as st
 
+from core import config
 from core.config import TOPICS
 from core.researcher import (
     analyze_competitors,
@@ -117,17 +118,42 @@ with st.sidebar:
         horizontal=True,
         key="image_provider",
     )
+    # ChatGPTを文章生成に使うためのモデル選択。モデルIDは推測せずAPIの一覧から取る
+    _openai_model = ""
+    if openai_key:
+        @st.cache_data(show_spinner=False)
+        def _openai_models(key: str) -> list:
+            try:
+                return config.list_openai_text_models(key)
+            except Exception:
+                return []
+        _oa_models = _openai_models(openai_key)
+        if _oa_models:
+            _openai_model = st.selectbox(
+                "ChatGPTのモデル", _oa_models, key="openai_text_model",
+                help="このキーで使えるモデルの一覧です。選ぶとリサーチAI・記事生成AIでChatGPTを選べます",
+            )
+        else:
+            st.caption("ChatGPTのモデル一覧を取得できませんでした。文章生成の選択肢に出ません")
+    config.set_openai(openai_key, _openai_model)
+
+    _provider_labels = {
+        "claude": "Claude",
+        "gemini": "Gemini Flash",
+        "openai": "ChatGPT",
+    }
+    _text_providers = ["gemini", "claude"] + (["openai"] if config.openai_ready() else [])
     research_provider = st.radio(
         "リサーチAI（競合分析・案件収集）",
-        ["gemini", "claude"],
-        format_func=lambda x: "Claude (Haiku)" if x == "claude" else "Gemini Flash",
+        _text_providers,
+        format_func=lambda x: "Claude (Haiku)" if x == "claude" else _provider_labels[x],
         horizontal=True,
         key="research_provider",
     )
     article_provider = st.radio(
-        "記事生成AI（構成・本文）",
-        ["claude", "gemini"],
-        format_func=lambda x: "Claude (Sonnet)" if x == "claude" else "Gemini Flash",
+        "記事生成AI（構成・本文・紹介ブロック）",
+        ["claude", "gemini"] + (["openai"] if config.openai_ready() else []),
+        format_func=lambda x: "Claude (Sonnet)" if x == "claude" else _provider_labels[x],
         horizontal=True,
         key="article_provider",
     )
@@ -1856,7 +1882,7 @@ with _safe_tab(tab_custom):
                         st.session_state.pop("t2_structure_edit", None)
                         s.update(label="✅ 見出し生成完了 — 下で確認してください", state="complete")
                     else:
-                        _provider_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
+                        _provider_label = _provider_labels.get(article_provider, article_provider)
                         st.write(f"✍️ 本文生成中（{_provider_label}）...")
                         _t2_site_info = {}
                         if site_name and _site_info_sheet_url_default:
@@ -2097,7 +2123,7 @@ with _safe_tab(tab_custom):
         if _sbtn2.button("✍️ この見出しで本文を生成", key="t2_gen_body_btn", type="primary"):
             _save_manual_edit()
             _t2_draft = st.session_state["t2_draft"]
-            _prov_label = "Gemini Flash" if article_provider == "gemini" else "Claude"
+            _prov_label = _provider_labels.get(article_provider, article_provider)
             with st.status(f"本文生成中（{_prov_label}）...", expanded=True) as _bs:
                 try:
                     _di = _t2_draft["inputs"]
