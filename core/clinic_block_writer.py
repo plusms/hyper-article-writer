@@ -1,6 +1,25 @@
 import re
 import anthropic
 
+
+def _call_model(prompt: str, claude_api_key: str, gemini_api_key: str = "",
+                provider: str = "claude", max_tokens: int = 8192) -> str:
+    """紹介ブロックの生成に使うモデル。構成・本文と同じ選択に従う。"""
+    if provider == "gemini" and gemini_api_key:
+        from google import genai as _genai
+        from core.config import GEMINI_TEXT_MODEL
+        client = _genai.Client(api_key=gemini_api_key)
+        response = client.models.generate_content(model=GEMINI_TEXT_MODEL, contents=prompt)
+        return (response.text or "").strip()
+    client = anthropic.Anthropic(api_key=claude_api_key)
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text.strip()
+
+
 COMPONENT_LABELS = {
     "spec_image": "スペック画像",
     "intro_text": "クリニック紹介文",
@@ -80,6 +99,8 @@ def generate_clinic_block(
     reference_html: str = "",
     extra_instruction: str = "",
     article_type: str = "",
+    gemini_api_key: str = "",
+    article_provider: str = "claude",
 ) -> str:
     # テンプレート設定は任意。型タブの見本HTMLがあれば、そちらが構成の正になる。
     template = template or {}
@@ -276,16 +297,11 @@ def generate_clinic_block(
 HTML本文のみを出力してください。説明文・コードフェンスは不要。
 """
 
-    client = anthropic.Anthropic(api_key=claude_api_key)
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=8192,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return msg.content[0].text.strip()
+    return _call_model(prompt, claude_api_key, gemini_api_key, article_provider)
 
 
-def edit_clinic_block(html: str, instruction: str, claude_api_key: str) -> str:
+def edit_clinic_block(html: str, instruction: str, claude_api_key: str,
+                      gemini_api_key: str = "", article_provider: str = "claude") -> str:
     """生成済みHTMLブロックに対して指示を適用して修正する。"""
     prompt = f"""以下のクリニック紹介ブロックHTMLに対して、指示に従って修正してください。
 
@@ -296,10 +312,4 @@ def edit_clinic_block(html: str, instruction: str, claude_api_key: str) -> str:
 {html}
 
 HTML本文のみを出力してください。説明文・コードフェンスは不要。"""
-    client = anthropic.Anthropic(api_key=claude_api_key)
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=8192,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return msg.content[0].text.strip()
+    return _call_model(prompt, claude_api_key, gemini_api_key, article_provider)

@@ -615,6 +615,34 @@ def _sync_clinic_list(inputs: dict, clinic_info: dict, log=None) -> None:
 _CLINIC_BLOCK_RE = re.compile(r"<!--\s*クリニック紹介ブロック入る\s*-->")
 
 
+def _review_clinic_block(block_html: str, source_text: str, inputs: dict, log=None) -> str:
+    """紹介ブロックを1院ぶんずつ別モデルで検品して直す。
+
+    記事の中で事実が一番多く出るブロックなので、本文と同じ縛りで見る。案件DBの
+    その案件のテキストだけを突き合わせ元にするので、入力にない数値をここで拾える。
+    """
+    if not st.session_state.get("auto_review") or not (claude_key and gemini_key):
+        return block_html
+    try:
+        result = article_review.run_review_loop(
+            block_html, WRITING_RULES,
+            writer_provider=article_provider,
+            claude_api_key=claude_key, gemini_api_key=gemini_key,
+            article_type=inputs.get("article_type", ""),
+            main_kw=inputs.get("main_kw", ""),
+            source_text=source_text,
+            max_rounds=1,
+            progress=log,
+        )
+    except Exception as e:
+        if log:
+            log(f"　→ 紹介ブロックの検品に失敗しました（{type(e).__name__}）。そのまま使います")
+        return block_html
+    if result.get("human") and log:
+        log(f"　→ 紹介ブロックで人が見る指摘 {len(result['human'])}件")
+    return result.get("html") or block_html
+
+
 def _push_rank(record: dict) -> int:
     try:
         return int(str(record.get("推し順位", "")).strip())
@@ -673,11 +701,14 @@ def _fill_clinic_blocks(html, clinic_info, records, inputs, type_record, site_pa
                 reference_html=reference,
                 extra_instruction=instruction,
                 article_type=inputs.get("article_type", ""),
+                gemini_api_key=gemini_key,
+                article_provider=article_provider,
             )
         except Exception as e:
             if log:
                 log(f"　→ {rank}位 {name} で失敗: {e}")
             continue
+        block = _review_clinic_block(block, info, inputs, log=log)
         blocks.append(block)
         # 2院目以降は1院目の出力に揃える。型の見本より実際の出力のほうが揃う
         reference = block
@@ -3809,6 +3840,13 @@ with _safe_tab(tab_rank):
                                 site_parts=_cb_site_parts,
                                 reference_html=_cb_reference_html,
                                 extra_instruction=_cb_instr_val,
+                                gemini_api_key=gemini_key,
+                                article_provider=article_provider,
+                            )
+                            _html = _review_clinic_block(
+                                _html, _scraped_text,
+                                {"article_type": _cb_article_type, "main_kw": _cb_main_kw},
+                                log=st.write,
                             )
                             if not _cb_reference_html:
                                 _cb_reference_html = _html
@@ -3892,7 +3930,10 @@ with _safe_tab(tab_rank):
                         _cur_html = st.session_state.get(f"cb_res_edit_{_res['rank']}", _res["html"])
                         st.write(f"✍️ {_res['rank']}位: {_res['name']} を修正中...")
                         try:
-                            _new_html = clinic_block_writer.edit_clinic_block(_cur_html, _bulk_instr, claude_key)
+                            _new_html = clinic_block_writer.edit_clinic_block(
+                                _cur_html, _bulk_instr, claude_key,
+                                gemini_api_key=gemini_key, article_provider=article_provider,
+                            )
                             _updated_results.append({"rank": _res["rank"], "name": _res["name"], "html": _new_html})
                             st.session_state[f"cb_res_edit_{_res['rank']}"] = _new_html
                         except Exception as _be:
