@@ -8,17 +8,18 @@ CLAUDE_WRITER_MODEL = "claude-sonnet-4-6"
 CLAUDE_RESEARCH_MODEL = "claude-haiku-4-5-20251001"
 GEMINI_TEXT_MODEL = "gemini-2.5-flash"
 GEMINI_RESEARCH_MODEL = "gemini-2.5-flash"
+# 日付入りのIDを指定する。日付なしのIDは指す先がいつの間にか変わるので、
+# 同じ入力でも出力が変わって精度がぶれる。
+OPENAI_TEXT_MODEL = "gpt-5.5-2026-04-23"
+OPENAI_RESEARCH_MODEL = "gpt-5.4-mini-2026-03-17"
 
-# ── OpenAI をテキスト生成に使うときの設定 ───────────────────────
-OPENAI_TEXT_MODEL = ""
 OPENAI_API_KEY = ""
 
 
-def set_openai(api_key: str = "", model: str = "") -> None:
+def set_openai(api_key: str = "") -> None:
     """app.py が起動時にキーを入れる。モデルは上の定数で固定する。"""
-    global OPENAI_API_KEY, OPENAI_TEXT_MODEL
+    global OPENAI_API_KEY
     OPENAI_API_KEY = api_key or ""
-    OPENAI_TEXT_MODEL = model or OPENAI_TEXT_MODEL
 
 
 def openai_ready() -> bool:
@@ -44,13 +45,14 @@ def list_openai_text_models(api_key: str) -> list:
     return sorted(set(ids))
 
 
-def call_openai_messages(messages: list, max_tokens: int = 8192) -> str:
+def call_openai_messages(messages: list, max_tokens: int = 8192, model: str = "") -> str:
     """OpenAIで文章を生成する。Responsesが通らないSDK・モデルでも動くよう2段構え。"""
     from openai import OpenAI
+    model = model or OPENAI_TEXT_MODEL
     client = OpenAI(api_key=OPENAI_API_KEY)
     try:
         response = client.responses.create(
-            model=OPENAI_TEXT_MODEL,
+            model=model,
             input=messages,
             max_output_tokens=max_tokens,
         )
@@ -60,15 +62,17 @@ def call_openai_messages(messages: list, max_tokens: int = 8192) -> str:
     except Exception:
         pass
     completion = client.chat.completions.create(
-        model=OPENAI_TEXT_MODEL,
+        model=model,
         messages=messages,
         max_completion_tokens=max_tokens,
     )
     return completion.choices[0].message.content or ""
 
 
-def call_openai(prompt: str, max_tokens: int = 8192) -> str:
-    return call_openai_messages([{"role": "user", "content": prompt}], max_tokens=max_tokens)
+def call_openai(prompt: str, max_tokens: int = 8192, model: str = "") -> str:
+    return call_openai_messages(
+        [{"role": "user", "content": prompt}], max_tokens=max_tokens, model=model,
+    )
 
 TOPICS = {
     "地域": [

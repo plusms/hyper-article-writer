@@ -120,13 +120,6 @@ with st.sidebar:
     )
     # モデルは core/config.py で固定する。選べるようにすると担当者ごとに精度がぶれる。
     config.set_openai(openai_key)
-    if openai_key and not config.OPENAI_TEXT_MODEL:
-        with st.expander("ChatGPTのモデルが未設定", expanded=False):
-            st.caption("core/config.py の OPENAI_TEXT_MODEL に入れると選択肢に出ます。このキーで使えるモデル:")
-            try:
-                st.code("\n".join(config.list_openai_text_models(openai_key)) or "（取得できませんでした）")
-            except Exception as _oa_e:
-                st.caption(f"一覧の取得に失敗しました: {type(_oa_e).__name__}")
 
     _provider_labels = {
         "claude": "Claude",

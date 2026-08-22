@@ -70,7 +70,9 @@ def _research_call(
     from core import config
     if provider == "openai" and config.openai_ready():
         try:
-            return config.call_openai(prompt, max_tokens=max_tokens)
+            return config.call_openai(
+                prompt, max_tokens=max_tokens, model=config.OPENAI_RESEARCH_MODEL,
+            )
         except Exception as e:
             if claude_api_key:
                 return _claude_call(claude_api_key, prompt, max_tokens)
