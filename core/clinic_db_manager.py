@@ -149,8 +149,49 @@ def _parse_worksheet(ws: gspread.Worksheet) -> dict:
             record.setdefault("lp_info", record.get("lp_info", ""))
             record.setdefault("updated_at", record.get("updated_at", ""))
             record.setdefault("affili_filename", record.get("affili_filename", ""))
+        # 同じ案件が二重に入っていることがある。取得Taskが既存を読まずに足すため。
+        # 後勝ちにすると推し順位が後ろの行の値になるので、順位の小さいほうを残す。
+        existing = result.get(name)
+        if existing is not None and _rank_of(existing) <= _rank_of(record):
+            continue
         result[name] = record
     return result
+
+
+def _rank_of(record: dict) -> int:
+    try:
+        return int(str(record.get("推し順位", "")).strip())
+    except (TypeError, ValueError):
+        return 9999
+
+
+def find_duplicate_names(creds_data=None, sheet_url=None, genre: str = "") -> list:
+    """ジャンルタブで二重に入っている案件名を返す。"""
+    if not (creds_data and sheet_url and genre):
+        return []
+    try:
+        spreadsheet = _get_spreadsheet(creds_data, sheet_url)
+        rows = spreadsheet.worksheet(genre).get_all_values()
+    except Exception:
+        return []
+    if len(rows) < 2:
+        return []
+    headers = [h.strip() for h in rows[0]]
+    name_key = NAME_COL if is_column_format(headers) else (headers[0] if headers else "")
+    if name_key not in headers:
+        return []
+    index = headers.index(name_key)
+    seen, dupes = set(), []
+    for row in rows[1:]:
+        if len(row) <= index:
+            continue
+        name = row[index].strip()
+        if not name:
+            continue
+        if name in seen and name not in dupes:
+            dupes.append(name)
+        seen.add(name)
+    return dupes
 
 
 def list_genre_tabs(creds_data=None, sheet_url=None) -> list[str]:

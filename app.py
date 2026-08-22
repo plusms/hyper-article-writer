@@ -781,6 +781,14 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                 inputs["clinics"], inputs.get("genre", ""),
                 creds_data=creds_data, sheet_url=db_sheet_url,
             )
+            _batch_dupes = clinic_db_manager.find_duplicate_names(
+                creds_data, db_sheet_url, inputs.get("genre", ""),
+            )
+            if _batch_dupes:
+                st.warning(
+                    "案件DBに同じ案件が二重に入っています。推し順位の小さいほうを使います:\n- "
+                    + "\n- ".join(_batch_dupes)
+                )
             if _batch_blocked:
                 st.warning("案件DBの照合を通らなかったため記事に載せません（人のキューへ）:\n- " + "\n- ".join(_batch_blocked))
             clinics = _attach_facilities(clinics, inputs, creds_data, db_sheet_url, log=st.write)
