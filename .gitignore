@@ -4,4 +4,4 @@ __pycache__/
 .env
 service_account.json
 .streamlit/secrets.toml
-起動.bat
+起動/

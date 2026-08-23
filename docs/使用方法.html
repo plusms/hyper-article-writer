@@ -269,7 +269,7 @@
     <li><a href="#db">商品データベース</a></li>
     <li><a href="#settings">サイト設定</a></li>
     <li class="group">画像生成</li>
-    <li><a href="#image-gen">画像生成タブ</a></li>
+    <li><a href="#image-gen">画像生成について</a></li>
     <li class="group">その他</li>
     <li><a href="#help">ヘルプ</a></li>
     <li><a href="#patterns">操作パターン</a></li>
@@ -280,7 +280,7 @@
 <main>
 
   <h1>CV Article Writer</h1>
-  <p class="subtitle">SEO記事・クリニック紹介ブロックの自動生成ツール — 使用方法ガイド</p>
+  <p class="subtitle">SEO記事・クリニック紹介ブロックの自動生成ツール — 使用方法ガイド<br><span style="font-size:12px;color:var(--accent);">最終更新：2026-07-22 / v1.1</span></p>
 
   <!-- ───────────── はじめての方へ ───────────── -->
   <section id="first-time">
@@ -320,7 +320,7 @@
   <!-- ───────────── 画面構成 ───────────── -->
   <section id="overview">
     <h2><span class="badge">–</span>画面構成</h2>
-    <p>サイドバー上部のラジオボタンで4つのセクションを切り替える。</p>
+    <p>サイドバー上部のラジオボタンで3つのセクションを切り替える。</p>
     <table>
       <tr><th>セクション</th><th>タブ</th><th>使いどころ</th></tr>
       <tr>
@@ -332,11 +332,6 @@
         <td>🗄️ データ・設定</td>
         <td>商品データベース ／ サイト設定</td>
         <td>初回セットアップ・クリニック情報の追加・更新</td>
-      </tr>
-      <tr>
-        <td>🖼️ 画像生成</td>
-        <td>（タブなし・単一画面）</td>
-        <td>記事HTMLを貼り付けてH2ごとに画像を一括生成・Drive アップロード</td>
       </tr>
       <tr>
         <td>❓ ヘルプ</td>
@@ -354,12 +349,13 @@
     <h2><span class="badge">1</span>一括作成タブ</h2>
     <p>スプレッドシートに入力済みのKWリストからノウハウ記事をまとめて生成し、同じスプシへ自動書き込みする。<strong>ノウハウ記事の量産・新サイト立ち上げ時の一括仕込みに使う。</strong>地域・比較・商標記事は一括作成しない。それらはカスタム作成タブで1本ずつ対応する。</p>
 
-    <h3>スプレッドシートのタブ構成</h3>
-    <p>記事管理シートには以下のタブを用意する。生成時に処理するタブを選択する。</p>
+    <h3>処理対象タブと共通設定</h3>
+    <p>一括作成は<strong>「ノウハウ一括」タブ固定</strong>で動く。タブを選ぶUIはない。サイト名・ジャンルはスプシの列ではなく、画面上の入力欄で全行共通として指定する。</p>
     <table>
-      <tr><th>タブ名</th><th>用途</th><th>列構成</th></tr>
-      <tr><td>ノウハウ</td><td>施術・症状の情報提供KW記事（クリニック掲載なし）</td><td>A〜J列（サイト名〜関連KW）共通</td></tr>
-      <tr><td>ノウハウ一括</td><td>サイト名・ジャンルを一括指定してノウハウ記事をまとめて流す</td><td>A〜J列（KWのみ。サイト名・ジャンルはUI側で指定）</td></tr>
+      <tr><th>入力欄</th><th>説明</th></tr>
+      <tr><td>サイト名（全行共通）</td><td>登録済みサイトから選択（「指定なし」も可）。選んだサイトのHTMLパーツ・デザインシステムが全行に適用される</td></tr>
+      <tr><td>ジャンル（全行共通）</td><td>処理対象行に適用するジャンルを入力。案件DB検索に使う</td></tr>
+      <tr><td>画像も一緒に生成する</td><td>チェックすると各記事のH2ごとに画像を自動生成してDriveへアップする。<strong>既定はOFF（記事のみ生成）。</strong>画像は通常は別の画像生成ツールで作るため、基本はOFFのままでよい</td></tr>
     </table>
 
     <h3>スプレッドシートの列構成</h3>
@@ -381,7 +377,7 @@
 
     <h3>操作手順</h3>
     <div class="steps">
-      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>処理するタブ名を選択</strong>ノウハウ一括 or ノウハウ から選ぶ</div></div>
+      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>「サイト名（全行共通）」「ジャンル（全行共通）」を指定</strong>処理対象の全行に共通で適用される。サイト名は登録済みサイトから選択（「指定なし」も可）</div></div>
       <div class="step"><div class="step-num">2</div><div class="step-body">
         <strong>実行前オプション（任意）</strong><br>
         <span class="chip">行を絞り込む</span> 特定の行だけ実行したい場合は行番号を入力（例: <code>3,5,8</code> または <code>3-10</code>）<br>
@@ -413,23 +409,45 @@
     </table>
 
     <h3>Step 2 — 追加指示（任意）</h3>
-    <p>禁止事項・特記事項を自由記述する。生成される本文全体に反映される。</p>
-    <pre><code>例：オンライン診療のクリニックは含めない
-例：処方上限量の記載は避ける
-例：2院目以降のH3見出しにクリニック名を入れない</code></pre>
+    <p>禁止事項・特記事項を自由記述する。生成される本文全体に反映される。「追加指示N（任意）」と「追加指示の意図（任意）」がペアになっており、<strong>「＋ 追加指示を追加」で複数追加</strong>、<strong>「✕」で個別削除</strong>できる。意図欄も生成に渡されるため、何のための指示かを書いておくと反映精度が上がる。</p>
+    <pre><code>追加指示：GLP-1の仕組みを解説するセクションを追加してほしい
+意図：既存薬に慣れたユーザーが新鮮に受け取れるようにしたい
 
-    <h3>Step 3 — 掲載院リスト</h3>
-    <p>「＋ 院を追加」ボタンで院を追加する。各院に以下を入力する。</p>
+追加指示：オンライン診療のクリニックは含めない
+追加指示：2院目以降のH3見出しにクリニック名を入れない</code></pre>
+
+    <h3>含めるセクション（地域・比較・商標）</h3>
+    <p>記事タイプが地域・比較・商標のとき、本文に含めるトピックをチェックボックスで選べる（ノウハウは選択欄なし）。固定トピックは外せない。</p>
+
+    <h3>Step 3 — 掲載案件（地域・比較記事）</h3>
+    <p>「＋ 案件を追加」ボタンで案件を追加する。各案件に以下を入力する。</p>
     <table>
       <tr><th>項目</th><th>説明</th></tr>
-      <tr><td>クリニック名</td><td>記事内で使用する表記（○○院まで含めて入力）</td></tr>
-      <tr><td>ドメイン（公式URL）</td><td>情報収集のクロール対象URL。商品DBに登録済みの場合はクロールをスキップする</td></tr>
-      <tr><td>最訴求プラン</td><td>LPが共有される場合はLPから取得。LPがない場合は公式HPで最も訴求されているプランを確認して入力する。1位院の強調表示に使われる</td></tr>
-      <tr><td>強み・比較優位性</td><td>任意。クロールで取れない情報（限定キャンペーン等）を補足する</td></tr>
+      <tr><td>件数（任意）</td><td>掲載する案件の件数。<strong>0にすると競合の掲載件数に自動で合わせる</strong>。ここに入力した案件は件数にかかわらず必ず掲載され、不足分は自動探索で補完される</td></tr>
+      <tr><td>案件名</td><td>記事内で使用する表記（○○院まで含めて入力）</td></tr>
+      <tr><td>ドメイン</td><td>情報収集のクロール対象URL。商品DBに登録済みの場合はクロールをスキップする。「📂 DB」ボタンで案件名からDB検索してドメイン・情報・最訴求プランを読み込める</td></tr>
+      <tr><td>最訴求プラン</td><td>1案件目は必須。LPが共有される場合はLPから取得。LPがない場合は公式HPで最も訴求されているプランを確認して入力する。1位案件の強調表示に使われる</td></tr>
+      <tr><td>強み・比較優位性（任意）</td><td>クロールで取れない情報（限定キャンペーン等）を補足する</td></tr>
+      <tr><td>メタリフ名（任意）</td><td>上位3件のみ。アフィリリンク用のファイル名（例: diet-tcb.html）</td></tr>
+    </table>
+
+    <h3>Step 3' — 対象案件（商標記事）</h3>
+    <p>記事タイプが「商標」のときは入力フォームが切り替わり、<strong>1案件固定</strong>になる（自動探索もしない）。地域・比較とは別の専用フォームで、以下を入力する。</p>
+    <table>
+      <tr><th>項目</th><th>説明</th></tr>
+      <tr><td>案件名 ／ ドメイン</td><td>対象1案件の名称とURL。「📂 DB読込」ボタンでDBから情報を読み込める</td></tr>
+      <tr><td>最訴求プラン</td><td>必須。記事の主訴求プラン</td></tr>
+      <tr><td>比較優位性（強み①〜③＋根拠）</td><td>強み3つと、それぞれの根拠・補足を入力する。ここに書いた強みと根拠が記事の訴求軸になり、AIが自然な文脈に組み込む</td></tr>
+      <tr><td>📋 補完情報・参考URL（任意）</td><td>DBやスクレイプで取れない情報（料金・取扱い薬・件数など）を自由記述する補完情報欄と、重点的にスクレイプしたい参考URL欄。入力すると [要確認] が減る</td></tr>
     </table>
 
     <h3>Step 4 — 競合URL（任意）</h3>
     <p>競合の上位記事URLを入力すると、構成・KWの参考に使われる。競合と差別化した構成にしたい場合や、上位記事の傾向を把握して網羅性を上げたい場合に入力する。</p>
+
+    <h3>👤 ユーザー認識インプット（任意）</h3>
+    <p>このKWで検索するユーザーの前提知識・思い込みを入力する。AIが説明の深さ・切り口を調整する。</p>
+    <pre><code>例：いびきで検索するユーザーはレーザー治療があまり浮かんでいない
+例：AGA治療 札幌で検索するユーザーはすでにオンライン診療を想定していそう</code></pre>
 
     <h3>Step 5 — スプシ書き込み先タブ</h3>
     <p>生成後にスプシへ書き込むタブを選択する。「（書き込まない）」のままにすると書き込みはスキップされる。</p>
@@ -455,18 +473,26 @@
     <table>
       <tr><th>機能</th><th>説明</th></tr>
       <tr>
-        <td>掲載院一覧コピー</td>
-        <td>ランキングブロックタブにそのまま貼り付けられる形式で院リストをコピーできる</td>
+        <td>ランキングブロック用データをダウンロード</td>
+        <td>ランキングブロックへの引き継ぎに必要なメインKW・サブKW・記事構成・選び方コンテンツ・掲載院一覧・案件詳細をまとめた1ファイルをダウンロードできる。ランキングブロックタブの「📤 本文作成データをアップロード」で読み込むと各欄に自動展開される</td>
       </tr>
       <tr>
-        <td>画像生成</td>
-        <td>スラッグ（ファイル名の接頭辞）を入力して実行。サイト設定の画像テンプレートを使用する。生成画像はGoogle Driveへ自動アップロードされる</td>
-      </tr>
-      <tr>
-        <td>履歴から復元</td>
-        <td>過去の生成結果をキャッシュから再表示・再書き込みできる。画像だけ追加生成したい場合もここから復元する</td>
+        <td>画像生成（2段階）</td>
+        <td>スラッグを入力 → <strong>「💡 Step1: 画像案を確認する」</strong>でGeminiがH2ごとの画像案を提案 → 生成する案をチェックボックスで選ぶ → <strong>「🎨 Step2: 選択した案を画像生成」</strong>で生成。生成後は各画像の確認・修正指示＋個別再生成・個別/全件Driveアップロードができる。サイト設定のデザインシステムを使用する</td>
       </tr>
     </table>
+
+    <h3>履歴・復元</h3>
+    <p>過去に入力した条件をスプシから呼び戻して再利用できる。以下の4つの入口がある。</p>
+    <table>
+      <tr><th>機能</th><th>説明</th></tr>
+      <tr><td>📋 {記事タイプ}の登録情報履歴（最新N件）</td><td>選択中の記事タイプのスプシ最新N件を一覧表示。各行の「📥 この入力条件を復元」で入力欄に展開する</td></tr>
+      <tr><td>行番号を直接指定して復元</td><td>履歴一覧内で行番号を入力して「この行を復元」を押すと、その行の条件を復元する（ノウハウ以外）</td></tr>
+      <tr><td>🔢 スプシの特定行から復元</td><td>タブと行番号を指定して任意の行から復元する</td></tr>
+      <tr><td>📥 入力を一時保存（スプシに書き込む）</td><td>記事を生成せず入力条件だけスプシに保存する。保存先の行番号が表示されるので、後から行番号指定で復元できる（ノウハウは非対応）</td></tr>
+    </table>
+    <div class="note"><strong>画像だけ追加生成したい場合</strong>履歴・行番号から条件を復元して再生成すると、生成結果の下に画像生成セクションが表示される。</div>
+    <div class="tip"><strong>画像ファイル名について</strong>生成画像のファイル名は「スラッグ＋意味のある単語（filename_key）」になる。連番ではなく内容を表す単語が入るため、後から識別しやすい。</div>
   </section>
 
   <!-- ───────────── ランキングブロック ───────────── -->
@@ -477,22 +503,31 @@
     <h3>操作手順</h3>
     <div class="steps">
       <div class="step"><div class="step-num">1</div><div class="step-body"><strong>サイト選択</strong>HTMLパーツ・テンプレート・リンク設定を読み込む</div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-body"><strong>テンプレート選択</strong>事前登録したクリニックブロックテンプレートを選択</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><strong>テンプレート選択</strong>事前登録した案件ブロックテンプレートを選択</div></div>
       <div class="step"><div class="step-num">3</div><div class="step-body"><strong>KW入力</strong>メインKW・サブKWを入力。クリニック紹介文のトーンに反映される</div></div>
-      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>選び方コンテンツを貼り付け</strong>記事内の評価軸テキストを貼り付ける。紹介文との整合性チェックに使われる</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>選び方コンテンツを貼り付け</strong>記事内の評価軸テキストを貼り付ける。紹介文との整合性チェックに使われる。<br>カスタム作成の「一括ダウンロード」に含まれているので、そちらから貼り付けると手間が省ける</div></div>
       <div class="step"><div class="step-num">5</div><div class="step-body">
         <strong>掲載案件リストを入力</strong>
-        カスタム作成の「掲載院一覧コピー」をそのまま貼り付けられる
+        カスタム作成の「一括ダウンロード」に含まれる掲載院一覧をそのまま貼り付けられる
         <pre><code>1. クリニック名A::https://example.com
 2. クリニック名B::https://example.com
 3. クリニック名C::https://example.com</code></pre>
       </div></div>
       <div class="step"><div class="step-num">6</div><div class="step-body">
-        <strong>各院の詳細を入力</strong>
-        院ごとに展開して公式URL・LP掲載プラン・料金データ・補足メモを入力。<br>
-        <strong>アフィリリンクについて：</strong>サイト設定でリンク設定が登録されている場合、商品DBに登録済みのアフィリファイル名から「アフィリURL候補」が自動表示される。確認して使う。
+        <strong>各案件の詳細を入力</strong>
+        案件ごとに展開して公式URL・リンクURL（LP等）・LP掲載プラン・料金データ・追加メモを入力。<br>
+        <strong>アフィリリンクについて：</strong>サイト設定でリンク設定が登録されている場合、入力したメタリフ名から「アフィリURL候補」が自動表示される。確認して使う。
       </div></div>
-      <div class="step"><div class="step-num">7</div><div class="step-body"><strong>「🚀 ランキングブロックを生成」を押す</strong></div></div>
+      <div class="step"><div class="step-num">7</div><div class="step-body">
+        <strong>記事タイプを選ぶ</strong>「地域」「比較」のラジオボタンで選択する。構成ロジックに反映される
+      </div></div>
+      <div class="step"><div class="step-num">8</div><div class="step-body">
+        <strong>追加指示＋意図を入力（任意・全院共通）</strong>「追加指示N（任意・全院共通）」と「追加指示の意図（任意）」のペアで、全案件に共通の指示を出せる。「＋ 追加指示を追加」で複数追加・「✕」で削除できる
+      </div></div>
+      <div class="step"><div class="step-num">9</div><div class="step-body">
+        <strong>見本ブロックHTMLを貼り付け（任意）</strong>他記事で生成済みの1案件分ブロックHTML全体を貼り付けると、基本情報の項目・料金テーブルの形式（タブ切り替えの有無等）・口コミ有無など、構成全体を参照して統一できる
+      </div></div>
+      <div class="step"><div class="step-num">10</div><div class="step-body"><strong>「🚀 全案件のブロックを生成」を押す</strong></div></div>
     </div>
 
     <h3>生成仕様</h3>
@@ -501,7 +536,9 @@
       <tr><td>1〜3位</td><td>4段落</td><td>CTAボタン付き・見出しリンクあり</td></tr>
       <tr><td>4位以下</td><td>2〜3段落</td><td>リンク・CTAなし</td></tr>
     </table>
-    <div class="tip"><strong>フォーマット統一</strong>1院目のHTMLを参照して後続院に渡すため、テーブル構造・小見出し位置・項目名が全院で自動的に揃う。</div>
+    <p>各段落は「1段落1主張」で書き分ける（1段落に複数の主張を詰め込まない）。</p>
+    <div class="note"><strong>見出しに順位（◯位）を含めるか</strong>見出しに「◯位」を入れる／入れないは、このタブではなく<strong>サイト設定タブの案件ブロックテンプレート側で設定</strong>する（「見出しに順位（◯位）を含める」のON/OFF）。</div>
+    <div class="tip"><strong>フォーマット統一</strong>1案件目のHTMLを参照して後続案件に渡すため、テーブル構造・小見出し位置・項目名が全案件で自動的に揃う。</div>
   </section>
 
   <!-- ───────────── 品質チェック ───────────── -->
@@ -518,7 +555,15 @@
         <span class="chip">読者視点チェック</span> 「1位を選ばない理由」を読者目線で探す
       </div></div>
       <div class="step"><div class="step-num">3</div><div class="step-body"><strong>メインKW・サブKWを入力</strong></div></div>
-      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>HTMLを貼り付けて「チェック実行」</strong></div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>タイトル（任意）・メタディスクリプション（任意）を入力</strong>入力するとタイトル文字数・メタ文字数もチェック対象に含まれる</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body"><strong>HTMLを貼り付けて「チェック実行」</strong></div></div>
+    </div>
+
+    <h3>見出し構成チェック</h3>
+    <p>本文チェックとは別に、見出しの階層崩れ（先祖返り）を検出する機能。同じタブの下部にある。</p>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>H2・H3の見出し一覧をテキストで貼り付ける</strong>「見出し構成を貼り付け」欄に貼る。メインKW・サブKW・記事タイプは上の入力欄を共用する</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><strong>「見出し構成チェック実行」を押す</strong>見出しの階層崩れ（H3がH2より上位に来てしまう等の先祖返り）や、見出し文字数・KW含有を確認できる</div></div>
     </div>
 
     <h3>主なチェック項目</h3>
@@ -566,29 +611,48 @@
   <section id="db">
     <h2><span class="badge">6</span>商品データベースタブ</h2>
     <p>記事に繰り返し登場するクリニック情報を事前に蓄積しておくことで、生成時のクロールをスキップして処理を高速化する。<strong>同ジャンルで量産する場合は必ずここに登録してから始める。</strong></p>
+    <div class="note"><strong>DBタイプの切替</strong>タブ上部の「DBタイプ」で<strong>クリニック系</strong>と<strong>ライフスタイル系</strong>を切り替える。扱うジャンルに合わせて選ぶ（それぞれ別のスプシに保存される）。</div>
 
-    <h3>登録方法</h3>
+    <h3>新規追加</h3>
     <div class="steps">
       <div class="step"><div class="step-num">1</div><div class="step-body"><strong>ジャンルを選択または新規作成</strong>例：AGA治療、クマ取り</div></div>
       <div class="step"><div class="step-num">2</div><div class="step-body">
-        <strong>クリニック名・ドメイン・アフィリファイル名を入力</strong><br>
-        アフィリファイル名（任意）はアフィリリンクの <code>*.html</code> 部分。サイト設定のリンク設定に登録したベースURLと組み合わせてアフィリURLを自動構築する。<br>
-        例：ベースURL <code>https://example.jp/web/</code> ＋ アフィリファイル名 <code>diet-dmm.html</code> → <code>https://example.jp/web/diet-dmm.html</code>
+        <strong>案件名・メインURLを入力</strong><br>
+        メインURL（ドメイン or パス指定）はクロールの起点。URLとLP画像のどちらか一方があれば登録できる。
       </div></div>
       <div class="step"><div class="step-num">3</div><div class="step-body">
-        <strong>情報取得方法を選択</strong><br>
-        <span class="chip">クロールして情報取得&amp;保存</span> 公式サイトから自動取得（推奨）<br>
-        <span class="chip">手動で情報を入力して保存</span> クロールできない場合に直接入力
+        <strong>追加クロールURL・取得指示（任意）</strong><br>
+        メインURLに加えて重点的にたどりたいページ（院一覧・料金ページ等）を1行1URLで指定できる。指定URLを起点に最大5ページたどる。<br>
+        「追加クロールの取得指示」に「各院の住所と診療時間を全都市分取ってきてほしい」のように書くと、抽出時に反映される。
       </div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">
+        <strong>LPスクリーンショット（任意）</strong><br>
+        LPの画像を添付すると、クーポン・料金・訴求軸などLP固有の情報もあわせて抽出される。URLなしでLP画像のみでも登録可能。
+      </div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body"><strong>「追加」を押す</strong>URL/LPの有無に応じて取得モード（クロールのみ／LP画像のみ／クロール＋LP）が自動判定される</div></div>
+    </div>
+    <p>アフィリファイル名は登録後、各案件の展開メニューから入力・保存できる。サイト設定のリンク設定に登録したベースURLと組み合わせてアフィリURLを自動構築する（例：ベースURL <code>https://example.jp/web/</code> ＋ アフィリファイル名 <code>diet-dmm.html</code> → <code>https://example.jp/web/diet-dmm.html</code>）。</p>
+
+    <h3>📄 記事から一括登録・更新</h3>
+    <p>修正済みの記事を貼り付けて、登場するクリニックをまとめてDBに登録・更新する機能。</p>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>記事テキスト（HTMLまたはプレーンテキスト）を貼り付ける</strong></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><strong>「🔍 クリニック名を自動抽出」を押す</strong>記事内のクリニック名が抽出され、編集欄に1行1院で入る。不要な院は削除・追加したい院は追記できる</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><strong>登録先ジャンルを選んで「📥 登録・更新する」を押す</strong></div></div>
     </div>
 
-    <h3>その他の操作</h3>
+    <h3>登録済み案件の更新・その他の操作</h3>
     <table>
       <tr><th>操作</th><th>説明</th></tr>
-      <tr><td>一括クロール</td><td>既存DBの全件を選択して一括再クロール。クリニック情報が古くなった時に使う</td></tr>
-      <tr><td>個別再クロール</td><td>院ごとに「🔄 再クロール」ボタンで最新情報に更新</td></tr>
-      <tr><td>削除</td><td>「🗑️ このジャンルから削除」でジャンル単位で削除</td></tr>
+      <tr><td>一括再取得（クロール）</td><td>ジャンル単位で「🔄 一括再取得」。そのジャンルの全件をまとめて再クロールする</td></tr>
+      <tr><td>🔄 再クロールのみ</td><td>案件ごとに公式サイトを再クロールして最新情報に更新</td></tr>
+      <tr><td>🖼️ LP更新のみ</td><td>添付したLPスクリーンショットの情報だけで更新</td></tr>
+      <tr><td>🔄🖼️ 両方</td><td>再クロールとLP更新を同時に行う</td></tr>
+      <tr><td>✨ 空欄を補完</td><td>取得済み情報の中の <code>[要確認]</code> フィールドを自動検出し、サイト内を重点的に探して埋める（未取得フィールドがある場合のみ押せる）</td></tr>
+      <tr><td>📋 貼り付けで更新</td><td>料金表・住所一覧など、直接貼り付けた情報から抽出して更新する（URL未登録でも使える）</td></tr>
+      <tr><td>🗑️ 削除</td><td>そのジャンルから案件を削除する</td></tr>
     </table>
+    <p>更新時も「追加クロールURL」「追加クロールの取得指示」「手動貼り付け情報」をあわせて指定できる。取得済み情報は展開メニュー内で直接編集して保存することもできる。</p>
 
     <div class="note"><strong>ジャンル名のマッチングについて</strong>記事生成時にジャンル名で完全一致検索 → 一致しない場合は全ジャンルを横断検索するフォールバックが働く。ジャンル名が多少異なっていてもヒットする。</div>
   </section>
@@ -596,25 +660,38 @@
   <!-- ───────────── サイト設定 ───────────── -->
   <section id="settings">
     <h2><span class="badge">7</span>サイト設定タブ</h2>
-    <p>サイトごとにHTMLパーツ・画像テンプレート・クリニックブロックテンプレートを登録する。<strong>登録しておくことで、そのサイトのデザインに合ったHTMLが自動的に出力されるようになる。</strong></p>
+    <p>サイトごとにHTMLパーツ・画像テンプレート・案件ブロックテンプレートを登録する。<strong>登録しておくことで、そのサイトのデザインに合ったHTMLが自動的に出力されるようになる。</strong></p>
 
-    <h3>1. 画像テンプレート</h3>
-    <p>記事内に自動生成する画像のデザインパターンを登録する。複数テンプレートがあると、H2/H3ごとに最適なものをAIが自動選択する。</p>
+    <h3>1. デザインシステム</h3>
+    <p>画像生成に使うサイトのビジュアルスタイルを登録する。カラーパレットとイラストスタイルを設定することで、一貫したデザインの画像を自動生成できる。</p>
+
+    <p>登録は2ステップ：</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <strong>参照画像をアップロード（推奨）</strong>
+          そのサイトの既存画像を1〜5枚アップロードして「DriveにアップしてGeminiでスタイル分析」を押す。Geminiが画像を自動解析してデザインシステムの各項目（線質・塗り・色調・余白感など）を埋める。分析結果を確認して「✅ この内容で適用」すると保存される。
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <strong>カラーパレット・スタイルを手動で補完（任意）</strong>
+          参照画像で入力されなかった項目（メインカラー・アクセントカラー等）をフォームで手動入力して「💾 デザインシステムを保存」で保存できる。
+        </div>
+      </div>
+    </div>
+
     <table>
-      <tr><th>追加方法</th><th>説明</th></tr>
-      <tr>
-        <td>mdファイルをアップ</td>
-        <td>画像生成プロンプトを記述した .md ファイルをアップすると自動登録される。複数ファイル同時アップ可</td>
-      </tr>
-      <tr>
-        <td>見本画像からカスタム生成（手動）</td>
-        <td>見本画像を複数枚アップロード。1枚ずつClaude Visionで解析し、変数付きのプロンプトテンプレートを自動生成する</td>
-      </tr>
+      <tr><th>設定項目</th><th>内容</th></tr>
+      <tr><td>カラーパレット</td><td>背景色・メインカラー・サブカラー・アクセントカラー・テキストカラー・警告色</td></tr>
+      <tr><td>イラストスタイル</td><td>イラストの様式・禁止要素・追加ノート</td></tr>
+      <tr><td>参照画像</td><td>Google Driveに保存され、画像生成時のスタイル参考として使われる（最大5枚）。登録済み画像は一覧表示・個別削除が可能</td></tr>
     </table>
-    <ul class="plain">
-      <li>追加保存 / 上書き保存をモード切替できる</li>
-      <li>登録済みテンプレートは一覧表示・個別削除が可能</li>
-    </ul>
+
+    <div class="note"><strong>参照画像ありの場合</strong>画像生成時に参照画像のスタイルを模倣した生成が行われる。なしの場合はデザインシステムのテキスト設定のみで生成する。</div>
+    <div class="tip"><strong>参照画像によるスタイル分析について</strong>分析結果はスタイル（線質・塗り・色調・余白感）に限定される。何を描くか（人物の有無等）は記事内容に応じて画像ごとに自動判断されるため、分析結果に「人物あり」と書かれていても人物不要な画像には人物が入らない。</div>
 
     <h3>2. HTMLパーツ</h3>
     <p>サイトのパーツ置き場HTML（.html）をアップロードすると、パーツ一覧を自動取り込みする。取り込み後に各パーツのHTMLパターンを直接編集できる。</p>
@@ -626,6 +703,19 @@
     </table>
     <div class="warn"><strong>注意</strong>HTMLパターンが未設定（空欄）のコンポーネントは自動的に除外される。登録後は必ずHTMLパターンが入力されていることを確認すること。</div>
 
+    <h3>3. 案件ブロックテンプレート</h3>
+    <p>ランキングブロックタブで使うテンプレートをサイトごとに複数登録できる。</p>
+    <table>
+      <tr><th>設定項目</th><th>内容</th></tr>
+      <tr><td>見出しタイプ</td><td>①H3（クリニック名＋○○院のみ）／ ②H3（クリニック名＋○○院＋コメント）／ ③小見出し（クリニック名＋○○院のみ）／ ④専用パーツ（コメント先行＋クリニック名＋○○院）</td></tr>
+      <tr><td>コンポーネント順序</td><td>表示する要素と順序を数字で指定（0＝非表示）。スペック画像・クリニック紹介文・おすすめポイント（箇条書き）・料金テーブル・口コミ・マップ画像・基本情報テーブル・CTAボタン（上位3院のみ）</td></tr>
+      <tr><td>基本情報テーブルの項目</td><td>住所・最寄り駅・診療時間・休診日・支払方法・配送情報・割引情報・院数・公式サイトなどをチェックで選択</td></tr>
+      <tr><td>基本情報テーブルのHTMLサンプル欄</td><td>基本情報テーブルのHTML雛形を貼り付けて形式を指定できる</td></tr>
+      <tr><td>見出しに順位（◯位）を含める</td><td>ON/OFF。見出しに「◯位」を入れるかどうかをここで設定する（ランキングブロックタブ側ではなくこちら）</td></tr>
+      <tr><td>料金テーブルHTMLテンプレート</td><td>変数付きのHTMLテンプレートを複数パターン登録可能</td></tr>
+      <tr><td>上位3件のリンク設置箇所</td><td>見出し案件名・スペック画像・CTAボタンのどこにリンクを入れるか</td></tr>
+    </table>
+
     <h3>4. リンク設定</h3>
     <p>アフィリリンク・外部リンクのルールを登録する。登録するとランキングブロック生成時のプロンプトに自動反映される。</p>
     <table>
@@ -635,45 +725,20 @@
       <tr><td>形式コード</td><td>リンク形式をコンマ区切りで指定。<code>bt</code>=ボタン / <code>bn</code>=バナー / <code>txt</code>=テキスト</td></tr>
     </table>
     <div class="note"><strong>パラメータの形式</strong>生成されるアフィリリンクのパラメータは <code>?{スラッグ}_{場所}_{形式}</code> 形式で自動構築される。例：<code>?diet-dmmrybelsus_rank_bn</code><br>リンクには固定で <code>target="_blank" rel="nofollow noopener noreferrer"</code> が付く。</div>
-
-    <h3>3. クリニックブロックテンプレート</h3>
-    <p>ランキングブロックタブで使うテンプレートをサイトごとに複数登録できる。</p>
-    <table>
-      <tr><th>設定項目</th><th>内容</th></tr>
-      <tr><td>見出し形式</td><td>H3（コメントなし）/ H3（コメント付き）/ 小見出しパーツ / 専用パーツ</td></tr>
-      <tr><td>コンポーネント構成</td><td>表示する要素と順序（スペック画像・紹介文・料金テーブル・口コミ・マップ・基本情報・CTAボタン）</td></tr>
-      <tr><td>基本情報テーブルの項目</td><td>住所・最寄り駅・診療時間・休診日・支払方法など</td></tr>
-      <tr><td>料金テーブルHTML</td><td>変数付きのHTMLテンプレートを複数パターン登録可能</td></tr>
-      <tr><td>上位3院のリンク配置</td><td>見出し・スペック画像・CTAボタンのどこにリンクを入れるか</td></tr>
-    </table>
   </section>
 
   <hr>
 
-  <!-- ───────────── 画像生成タブ ───────────── -->
+  <!-- ───────────── 画像生成について ───────────── -->
   <section id="image-gen">
-    <h2><span class="badge">8</span>画像生成タブ</h2>
-    <p>記事HTMLを貼り付けてH2ごとに画像を一括生成し、Google Driveへアップロードする。<strong>記事公開前に画像をまとめて作りたいときに使う。</strong>カスタム作成タブ内の画像生成と異なり、記事生成なしで画像だけ独立して実行できる。</p>
-
-    <h3>操作手順</h3>
-    <div class="steps">
-      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>サイトを選択</strong>画像テンプレートが登録済みのサイトを選ぶ（未登録のサイトは実行不可）</div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-body"><strong>スラッグを入力</strong>ファイル名の接頭辞になる。例：<code>aga-treatment-tokyo</code></div></div>
-      <div class="step"><div class="step-num">3</div><div class="step-body"><strong>記事HTMLを貼り付ける</strong>生成済みの記事HTML全文を貼り付ける。H2見出しを自動抽出してH2ごとに最適なプロンプトを選択する</div></div>
-      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>「🖼️ 画像を生成」を押す</strong>プロンプト生成 → 画像生成の順で処理される</div></div>
-    </div>
-
-    <h3>生成後にできること</h3>
+    <h2><span class="badge">8</span>画像生成について</h2>
+    <p>画像は通常、<strong>専用の画像生成ツールで作成する</strong>。このツール内の画像生成は補助的な位置づけで、以下の2経路に残している。独立していた「画像生成タブ」は廃止した。</p>
     <table>
-      <tr><th>操作</th><th>説明</th></tr>
-      <tr><td>画像プレビュー</td><td>H2ごとに生成画像をプレビュー表示。ファイル名・altテキスト付き</td></tr>
-      <tr><td>プロンプト編集</td><td>各画像のプロンプトをその場で編集できる</td></tr>
-      <tr><td>修正指示＋再生成</td><td>「修正指示」欄にテキストで指示を入れて「🔄 再生成」で個別に作り直せる<br>例：「もっと明るいトーンで」「比較表レイアウトで」</td></tr>
-      <tr><td>個別アップロード</td><td>「⬆️ アップロード」で1枚ずつDriveにアップ</td></tr>
-      <tr><td>全件アップロード</td><td>「⬆️ 全件アップロード」で全画像を一括Driveアップ</td></tr>
+      <tr><th>経路</th><th>説明</th></tr>
+      <tr><td>カスタム作成タブ内</td><td>記事生成後に手動2段階で実行する。「💡 Step1で案を確認 → 案を選んで 🎨 Step2で生成」。生成後の確認・修正指示＋再生成・Driveアップロードができる（詳細はカスタム作成タブの項を参照）</td></tr>
+      <tr><td>一括作成タブのトグル</td><td>「画像も一緒に生成する」チェックボックス。<strong>既定OFF。</strong>ONにすると記事と同時に各H2の画像を自動生成・Driveアップロードする</td></tr>
     </table>
-
-    <div class="note"><strong>カスタム作成タブ内の画像生成との違い</strong>カスタム作成タブの画像生成は記事生成直後に同一セッションで実行するもの。この画像生成タブは「すでに記事HTMLがある・別のタイミングで画像だけ作る」場面で使う。機能は同等。</div>
+    <div class="note"><strong>既定は画像OFF</strong>記事作成と画像生成を分けることで、記事を作り直したときに画像を無駄に再生成しない。画像は基本的に画像生成ツール側で作る。</div>
   </section>
 
   <hr>
@@ -716,13 +781,6 @@
       <div class="flow-step">院リストを貼り付け</div><div class="flow-arrow">→</div>
       <div class="flow-step">各院の詳細入力</div><div class="flow-arrow">→</div>
       <div class="flow-step">生成</div>
-    </div>
-
-    <h3>画像だけ生成する（既存記事・別タイミング）</h3>
-    <div class="flow">
-      <div class="flow-step">🖼️ 画像生成タブを開く</div><div class="flow-arrow">→</div>
-      <div class="flow-step">サイト・スラッグ・記事HTMLを入力</div><div class="flow-arrow">→</div>
-      <div class="flow-step">生成・確認・Drive アップロード</div>
     </div>
 
     <h3>AIっぽい文章を直す</h3>

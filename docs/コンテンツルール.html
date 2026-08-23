@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLUS記事 コンテンツルール &amp; 公開前チェックリスト</title>
+<style>
+  :root {
+    --main: #3b4fa8;
+    --accent: #5c6fca;
+    --light: #eef1fb;
+    --border: #d0d6f0;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --ok: #16a34a;
+    --ng: #dc2626;
+    --warn: #d97706;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Noto Sans JP", "Hiragino Sans", "Meiryo", sans-serif;
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text);
+    background: #f8f9fc;
+  }
+
+  .wrapper { display: flex; min-height: 100vh; }
+
+  nav {
+    width: 210px;
+    flex-shrink: 0;
+    background: var(--main);
+    color: #fff;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 28px 0 40px;
+  }
+  nav .logo {
+    font-size: 13px;
+    font-weight: 700;
+    padding: 0 18px 18px;
+    border-bottom: 1px solid rgba(255,255,255,.2);
+    margin-bottom: 14px;
+    line-height: 1.4;
+  }
+  nav .logo span { display: block; font-size: 10px; font-weight: 400; opacity: .65; margin-top: 3px; }
+  nav ul { list-style: none; }
+  nav ul li a {
+    display: block;
+    padding: 6px 18px;
+    color: rgba(255,255,255,.85);
+    text-decoration: none;
+    font-size: 12.5px;
+    transition: background .15s;
+  }
+  nav ul li a:hover { background: rgba(255,255,255,.12); color: #fff; }
+  nav ul li.group {
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.45);
+    padding: 14px 18px 4px;
+    font-weight: 700;
+  }
+
+  main {
+    flex: 1;
+    max-width: 820px;
+    padding: 48px 52px 80px;
+  }
+
+  section { margin-bottom: 52px; scroll-margin-top: 24px; }
+
+  h1 { font-size: 22px; font-weight: 700; color: var(--main); margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 32px; padding-bottom: 18px; border-bottom: 2px solid var(--border); }
+
+  h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--main);
+    margin-bottom: 12px;
+    padding: 9px 14px;
+    background: var(--light);
+    border-left: 4px solid var(--main);
+    border-radius: 0 6px 6px 0;
+  }
+  h2 .badge {
+    display: inline-block;
+    background: var(--main);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 20px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  h3 {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 20px 0 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+
+  p { margin-bottom: 10px; font-size: 13.5px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 16px;
+    font-size: 13px;
+  }
+  th { background: var(--main); color: #fff; font-weight: 600; padding: 8px 12px; text-align: left; }
+  td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: var(--light); }
+  tr:last-child td { border-bottom: none; }
+
+  .note { background: var(--light); border-left: 3px solid var(--accent); border-radius: 6px; padding: 11px 14px; margin: 10px 0; font-size: 13px; line-height: 1.6; }
+  .warn { background: #fffbeb; border-left: 3px solid var(--warn); border-radius: 6px; padding: 11px 14px; margin: 10px 0; font-size: 13px; line-height: 1.6; }
+  .note strong, .warn strong { display: block; margin-bottom: 3px; font-size: 11px; letter-spacing: .05em; }
+
+  /* OK/NGサンプル */
+  .example-pair { margin: 10px 0 16px; }
+  .ex { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; font-size: 13px; }
+  .ex-label {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-top: 2px;
+    white-space: nowrap;
+  }
+  .ex-label.ok { background: #dcfce7; color: var(--ok); }
+  .ex-label.ng { background: #fee2e2; color: var(--ng); }
+  .ex-body { line-height: 1.6; }
+
+  /* 禁止ワードタグ */
+  .ban-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
+  .ban {
+    display: inline-block;
+    background: #fee2e2;
+    color: var(--ng);
+    border: 1px solid #fca5a5;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  /* チェックリスト */
+  .checklist { list-style: none; padding-left: 0; margin: 8px 0 16px; }
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 10px;
+    border-bottom: 1px solid #f0f2fa;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    accent-color: var(--main);
+    cursor: pointer;
+  }
+
+  .checklist-section {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .checklist-section h3 {
+    border-bottom: none;
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--main);
+    background: var(--light);
+    padding: 5px 10px;
+    border-radius: 4px;
+  }
+
+  /* PREP図 */
+  .prep-flow { display: flex; gap: 0; margin: 10px 0 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .prep-step { flex: 1; padding: 10px 12px; background: #fff; border-right: 1px solid var(--border); font-size: 12.5px; }
+  .prep-step:last-child { border-right: none; }
+  .prep-step .label { font-weight: 700; color: var(--main); font-size: 11px; margin-bottom: 3px; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+  @media (max-width: 720px) {
+    nav { display: none; }
+    main { padding: 24px 20px 60px; }
+  }
+
+  @media print {
+    nav { display: none; }
+    main { padding: 20px; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<nav>
+  <div class="logo">PLUS 記事ルール<span>コンテンツルール &amp; 公開前チェック</span></div>
+  <ul>
+    <li class="group">基礎知識</li>
+    <li><a href="#purpose">記事の目的と構成</a></li>
+    <li><a href="#kw-types">KW・記事タイプ・カニバリ</a></li>
+    <li><a href="#benefit">ベネフィットとは</a></li>
+    <li><a href="#prep">PREP法・SoWhat</a></li>
+    <li class="group">リンク・画像</li>
+    <li><a href="#links">内部リンク・alt・参考文献</a></li>
+    <li><a href="#link-html">リンクのHTML記述</a></li>
+    <li class="group">禁止表現</li>
+    <li><a href="#ban-words">禁止ワード一覧</a></li>
+    <li><a href="#medical-ban">医療広告NG表現</a></li>
+    <li><a href="#ai-fix">AI表現の直し方</a></li>
+    <li class="group">公開前チェック</li>
+    <li><a href="#check-content">コンテンツ確認</a></li>
+    <li><a href="#check-publish">入稿・公開設定</a></li>
+  </ul>
+</nav>
+
+<main>
+
+  <h1>PLUS記事 コンテンツルール &amp; 公開前チェックリスト</h1>
+  <p class="subtitle">記事作成・納品前に必ず確認してください。疑問があれば担当者に確認してから進めてください。</p>
+
+  <!-- ────────────── 記事の目的と構成 ────────────── -->
+  <section id="purpose">
+    <h2><span class="badge">1</span>記事の目的と基本構成</h2>
+    <p>PLUSの記事は、検索してきたユーザーの悩みを解決し、次に取るべき行動を判断できる状態にすることが目的です。</p>
+    <p>記事全体を通じて <strong>「悩み → 解決 → 行動」</strong> の流れを意識して書いてください。</p>
+
+    <h3>記事の基本構成</h3>
+    <table>
+      <tr><th>パーツ</th><th>役割</th></tr>
+      <tr><td>記事タイトル</td><td>メインKWを前半に置き、記事の内容が一目でわかる表現にする</td></tr>
+      <tr><td>記事冒頭の導入文</td><td>ベネフィット（読後に得られる状態）を提示し、読み進める理由をつくる</td></tr>
+      <tr><td>H2 + 導入文 + H3×3〜4</td><td>ユーザーが知りたい順に並べる。H2直下に1〜2文の導入を入れる</td></tr>
+      <tr><td>まとめ（H2として設置）</td><td>「まとめ」という見出し名は使わない。記事全体の結論と次の行動を示す</td></tr>
+      <tr><td>メタディスクリプション</td><td>80〜100文字。KWを含み、クリックしたくなる内容にする</td></tr>
+    </table>
+
+    <div class="note"><strong>KW構成の基本</strong>メインKW 1つ、サブKW 2つを設定します。メインKW・サブKWの検索意図に対応するH2を必ず設置してください。</div>
+  </section>
+
+  <!-- ────────────── KW・記事タイプ ────────────── -->
+  <section id="kw-types">
+    <h2><span class="badge">2</span>KWと記事タイプ</h2>
+    <p>記事作成前に、担当者から指定される「記事タイプ」と「KW」の意味を理解してください。</p>
+
+    <h3>記事タイプ</h3>
+    <table>
+      <tr><th>タイプ</th><th>概要</th><th>KWの例</th></tr>
+      <tr><td><strong>ノウハウ</strong></td><td>施術・症状・成分などの情報を解説する。クリニック紹介なし。ツールの一括作成で生成</td><td>「AGAとは」「育毛剤 効果」</td></tr>
+      <tr><td><strong>一般（比較）</strong></td><td>複数クリニックをランキング形式で比較紹介。送客が主目的</td><td>「AGA クリニック おすすめ」「クマ取り 比較」</td></tr>
+      <tr><td><strong>地域</strong></td><td>地域絞り込みKW。その地域のクリニックを紹介する</td><td>「AGA 大阪」「医療脱毛 渋谷」</td></tr>
+      <tr><td><strong>商標</strong></td><td>特定クリニック・ブランドを探しているユーザーへの記事</td><td>「TCB 料金」「湘南美容クリニック AGA」</td></tr>
+    </table>
+
+    <h3>メインKW・サブKW</h3>
+    <table>
+      <tr><th>種類</th><th>役割</th><th>設置場所</th></tr>
+      <tr>
+        <td><strong>メインKW</strong></td>
+        <td>この記事で上位表示させたい主軸のKW。担当者から1つ指定される</td>
+        <td>タイトル前半・冒頭文前半・H2前半に必ず含める</td>
+      </tr>
+      <tr>
+        <td><strong>サブKW</strong></td>
+        <td>メインKWと検索意図が近いKW。担当者からカンマ区切りで指定される</td>
+        <td>各サブKWに対応するH2を最低1つ設置する</td>
+      </tr>
+    </table>
+    <div class="note"><strong>KWを詰め込まない</strong>メインKW・サブKWは規定の箇所に自然に含めます。不自然にKWを繰り返すとSEO評価が下がります。</div>
+
+    <h3>カニバリゼーション（共食い）に注意</h3>
+    <p>カニバリゼーションとは、同じサイト内で似たKWを狙う記事が複数存在することで、Googleがどちらを上位表示すべきか判断できなくなる現象です。結果として両方の記事の順位が下がります。</p>
+    <table>
+      <tr><th>確認方法</th><th>内容</th></tr>
+      <tr><td>Google検索</td><td><code>site:サイトドメイン メインKW</code> で検索し、同テーマの記事が既に存在しないか確認する</td></tr>
+      <tr><td>サーチコンソール</td><td>既存記事のクエリ一覧を確認し、追加しようとするKWを既存記事が拾っていないか確認する</td></tr>
+    </table>
+    <div class="warn"><strong>新規記事を追加する前に必ず確認</strong>同テーマ・類似KWの記事が既にある場合は、新規追加ではなく既存記事のリライトを検討してください。</div>
+  </section>
+
+  <!-- ────────────── ベネフィット ────────────── -->
+  <section id="benefit">
+    <h2><span class="badge">3</span>ベネフィットとは</h2>
+    <p>ベネフィットとは「この記事を読んだ後、どんな良い状態になれるか」を伝えることです。単なる情報の説明にとどまらず、読後の状態変化まで書きます。</p>
+    <p>冒頭の導入文と、各H2直下の導入文で必ず使います。</p>
+
+    <h3>NG vs OK の例</h3>
+    <div class="example-pair">
+      <div class="ex"><span class="ex-label ng">NG</span><span class="ex-body">二重整形の料金プランを詳しく解説します。</span></div>
+      <div class="ex"><span class="ex-label ok">OK</span><span class="ex-body">広告には載っていない麻酔代やアフターケアを含めた総額がわかります。予算オーバーを防いで賢くクリニックを選ぶ判断材料にしてください。</span></div>
+    </div>
+    <div class="example-pair">
+      <div class="ex"><span class="ex-label ng">NG</span><span class="ex-body">ICLで失敗する原因についてまとめました。</span></div>
+      <div class="ex"><span class="ex-label ok">OK</span><span class="ex-body">手術の「リスク」だけでなく、失敗を避けるためのクリニック選びの共通点を解説します。不安を解消して納得した状態で手術を受けることができます。</span></div>
+    </div>
+
+    <div class="warn"><strong>冒頭文のNG表現（使用禁止）</strong>
+      「この記事では〜」「今回は〜」「こちらでは〜」「ここでは〜」「内容を理解することで〜」「〇〇に悩んでいませんか？」</div>
+
+    <h3>未来の描き方（目指すレベル）</h3>
+    <table>
+      <tr><th>レベル</th><th>例</th></tr>
+      <tr><td>❌ 知識止まり</td><td>「情報がわかります」</td></tr>
+      <tr><td>△ 判断止まり</td><td>「自分に合う選択ができるようになります」</td></tr>
+      <tr><td>◎ 行動後の状態</td><td>「朝の体の重だるさが軽減しやすくなります」「翌日のパフォーマンスを保ちやすくなります」</td></tr>
+    </table>
+  </section>
+
+  <!-- ────────────── PREP ────────────── -->
+  <section id="prep">
+    <h2><span class="badge">4</span>PREP法・SoWhat</h2>
+    <p>本文は必ずPREP構造で書き、最後にSoWhatで締めます。</p>
+
+    <div class="prep-flow">
+      <div class="prep-step"><div class="label">Point（主張）</div>結論・主張を1文で述べる</div>
+      <div class="prep-step"><div class="label">Reason（理由）</div>なぜそう言えるかを説明する</div>
+      <div class="prep-step"><div class="label">Example（具体例）</div>根拠・数値・事実で裏付ける</div>
+      <div class="prep-step"><div class="label">SoWhat（行動）</div>読者が次に取る行動を示す</div>
+    </div>
+
+    <h3>SoWhatのルール</h3>
+    <p>説明で終わらず、読者が次に取る行動を示してください。各H3に必ず入れます。H2ブロックの最後のH3末尾には、H2全体のSoWhatも含めます。</p>
+
+    <div class="example-pair">
+      <div class="ex"><span class="ex-label ng">NG（説明止まり）</span><span class="ex-body">埋没法は元に戻る可能性があります。</span></div>
+      <div class="ex"><span class="ex-label ok">OK（行動まで）</span><span class="ex-body">埋没法は元に戻る可能性があるため、医師の診察を受けて自分に合った施術を選ぶことが大切です。</span></div>
+    </div>
+
+    <h3>チェックポイント</h3>
+    <ul class="checklist">
+      <li><input type="checkbox"> 最初のPoint（主張）の繰り返しではなく、一段階具体化された内容になっているか</li>
+      <li><input type="checkbox"> 「次は自分は何をしたらよいか」が具体的にイメージできるか</li>
+    </ul>
+  </section>
+
+  <hr>
+
+  <!-- ────────────── 内部リンク・関連記事・alt ────────────── -->
+  <section id="links">
+    <h2><span class="badge">5</span>リンク・画像の基礎知識</h2>
+
+    <h3>内部リンクの考え方</h3>
+    <p>内部リンクとは、同サイト内の別記事へのリンクです。ユーザーの回遊を促し、サイト全体のSEO評価にも貢献します。設置先は自分で判断してください。</p>
+    <table>
+      <tr><th>項目</th><th>ルール</th></tr>
+      <tr><td>リンク先の選び方</td><td>本文中で触れたテーマに関連する同サイト内記事を選ぶ。カニバリしない記事（KWが被らない）を選ぶ</td></tr>
+      <tr><td>設置場所</td><td>本文中の自然な文脈に設置する。「詳しくはこちら」だけのリンクはNG</td></tr>
+      <tr><td>アンカーテキスト</td><td>リンク先記事のメインKWを含む言葉にする。「こちら」「詳細」「詳しくはこちら」はNG</td></tr>
+      <tr><td>設置数</td><td>1記事あたり2〜4箇所程度。過剰なリンクはNG</td></tr>
+    </table>
+    <div class="example-pair">
+      <div class="ex"><span class="ex-label ng">NG</span><span class="ex-body">AGAの費用については<u>詳しくはこちら</u>をご覧ください。（抽象的すぎる）</span></div>
+      <div class="ex"><span class="ex-label ng">NG</span><span class="ex-body">クリニック別の費用相場は<u>「AGA治療 費用 クリニック比較」</u>で解説しています。（KWそのままはスパム判定リスクあり）</span></div>
+      <div class="ex"><span class="ex-label ok">OK</span><span class="ex-body">クリニック別の費用については<u>各院のAGA費用比較</u>でまとめています。（内容を端的に表す自然な言葉）</span></div>
+    </div>
+
+    <h3>関連記事の考え方</h3>
+    <p>記事末尾（まとめH2の後）に設置します。設置先は自分で判断してください。選ぶ基準は以下の通りです。</p>
+    <table>
+      <tr><th>選ぶ基準</th><th>内容</th></tr>
+      <tr><td>テーマの補完関係</td><td>この記事を読んだ後に次に知りたくなるテーマの記事を選ぶ</td></tr>
+      <tr><td>同ジャンル・近いKW</td><td>同サイト内の同ジャンル記事から選ぶ。カニバリしない（KWが被らない）記事を選ぶ</td></tr>
+    </table>
+
+    <h3>参考文献・外部リンクの必要性</h3>
+    <p>統計データ・医学的な数値・臨床結果を記載する場合は、必ず一次情報源のURLをセットで記載してください。外部リンクは記事の信頼性を高め、医療広告ガイドラインへの対応にもなります。</p>
+    <table>
+      <tr><th>使える参照元</th><th>使えない参照元</th></tr>
+      <tr><td>クリニック公式サイト・厚生労働省HP・専門学会の発表資料</td><td>個人ブログ・Yahoo!知恵袋・他社まとめサイト・日付不明の記事</td></tr>
+    </table>
+
+    <h3>altテキストの考え方</h3>
+    <p>altは画像の内容を検索エンジンとスクリーンリーダーに伝えるテキストです。画像が表示できない場合の代替テキストにもなります。</p>
+    <table>
+      <tr><th>ルール</th><th>例</th></tr>
+      <tr><td>画像の内容を具体的に説明する</td><td>alt="AGA治療の料金をクリニック別に比較した表"</td></tr>
+      <tr><td>記事のKWを自然に含める（詰め込みNG）</td><td>alt="医療脱毛クリニックの施術室の様子"</td></tr>
+      <tr><td>装飾画像・区切り画像は空にする</td><td>alt=""</td></tr>
+      <tr><td>「〜の画像」「〜の写真」は不要</td><td>✕ alt="AGAの画像"　→　✓ alt="AGA（男性型脱毛症）の進行段階図"</td></tr>
+    </table>
+  </section>
+
+  <!-- ────────────── リンクHTML記述 ────────────── -->
+  <section id="link-html">
+    <h2><span class="badge">6</span>リンクのHTML記述ルール</h2>
+
+    <h3>アフィリエイトリンク（案件リンク）</h3>
+    <p>案件へのリンクは記事内にASPリンクを直接設置しません。必ずメタリフ（meta refresh）ページを経由して設置します。</p>
+    <table>
+      <tr><th>属性</th><th>記述値</th><th>理由</th></tr>
+      <tr><td>rel</td><td><code>noopener noreferrer nofollow</code></td><td>セキュリティ対策・リファラ送信防止・リンク評価を渡さない</td></tr>
+      <tr><td>target</td><td><code>_blank</code></td><td>別タブで開く</td></tr>
+    </table>
+    <pre style="background:#1e1e3a;color:#c8d3f5;padding:14px 16px;border-radius:8px;font-size:12.5px;margin:10px 0;font-family:'Consolas','Monaco',monospace;overflow-x:auto;">&lt;a href="/metaref/[メタリフ名]/" rel="noopener noreferrer nofollow" target="_blank"&gt;クリニック名&lt;/a&gt;</pre>
+
+    <h3>メタリフ（meta refresh）について</h3>
+    <p>メタリフとは、ASPリンクへのリダイレクト専用ページです。記事内には「自サイトのメタリフページURL」へのリンクを設置し、そこからASPへ転送します。</p>
+    <table>
+      <tr><th>項目</th><th>内容</th></tr>
+      <tr><td>設置対象の院</td><td>上位3位のクリニック（CTAボタンを設置する院）のみ。4位以下は設置しない</td></tr>
+      <tr><td>ファイル名・設置場所</td><td>サイトごとに担当者（三浦）から指定される。勝手に決めない</td></tr>
+    </table>
+    <p>メタリフページのHTMLは以下のコードを使用します。</p>
+    <pre style="background:#1e1e3a;color:#c8d3f5;padding:14px 16px;border-radius:8px;font-size:12.5px;margin:10px 0;font-family:'Consolas','Monaco',monospace;overflow-x:auto;">&lt;!DOCTYPE html&gt;
+&lt;html lang="ja"&gt;&lt;head&gt;
+&lt;meta charset="UTF-8"&gt;
+&lt;meta http-equiv="refresh" content="0;url=[ASPのリンクURL]"&gt;
+&lt;/head&gt;
+&lt;body&gt;&lt;/body&gt;
+&lt;/html&gt;</pre>
+
+    <h3>外部リンク（参考文献・官公庁・クリニック公式等）</h3>
+    <p>信頼できるサイトへのリンクはnofollowを付けません。</p>
+    <table>
+      <tr><th>属性</th><th>記述値</th></tr>
+      <tr><td>rel</td><td><code>noopener noreferrer</code>（nofollowは不要）</td></tr>
+      <tr><td>target</td><td><code>_blank</code></td></tr>
+    </table>
+    <pre style="background:#1e1e3a;color:#c8d3f5;padding:14px 16px;border-radius:8px;font-size:12.5px;margin:10px 0;font-family:'Consolas','Monaco',monospace;overflow-x:auto;">&lt;a href="https://example.com" rel="noopener noreferrer" target="_blank"&gt;参照テキスト&lt;/a&gt;</pre>
+
+    <h3>パラメータのルール</h3>
+    <p>アフィリリンク（メタリフURL）には計測用パラメータを付与します。どのページのどの位置のどの種類のリンクから発生したか追跡できます。</p>
+    <p><strong>形式：</strong><code>?記事スラッグ_コンテンツ位置_リンクタイプ</code></p>
+    <table>
+      <tr><th>要素</th><th>値</th><th>説明</th></tr>
+      <tr><td>記事スラッグ</td><td><code>diet-rybelsus</code> など</td><td>リンクを設置した記事のスラッグ</td></tr>
+      <tr><td>コンテンツ位置</td><td><code>osusume</code></td><td>おすすめ商品紹介見出し内</td></tr>
+      <tr><td></td><td><code>osusume2</code></td><td>再訴求BOX内</td></tr>
+      <tr><td></td><td><code>hikaku</code></td><td>比較表・比較セクション内</td></tr>
+      <tr><td></td><td><code>matome</code></td><td>記事末尾（まとめ）</td></tr>
+      <tr><td>リンクタイプ</td><td><code>bt</code></td><td>ボタン</td></tr>
+      <tr><td></td><td><code>bn</code></td><td>画像リンク</td></tr>
+      <tr><td></td><td><code>txt</code></td><td>テキストリンク</td></tr>
+    </table>
+    <pre style="background:#1e1e3a;color:#c8d3f5;padding:14px 16px;border-radius:8px;font-size:12.5px;margin:10px 0;font-family:'Consolas','Monaco',monospace;overflow-x:auto;">&lt;!-- おすすめ紹介見出し内のボタン --&gt;
+&lt;a href="/metaref/rybelsus/?diet-rybelsus_osusume_bt" rel="noopener noreferrer nofollow" target="_blank"&gt;公式サイトはこちら&lt;/a&gt;
+
+&lt;!-- 再訴求BOX内のボタン --&gt;
+&lt;a href="/metaref/rybelsus/?diet-rybelsus_osusume2_bt" rel="noopener noreferrer nofollow" target="_blank"&gt;公式サイトはこちら&lt;/a&gt;
+
+&lt;!-- まとめ部分のテキストリンク --&gt;
+&lt;a href="/metaref/rybelsus/?diet-rybelsus_matome_txt" rel="noopener noreferrer nofollow" target="_blank"&gt;リベルサスの公式サイト&lt;/a&gt;</pre>
+    <div class="note"><strong>パラメータの仕組み</strong><code>?</code>以降はURLとしては無視されるため、ユーザーは同じページに飛ぶ。ただしアクセス解析ツールには別URLとして記録されるため、リンクごとの発生を計測できる。</div>
+  </section>
+
+  <hr>
+
+  <!-- ────────────── 禁止ワード ────────────── -->
+  <section id="ban-words">
+    <h2><span class="badge">7</span>禁止ワード一覧</h2>
+    <p>以下のワード・表現は本文・見出し・冒頭文すべてで使用禁止です。</p>
+
+    <h3>指示語・参照語（こそあど）</h3>
+    <div class="ban-list">
+      <span class="ban">この</span><span class="ban">その</span><span class="ban">ここ</span><span class="ban">そこ</span>
+      <span class="ban">これ</span><span class="ban">次</span><span class="ban">以上</span><span class="ban">以下</span>
+    </div>
+
+    <h3>記事参照表現</h3>
+    <div class="ban-list">
+      <span class="ban">この記事</span><span class="ban">本記事</span><span class="ban">このブロック</span>
+      <span class="ban">先ほど</span><span class="ban">この後</span><span class="ban">上記</span><span class="ban">下記</span>
+      <span class="ban">ページ上部</span><span class="ban">記事冒頭</span><span class="ban">前述の</span>
+      <span class="ban">次のセクション</span><span class="ban">〜で紹介します</span><span class="ban">〜をご覧ください</span>
+    </div>
+
+    <h3>橋渡し文・不要な接続詞</h3>
+    <div class="ban-list">
+      <span class="ban">つまり</span><span class="ban">それでは</span>
+      <span class="ban">以下で詳しく解説します</span><span class="ban">次の項目をご確認ください</span>
+    </div>
+
+    <h3>推量・疑問形（タイトル・見出し・本文すべて禁止）</h3>
+    <div class="ban-list">
+      <span class="ban">〜でしょう</span><span class="ban">〜かもしれません</span><span class="ban">〜ではないでしょうか</span>
+    </div>
+    <p style="font-size:12.5px; color:var(--muted); margin-top:4px;">→ 言い切り（「〜です」「〜してください」）に変換してください。</p>
+
+    <h3>見出し内の記号</h3>
+    <table>
+      <tr><th>見出し</th><th>使用可</th><th>使用禁止</th></tr>
+      <tr><td>H1（タイトル）</td><td>「！」「補足の（）」のみ</td><td>？・・・｜：などの区切り記号すべて</td></tr>
+      <tr><td>H2・H3</td><td>「！」「？」「補足の（）」</td><td>・・・｜：などの区切り記号</td></tr>
+    </table>
+
+    <h3>その他の禁止事項</h3>
+    <table>
+      <tr><th>項目</th><th>ルール</th></tr>
+      <tr><td>「」（隅付き括弧）の強調使用</td><td>強調は太字・マーカーで行うため、文中の「」は禁止</td></tr>
+      <tr><td>自分語り・共感の強要</td><td>「〜ですよね」「〜と思いませんか」など読者への同意強要は禁止</td></tr>
+      <tr><td>削除対象の文</td><td>他の記事・他のジャンルでも通じる一般論の一文、主語がない文、主張のない短い一文</td></tr>
+    </table>
+  </section>
+
+  <!-- ────────────── 医療広告NG ────────────── -->
+  <section id="medical-ban">
+    <h2><span class="badge">8</span>医療広告 禁止表現と必須記載</h2>
+
+    <h3>禁止表現と言い換え</h3>
+    <table>
+      <tr><th>種類</th><th>❌ NG表現</th><th>✅ OK表現</th></tr>
+      <tr><td>断定・最上級</td><td>絶対・100%・最強・日本一・最安値</td><td>〜の可能性があります・〇〇円〜</td></tr>
+      <tr><td>比較優良</td><td>他社よりも優れています・A社より安い</td><td>〇〇円（税込）・自社内比較で〜</td></tr>
+      <tr><td>権威の誤用</td><td>厚生労働省が推奨する施術です</td><td>厚生労働省に承認された機器を使用しています</td></tr>
+      <tr><td>体験談</td><td>私はこのサプリで5キロ痩せました</td><td>成分の特徴・効果の保証ではない旨を明記</td></tr>
+      <tr><td>Before/After</td><td>写真だけで「激変！」と煽る</td><td>写真横に「リスク・副作用・費用」を必ず併記</td></tr>
+    </table>
+
+    <h3>自由診療の必須記載事項（1カ所にまとめて記載）</h3>
+    <p>自由診療（保険適用外）を扱う記事では、以下の項目を必ず1つのブロックにまとめて記載してください。</p>
+    <ul class="checklist" style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:10px 14px;">
+      <li><input type="checkbox"> 「本施術は公的医療保険が適用されない自由診療です」の明記</li>
+      <li><input type="checkbox"> 標準費用（税込）の記載</li>
+      <li><input type="checkbox"> 回数・期間の記載</li>
+      <li><input type="checkbox"> リスク・副作用の記載</li>
+      <li><input type="checkbox"> 承認医薬品の有無の記載</li>
+      <li><input type="checkbox"> 別途費用の記載（発生する場合）</li>
+    </ul>
+
+    <h3>数値の根拠について</h3>
+    <p>金額の相場・統計データなど「数字」を出す際は、必ず一次情報（クリニック公式サイト・官公庁・専門学会）のURLをセットで記載してください。</p>
+    <table>
+      <tr><th>OK（使える参照元）</th><th>NG（使えない参照元）</th></tr>
+      <tr><td>クリニック公式サイト（LP）・厚生労働省HP・専門学会の発表資料</td><td>個人ブログ・Yahoo!知恵袋・他社まとめサイト・日付不明の記事</td></tr>
+    </table>
+    <div class="note"><strong>迷ったらLPを参照</strong>案件のLPで使われている表現は法務チェック済みです。独自の表現を作らず、LPのトーンに合わせましょう。</div>
+  </section>
+
+  <!-- ────────────── AI表現修正 ────────────── -->
+  <section id="ai-fix">
+    <h2><span class="badge">9</span>AI表現の直し方</h2>
+    <p>AI生成文に多いパターンを3つ確認してください。不自然でなければ全部直す必要はありませんが、以下のパターンが多いと品質が下がります。</p>
+
+    <h3>① 抽象語で逃げている</h3>
+    <p>具体性を避けて「それっぽい抽象語」で締めているパターン。</p>
+    <div class="ban-list">
+      <span class="ban">傾向です</span><span class="ban">判断につながります</span><span class="ban">納得感のある選択</span>
+      <span class="ban">後悔しにくいです</span><span class="ban">設計です</span><span class="ban">方向性はさまざまです</span>
+    </div>
+    <div class="example-pair">
+      <div class="ex"><span class="ex-label ng">NG</span><span class="ex-body">後悔しにくい選択になります。</span></div>
+      <div class="ex"><span class="ex-label ok">OK</span><span class="ex-body">追加費用で困るリスクを減らせます。</span></div>
+    </div>
+
+    <h3>② 誇張している</h3>
+    <p>感情に振りすぎた表現・情報記事として信頼性が落ちる表現。</p>
+    <div class="ban-list">
+      <span class="ban">救世主</span><span class="ban">味方</span><span class="ban">成功の鍵</span>
+      <span class="ban">最適</span><span class="ban">スムーズです</span><span class="ban">最もふさわしい</span>
+    </div>
+    <div class="example-pair">
+      <div class="ex"><span class="ex-label ng">NG</span><span class="ex-body">これが成功の鍵です。</span></div>
+      <div class="ex"><span class="ex-label ok">OK</span><span class="ex-body">〇〇を確認することが重要なポイントです。</span></div>
+    </div>
+
+    <h3>③ 断定回避している（答えを出さずに逃げている）</h3>
+    <p>PLUSは「読者に考えさせる記事」ではなく「読者を導く記事」にします。</p>
+    <div class="ban-list">
+      <span class="ban">満足度を左右します</span><span class="ban">〇〇な印象です</span>
+      <span class="ban">〇〇といえそうです</span><span class="ban">判断はあなた次第です</span>
+    </div>
+    <div class="example-pair">
+      <div class="ex"><span class="ex-label ng">NG</span><span class="ex-body">自分に合うかどうかを整理することが大切です。</span></div>
+      <div class="ex"><span class="ex-label ok">OK</span><span class="ex-body">価格重視ならAが向いています。着心地重視ならBのほうが合いやすいです。</span></div>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- ────────────── チェックリスト：コンテンツ ────────────── -->
+  <section id="check-content">
+    <h2><span class="badge">10</span>公開前チェックリスト ― コンテンツ確認</h2>
+
+    <div class="checklist-section">
+      <h3>タイトル</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> メインKWが含まれている（前半に配置）</li>
+        <li><input type="checkbox"> サブKWが含まれている</li>
+        <li><input type="checkbox"> メインKWがサブKWより前半に配置されているか</li>
+        <li><input type="checkbox"> 使用可能な記号は「！」「補足の（）」のみ（？・・・｜：等は不可）</li>
+        <li><input type="checkbox"> 文字数30文字前後（KW構成により柔軟対応）</li>
+        <li><input type="checkbox"> 音読して違和感がない（不自然な語順・KW詰め込みなし）</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>H2見出し</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 1記事あたり3〜5個</li>
+        <li><input type="checkbox"> ユーザーが知りたい順になっているか</li>
+        <li><input type="checkbox"> メインKWが含まれているか</li>
+        <li><input type="checkbox"> サブKW解説ブロックにサブKWが含まれているか</li>
+        <li><input type="checkbox"> H2だけ読んで記事の流れが分かるか</li>
+        <li><input type="checkbox"> そのKWでないと通じない表現になっているか（汎用的な見出しになっていないか）</li>
+        <li><input type="checkbox"> 使用可能な記号は「！」「？」「補足の（）」のみ（・・・｜：等は不可）</li>
+        <li><input type="checkbox"> まとめH2は「まとめ」という見出し名を使っていない（記事の結論を示す言葉にする）</li>
+        <li><input type="checkbox"> まとめH2内に次の行動（予約・相談・問い合わせ）への誘導が含まれている</li>
+        <li><input type="checkbox"> 1つのH2内に箇条書きまたはテーブルが最低1つ含まれている</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>H3見出し</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 1つのH2につき3〜4個（概要H2などは例外あり）</li>
+        <li><input type="checkbox"> 1つのH3で1つのトピックだけを扱っている（複数の話題を混ぜない）</li>
+        <li><input type="checkbox"> H3の本文は3段落以上5段落以内（箇条書き・テーブルは1段落として数える）</li>
+        <li><input type="checkbox"> H2テーマからズレていない（話が飛んでいない）</li>
+        <li><input type="checkbox"> 使用可能な記号は「！」「？」「補足の（）」のみ（・・・｜：等は不可）</li>
+        <li><input type="checkbox"> 似た内容のH3が重複していない（被りのない構成になっているか）</li>
+        <li><input type="checkbox"> そのH2内で知りたい順になっているか</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>冒頭文（記事導入）</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> ベネフィット（読後どんな状態になれるか）が示されている</li>
+        <li><input type="checkbox"> 「この記事では」「今回は」「こちらでは」を使っていない</li>
+        <li><input type="checkbox"> 「〇〇に悩んでいませんか？」系の問いかけを使っていない</li>
+        <li><input type="checkbox"> メインKW・サブKWが前半に入っている</li>
+        <li><input type="checkbox"> 未来の描写が「知識」止まりでなく「行動後の状態」まで踏み込んでいる</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>H2下導入文</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 各H2の直下に1〜2文入れている</li>
+        <li><input type="checkbox"> 「このH2を読む価値・得られるもの」に触れている</li>
+        <li><input type="checkbox"> 単なる内容の説明（箇条書きの予告）になっていない</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>本文・PREP</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 各H3にPREP構造（主張→理由→具体例→SoWhat）がある</li>
+        <li><input type="checkbox"> SoWhatが「説明」で終わらず、読者の次の行動を示している</li>
+        <li><input type="checkbox"> 指示語（こそあど）・記事参照表現を使っていない</li>
+        <li><input type="checkbox"> 推量・疑問形（〜でしょう・〜かもしれません）を使っていない</li>
+        <li><input type="checkbox"> 削除対象の文（一般論・主語なし・主張なし）がない</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>テーブル・箇条書き</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 表・箇条書きの前に見出し（タイトル）がある</li>
+        <li><input type="checkbox"> 表・箇条書きの後に「その情報をどう受け取ってほしいか」のSoWhat（読者の判断・行動）が書いてある</li>
+        <li><input type="checkbox"> 「以下のように」「次の通りです」などの不要な前置きを削除している</li>
+        <li><input type="checkbox"> 比較には表を、並列情報の羅列には箇条書きを使い分けている</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>改行・強調（マーカー）</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 1〜2文で改行している（4文以上の連続はNG）</li>
+        <li><input type="checkbox"> 話題が切り替わる箇所で段落（&lt;p&gt;）を分けている</li>
+        <li><input type="checkbox"> マーカーはH3ごとに1カ所のみ（一番重要な箇所だけ）</li>
+        <li><input type="checkbox"> H2下導入文にも1カ所マーカーがある</li>
+        <li><input type="checkbox"> デメリット・ネガティブな箇所にマーカーを引いていない</li>
+        <li><input type="checkbox"> 一文まるごとのマーカーはNG（フレーズ単位にとどめる）</li>
+        <li><input type="checkbox"> 単語だけ・複数箇所への過剰なマーカーになっていない</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>AI表現</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 抽象語で逃げていない（具体的な状態に置き換えられているか）</li>
+        <li><input type="checkbox"> 誇張表現がない（救世主・鍵・最適 等）</li>
+        <li><input type="checkbox"> 断定回避せず、読者に合う方向を示している</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>ランキングブロック（比較・地域記事のみ）</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 全院のクリニック紹介ブロックが同じHTML構成になっている</li>
+        <li><input type="checkbox"> 「選び方」セクションで挙げた比較軸（実績・料金・アクセス等）が各院の紹介文でも網羅されている</li>
+        <li><input type="checkbox"> 1〜3位のみCTAボタン付き・見出しリンクあり。4位以下はリンク・CTAなし</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>エラーチェック</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> <strong>Crescent Eve</strong>（HTML5選択 → ツール → 文法チェック）でチェック済み</li>
+        <li><input type="checkbox"> <strong>HTML Tag エラーチェッカー</strong>でタグの閉じ忘れ・構造エラーをチェック済み</li>
+        <li><input type="checkbox"> タグの閉じ忘れ・不要タグ・装飾崩れがない</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>医療広告</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 禁止表現（絶対・100%・最強・他社比較等）を使っていない</li>
+        <li><input type="checkbox"> 自由診療の場合、必須記載事項（費用・リスク・回数・承認情報等）を1カ所にまとめている</li>
+        <li><input type="checkbox"> 数値に一次情報の参照元URLを付けている</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ────────────── チェックリスト：入稿・公開 ────────────── -->
+  <section id="check-publish">
+    <h2><span class="badge">11</span>公開前チェックリスト ― 入稿・公開設定</h2>
+
+    <div class="checklist-section">
+      <h3>WordPress 設定</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 記事タイトルをWPのSEOタイトル欄に設定した</li>
+        <li><input type="checkbox"> メタディスクリプション（80〜100文字）をWPに設定した</li>
+        <li><input type="checkbox"> カテゴリ・タグを設定した（担当者指定の設定に合わせる）</li>
+        <li><input type="checkbox"> アイキャッチ画像を設定した</li>
+        <li><input type="checkbox"> 目次の表示対象はH2のみに設定した（H3を目次に含めない）</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>内部リンク・関連記事</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 本文中に関連テーマの同サイト記事への内部リンクを2〜4箇所設置した</li>
+        <li><input type="checkbox"> アンカーテキストはリンク先の内容を自然に表す言葉になっている（「こちら」「詳細」はNG。KWそのままもスパム判定リスクあるのでNG）</li>
+        <li><input type="checkbox"> リンク先がカニバリしていない（この記事とKWが被っていない）</li>
+        <li><input type="checkbox"> 関連記事をまとめH2の後に設置した（カニバリしない・テーマが補完関係にある記事）</li>
+        <li><input type="checkbox"> 内部リンクのリンク先が正常に開くか確認した</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>リンクのHTML属性</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> アフィリリンク（案件リンク）: <code>rel="noopener noreferrer nofollow" target="_blank"</code> になっている</li>
+        <li><input type="checkbox"> アフィリリンクのhrefはメタリフページのURLになっている（ASPリンク直貼りNG）</li>
+        <li><input type="checkbox"> 外部リンク（参考文献等）: <code>rel="noopener noreferrer" target="_blank"</code> になっている</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>画像</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 画像をWEBP形式に変換した（PNG/JPEGのままで入稿しない）</li>
+        <li><input type="checkbox"> ファイル名が記事内容に関連した英数字になっている（例：icl-osaka-01.webp）</li>
+        <li><input type="checkbox"> altテキストを設定した</li>
+      </ul>
+    </div>
+
+    <div class="checklist-section">
+      <h3>公開後</h3>
+      <ul class="checklist">
+        <li><input type="checkbox"> 公開後にブラウザで表示崩れがないか確認した（PC・スマホ両方）</li>
+        <li><input type="checkbox"> Google Search Consoleでフェッチ（URLインデックス登録リクエスト）を実施した</li>
+        <li><input type="checkbox"> 担当者に完了報告をした</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+</div>
+</body>
+</html>
