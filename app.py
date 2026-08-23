@@ -392,6 +392,37 @@ def _regenerate_h2_block(
     return msg.content[0].text.strip()
 
 
+def _format_sheets_error(what: str, error: Exception) -> str:
+    """gspreadの例外から、実際に返ってきた中身を取り出して読める形にする。
+
+    Streamlit Cloud は未処理の例外の本文を伏せるので、握って自分で出さないと
+    原因が分からない。権限・タブ名・回数制限のどれかが大半なので、状態コードと
+    APIのメッセージまで出す。
+    """
+    parts = [f"{what}: {type(error).__name__}"]
+    response = getattr(error, "response", None)
+    status = getattr(response, "status_code", None)
+    if status:
+        parts.append(f"状態コード {status}")
+    body = ""
+    if response is not None:
+        try:
+            payload = response.json()
+            body = str(payload.get("error", {}).get("message", "")) or str(payload)
+        except Exception:
+            body = getattr(response, "text", "") or ""
+    if not body:
+        body = str(error)
+    parts.append(body[:800])
+    if status == 429:
+        parts.append("読み取り回数の上限です。1分ほど置いてから実行してください")
+    elif status == 403:
+        parts.append("サービスアカウントにこのスプレッドシートの権限がありません")
+    elif status == 404:
+        parts.append("スプレッドシートIDかタブ名が違います")
+    return "\n".join(parts)
+
+
 def build_inputs_from_row(row: dict, defaults: dict | None = None) -> dict:
     clinics_raw = row.get("clinics_raw", "")
     clinics = []
@@ -1038,27 +1069,35 @@ with _safe_tab(tab_batch):
             for e in errors:
                 st.error(e)
         else:
-            ws = get_sheet(article_sheet_url, creds_data, tab_name=batch_tab_sel)
+            try:
+                ws = get_sheet(article_sheet_url, creds_data, tab_name=batch_tab_sel)
+            except Exception as _ws_e:
+                st.error(_format_sheets_error("タブを開けませんでした", _ws_e))
+                st.stop()
             _batch_is_bulk = batch_tab_sel == "ノウハウ一括"
             _batch_is_kh   = batch_tab_sel == "ノウハウ" or _batch_is_bulk
 
-            if _batch_is_bulk:
-                _b_site = st.session_state.get("bulk_site_name", "指定なし")
-                _b_site = "" if _b_site == "指定なし" else _b_site
-                _b_genre = st.session_state.get("bulk_genre", "")
-                rows = read_input_rows_knowhow_bulk(ws, site_name=_b_site, genre=_b_genre)
-            elif batch_tab_sel == "ノウハウ":
-                rows = read_input_rows_knowhow(ws)
-            elif batch_tab_sel == "量産":
-                _m_site = st.session_state.get("mass_site_name", "指定なし")
-                _m_genre = st.session_state.get("mass_genre_sel") or st.session_state.get("mass_genre_txt", "")
-                rows = read_input_rows_mass(
-                    ws,
-                    site_name="" if _m_site == "指定なし" else _m_site,
-                    genre=_m_genre,
-                )
-            else:
-                rows = read_input_rows(ws, default_article_type=batch_tab_sel)
+            try:
+                if _batch_is_bulk:
+                    _b_site = st.session_state.get("bulk_site_name", "指定なし")
+                    _b_site = "" if _b_site == "指定なし" else _b_site
+                    _b_genre = st.session_state.get("bulk_genre", "")
+                    rows = read_input_rows_knowhow_bulk(ws, site_name=_b_site, genre=_b_genre)
+                elif batch_tab_sel == "ノウハウ":
+                    rows = read_input_rows_knowhow(ws)
+                elif batch_tab_sel == "量産":
+                    _m_site = st.session_state.get("mass_site_name", "指定なし")
+                    _m_genre = st.session_state.get("mass_genre_sel") or st.session_state.get("mass_genre_txt", "")
+                    rows = read_input_rows_mass(
+                        ws,
+                        site_name="" if _m_site == "指定なし" else _m_site,
+                        genre=_m_genre,
+                    )
+                else:
+                    rows = read_input_rows(ws, default_article_type=batch_tab_sel)
+            except Exception as _read_e:
+                st.error(_format_sheets_error("シートを読めませんでした", _read_e))
+                st.stop()
             pending = [r for r in rows if not r.get("status") or r.get("status") == "処理中"]
             _row_filter = _parse_batch_row_filter(st.session_state.get("batch_row_filter", ""))
             if _row_filter is not None:
