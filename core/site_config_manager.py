@@ -466,13 +466,34 @@ def format_link_settings(link_settings: Dict[str, Any]) -> str:
 
 
 def format_site_parts(components: List[Dict[str, Any]]) -> str:
+    """登録済みのパーツだけを渡す。
+
+    未登録のパーツを使えと書くと、存在しないものを使うことになり、モデルが
+    独自のクラス名を作る。ここに出ていないものは見本HTMLに倣わせる。
+    """
     active = [c for c in components if c.get("active", True) and c.get("pattern", "").strip()]
     if not active:
         return ""
+    names = "、".join(c.get("name", "") for c in active)
     lines = [
         "【サイト別HTMLパーツ一覧】",
-        "記事本文ではこれらのパーツを使用してください。各パーツの {{変数名}} は実際の内容に置き換えてください。\n",
+        "記事本文ではこれらのパーツを使用してください。各パーツの {{変数名}} は実際の内容に置き換えてください。",
+        f"登録されているのはこの{len(active)}種類だけです: {names}",
+        "この一覧に無いものは見本HTMLと同じ形で書いてください。独自のクラス名を作らないでください。\n",
     ]
     for c in active:
         lines.append(f"■ {c.get('name', '')}\n{c['pattern']}")
     return "\n\n".join(lines)
+
+
+def registered_part_names(components: list) -> list:
+    """中身が入っているパーツの名前だけを返す。
+
+    枠だけあって空のスロットを「登録済み」と数えると、存在しないパーツを
+    使えという指示になり、モデルが独自のクラス名を作る。
+    """
+    return [
+        c.get("name", "")
+        for c in (components or [])
+        if c.get("active", True) and str(c.get("pattern", "")).strip()
+    ]
