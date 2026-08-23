@@ -430,4 +430,19 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     result["html"] = fill_clinic_blocks(
         output["html"], clinics, records, inputs, type_record, settings, log=log,
     )
+
+    # 見本に無いクラス名をモデルが作ると装飾が効かないまま公開される。
+    # 直すのは人なので、指摘として要確認欄に出す。
+    reference_all = "\n".join(
+        article_type_db.get_reference_html(type_record or {}, col)
+        for col in article_type_db.REFERENCE_COLUMNS
+    )
+    invented = output_check.find_invented_classes(result["html"], reference_all)
+    if invented:
+        names = "、".join(f["text"] for f in invented)
+        log(f"　→ 見本に無いクラス名が {len(invented)}種類: {names}")
+        result["todo_list"] = (
+            result.get("todo_list", "")
+            + "\n\n【見本に無いクラス名】\n" + names
+        ).strip()
     return result

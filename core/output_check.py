@@ -237,3 +237,28 @@ def apply_mechanical_fixes(html: str) -> tuple:
     ]
     pairs += [(word, "") for word in DELETABLE_WORDS]
     return _replace_in_text(html, pairs)
+
+
+# 見本に無いクラス名をモデルが作ることがある。h2-title・h2-ttl など。
+# 装飾が効かない状態で公開されるので、生成後に機械で拾う。
+def find_invented_classes(html: str, reference_html: str) -> list:
+    """見本に出てこないクラス名を返す。"""
+    if not reference_html:
+        return []
+    known = set(re.findall(r'class="([^"]+)"', reference_html))
+    known_words = set()
+    for value in known:
+        known_words.update(value.split())
+    findings = []
+    seen = set()
+    for value in re.findall(r'class="([^"]+)"', html):
+        for word in value.split():
+            if word in known_words or word in seen:
+                continue
+            seen.add(word)
+            findings.append({
+                "rule": "見本に無いクラス名",
+                "text": word,
+                "detail": "見本に出てこないクラス名。装飾が効かない可能性がある",
+            })
+    return findings
