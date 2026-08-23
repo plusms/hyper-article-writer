@@ -211,6 +211,14 @@ NG_PHRASE_REPLACEMENTS = [
     ("が前提となるため", "が必要になるため"),
     ("が前提の", "が必要な"),
     ("を前提に", "をもとに"),
+    ("を前提としない", "を必要としない"),
+    ("を前提とせず", "を必要とせず"),
+    ("前提とした", "を必要とした"),
+    ("で整理しました", "でまとめました"),
+    ("を整理します", "をまとめます"),
+    ("を整理しました", "をまとめました"),
+    ("整理しました", "まとめました"),
+    ("整理します", "まとめます"),
     ("コース契約が前提", "コース契約のみ"),
     ("正確に把握できます", "正確に分かります"),
     ("を把握できます", "が分かります"),
@@ -230,6 +238,10 @@ NG_PHRASE_REPLACEMENTS = [
     ("を把握しやすい", "が分かりやすい"),
     ("を把握できる", "が分かる"),
     ("把握", "確認"),
+    ("ご活用ください", "お使いください"),
+    ("活用して", "使って"),
+    ("活用できます", "使えます"),
+    ("を活用", "を利用"),
     ("を整理しています", "をまとめています"),
     ("を整理することで", "をそろえることで"),
     ("を整理して", "をそろえて"),
@@ -333,3 +345,64 @@ def find_long_paragraphs(html: str) -> list:
             "detail": f"{plain.count('。')}文ある。段落を分けるか箇条書きにする",
         })
     return findings
+
+
+# 仕様として置かないと決めたものは、指摘が出ても意味がない。
+# 4位以降にリンクとCTAを置かないのは決定事項なので、その指摘は捨てる。
+_DROP_TODO_PATTERNS = [
+    "送客リンク", "CTAボタン", "CTA設置", "リンク・CTA",
+]
+
+
+def strip_useless_todo(todo_text: str) -> tuple:
+    """要確認欄から、仕様として対応不要な行を落とす。
+
+    Returns: (残した本文, 落とした件数)
+    """
+    if not todo_text:
+        return todo_text, 0
+    kept, dropped = [], 0
+    for line in todo_text.split(chr(10)):
+        body = line.strip().lstrip("-").strip()
+        if body and any(word in body for word in _DROP_TODO_PATTERNS):
+            dropped += 1
+            continue
+        kept.append(line)
+    return chr(10).join(kept).strip(), dropped
+
+
+def split_long_paragraphs(html: str) -> tuple:
+    """4文以上の段落を句点で分けて別々の段落にする。
+
+    モデルに分けさせると、直したそばから別の違反が出る。ここは文を触らず
+    段落タグを増やすだけなので機械でできる。
+    Returns: (直したHTML, 分けた段落の数)
+    """
+    count = 0
+
+    def _split(match):
+        nonlocal count
+        opening, inner = match.group(1), match.group(2)
+        plain = _strip_tags(inner)
+        if plain.count("。") <= MAX_SENTENCES_PER_PARAGRAPH:
+            return match.group(0)
+        # タグをまたぐ段落は触らない。壊す危険のほうが大きい
+        if "<" in inner:
+            return match.group(0)
+        parts = [x for x in inner.split("。") if x.strip()]
+        if len(parts) <= MAX_SENTENCES_PER_PARAGRAPH:
+            return match.group(0)
+        half = (len(parts) + 1) // 2
+        first = "。".join(parts[:half]) + "。"
+        second = "。".join(parts[half:]) + "。"
+        count += 1
+        return f"{opening}{first}</p>{chr(10)}{opening}{second}</p>"
+
+    # 1回の分割で半分にしても、元が7文なら4文の段落が残る。残らなくなるまで繰り返す。
+    fixed = html
+    for _ in range(4):
+        before = fixed
+        fixed = re.sub(r"(<p[^>]*>)(.*?)</p>", _split, fixed, flags=re.S)
+        if fixed == before:
+            break
+    return fixed, count

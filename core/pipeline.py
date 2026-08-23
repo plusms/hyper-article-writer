@@ -451,25 +451,25 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     if replaced:
         log(f"　→ 記事全体を機械で置き換え: {len(replaced)}種類")
 
-    # 段落が長い箇所だけモデルに直させる。分割は文章を触るので機械ではできない。
-    long_paras = output_check.find_long_paragraphs(result["html"])
-    if long_paras and settings.auto_review and settings.claude_key:
-        log(f"　→ 4文以上の段落 {len(long_paras)}件を分けます")
-        try:
-            repaired = article_review.apply_fixes(
-                result["html"], long_paras, settings.article_provider,
-                claude_api_key=settings.claude_key, gemini_api_key=settings.gemini_key,
-            )
-            if repaired and len(repaired) >= len(result["html"]) * 0.7:
-                result["html"] = repaired
-            else:
-                log("　→ 修正後が短くなりすぎたので元のまま使います")
-        except Exception as e:
-            log(f"　→ 段落の分割に失敗しました（{type(e).__name__}）")
+    # 段落の分割は機械でやる。モデルに任せると直したそばから別の違反が出た。
+    result["html"], split_count = output_check.split_long_paragraphs(result["html"])
+    if split_count:
+        log(f"　→ 4文以上の段落を {split_count}件 機械で分けました")
 
+    # 置換表に無い禁止ワードが残ることがある。黙って通さず要確認へ回す。
     remaining = output_check.run_checks(result["html"], "")
     if remaining.get("fix"):
-        log(f"　→ 機械チェックの残り {len(remaining['fix'])}件")
+        words = "、".join(sorted({f["text"][:20] for f in remaining["fix"]}))
+        log(f"　→ 機械チェックの残り {len(remaining['fix'])}件: {words}")
+        result["todo_list"] = (
+            result.get("todo_list", "")
+            + "\n\n【機械チェックで残った箇所】\n" + words
+        ).strip()
+
+    # 仕様として置かないと決めたものの指摘を落とす
+    result["todo_list"], dropped = output_check.strip_useless_todo(result.get("todo_list", ""))
+    if dropped:
+        log(f"　→ 要確認から対応不要な指摘を {dropped}件 落としました")
 
     invented = output_check.find_invented_classes(result["html"], reference_all)
     if invented:
