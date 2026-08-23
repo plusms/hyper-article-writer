@@ -238,6 +238,10 @@ NG_PHRASE_REPLACEMENTS = [
     ("を把握しやすい", "が分かりやすい"),
     ("を把握できる", "が分かる"),
     ("把握", "確認"),
+    ("ことが大切です", "ことで選べます"),
+    ("が大切です", "で判断できます"),
+    ("は大切です", "で決まります"),
+    ("大切です", "判断の分かれ目になります"),
     ("ご活用ください", "お使いください"),
     ("活用して", "使って"),
     ("活用できます", "使えます"),
@@ -406,3 +410,28 @@ def split_long_paragraphs(html: str) -> tuple:
         if fixed == before:
             break
     return fixed, count
+
+
+_CELL_RE = re.compile(r"(<t[dh][^>]*>)(.*?)(</t[dh]>)", re.S)
+_TODO_MARK_RE = re.compile(r"\[要確認[^\]]*\]")
+
+
+def replace_todo_in_cells(html: str) -> tuple:
+    """テーブルのセルに残った要確認の印を「−」に置き換える。
+
+    セルは空欄か「−」で意味が通る。印が残ったまま公開されると事故になる。
+    本文の文章に出る印はそのまま残す。人が後で埋める目印として要る。
+    Returns: (直したHTML, 置き換えた数)
+    """
+    count = 0
+
+    def _fix(match):
+        nonlocal count
+        opening, inner, closing = match.groups()
+        if not _TODO_MARK_RE.search(inner):
+            return match.group(0)
+        cleaned = _TODO_MARK_RE.sub("", inner).strip()
+        count += len(_TODO_MARK_RE.findall(inner))
+        return f"{opening}{cleaned or '−'}{closing}"
+
+    return _CELL_RE.sub(_fix, html), count

@@ -451,6 +451,11 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     if replaced:
         log(f"　→ 記事全体を機械で置き換え: {len(replaced)}種類")
 
+    # 表のセルに残った要確認の印を消す。指示だけでは守られないので機械で消す。
+    result["html"], cell_marks = output_check.replace_todo_in_cells(result["html"])
+    if cell_marks:
+        log(f"　→ 表のセルの要確認 {cell_marks}件を「−」にしました")
+
     # 段落の分割は機械でやる。モデルに任せると直したそばから別の違反が出た。
     result["html"], split_count = output_check.split_long_paragraphs(result["html"])
     if split_count:
