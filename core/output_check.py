@@ -194,6 +194,10 @@ def build_fix_instruction(findings: list[dict]) -> str:
     )
 
 
+# 言い換え先が日本語として成立しない組み合わせ。検出はするが機械で置き換えない。
+# 品質性は辞書にない語なので、置き換えると文章が壊れる。人かモデルが直す。
+NO_AUTO_REPLACE = {"安全性"}
+
 # 削るだけで文が成立する語。置き換え先を考える必要がないのでここで消す。
 DELETABLE_WORDS = ["もちろん", "なお、", "順番に"]
 
@@ -226,6 +230,10 @@ def apply_mechanical_fixes(html: str) -> tuple:
     禁止ワードのうち文の作り直しが要るものはここでは触らない。
     Returns: (直したHTML, [(直した語, 直した後)])
     """
-    pairs = [(word, replacement) for word, replacement, _reason in NOTATION_RULES]
+    pairs = [
+        (word, replacement)
+        for word, replacement, _reason in NOTATION_RULES
+        if word not in NO_AUTO_REPLACE
+    ]
     pairs += [(word, "") for word in DELETABLE_WORDS]
     return _replace_in_text(html, pairs)
