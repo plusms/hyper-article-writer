@@ -398,7 +398,9 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
                 article_type=inputs.get("article_type", ""),
                 main_kw=inputs.get("main_kw", ""),
                 source_text="\n\n".join(clinics.values()) if clinics else "",
-                max_rounds=2, progress=log,
+                # 2周まわすと、直した箇所が別の規則に触れて指摘が増えることがある。
+                # 仙台2本目は35件が20件に減ったあと45件に増えた。1周で切って残りは人へ。
+                max_rounds=1, progress=log,
             )
             output = dict(output)
             output["html"] = reviewed["html"]
