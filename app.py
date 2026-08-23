@@ -656,12 +656,38 @@ def _sync_clinic_list(inputs: dict, clinic_info: dict, log=None) -> None:
 _CLINIC_BLOCK_RE = re.compile(r"<!--\s*クリニック紹介ブロック入る\s*-->")
 
 
-def _review_clinic_block(block_html: str, source_text: str, inputs: dict, log=None) -> str:
+# モデルを呼ぶ検品をかける掲載順位の上限。ここまでがリンクとCTAと料金表を持つ。
+# 全院にかけると1記事で30回以上モデルを呼ぶことになり、途中で落ちる。
+REVIEW_BLOCK_RANK_MAX = 3
+
+
+def _check_clinic_block(block_html: str, source_text: str, rank: int, log=None) -> None:
+    """モデルを使わない検品。入力データに無い金額と禁止ワードを拾って知らせる。
+
+    4位以降はモデルの検品をかけないので、ここだけは全院に通す。
+    """
+    try:
+        found = output_check.run_checks(block_html, source_text)
+    except Exception:
+        return
+    items = found.get("fix", []) + found.get("human", [])
+    if items and log:
+        log(f"　→ {rank}位の紹介ブロックに機械チェックの指摘 {len(items)}件")
+        for item in items[:5]:
+            log(f"　　- [{item.get('rule', '')}] {item.get('text', '')[:40]}")
+
+
+def _review_clinic_block(block_html: str, source_text: str, inputs: dict, rank: int = 1, log=None) -> str:
     """紹介ブロックを1院ぶんずつ別モデルで検品して直す。
 
     記事の中で事実が一番多く出るブロックなので、本文と同じ縛りで見る。案件DBの
     その案件のテキストだけを突き合わせ元にするので、入力にない数値をここで拾える。
+
+    モデルを呼ぶのは上位3院まで。4位以降は機械チェックだけにする。
     """
+    _check_clinic_block(block_html, source_text, rank, log=log)
+    if rank > REVIEW_BLOCK_RANK_MAX:
+        return block_html
     if not st.session_state.get("auto_review") or not (claude_key and gemini_key):
         return block_html
     try:
@@ -749,7 +775,7 @@ def _fill_clinic_blocks(html, clinic_info, records, inputs, type_record, site_pa
             if log:
                 log(f"　→ {rank}位 {name} で失敗: {e}")
             continue
-        block = _review_clinic_block(block, info, inputs, log=log)
+        block = _review_clinic_block(block, info, inputs, rank=rank, log=log)
         blocks.append(block)
         # 2院目以降は1院目の出力に揃える。型の見本より実際の出力のほうが揃う
         reference = block
@@ -868,6 +894,24 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                                       notation_rules=_batch_site_info.get("notation_rules"),
                                       site_notes=_batch_site_info.get("notes", ""))
             output = _auto_review_body(output, inputs, clinics, log=st.write)
+            # 紹介ブロックは1院1コールで時間がかかる。ここで一度書いておかないと、
+            # 途中で落ちたときに本文まで丸ごと消えてやり直しになる。
+            _batch_partial = {
+                "title": structure["title"],
+                "meta": structure["meta"],
+                "html": output["html"],
+                "todo_list": output.get("todo_list", ""),
+                "clinics": inputs.get("clinics", []),
+            }
+            try:
+                if tab_name == "量産":
+                    write_output_row_mass(ws, row_num, _batch_partial)
+                elif not is_bulk and not is_kh:
+                    write_output_row(ws, row_num, _batch_partial)
+                _write_status(ws, row_num, "本文まで完了")
+            except Exception as _pw_e:
+                st.warning(f"　→ 途中保存に失敗しました（{type(_pw_e).__name__}）。生成は続けます")
+
             _batch_records = clinic_db_manager.build_db_records(
                 list(clinics.keys()), genre=inputs.get("genre", ""),
                 creds_data=creds_data, sheet_url=db_sheet_url,
@@ -1098,7 +1142,9 @@ with _safe_tab(tab_batch):
             except Exception as _read_e:
                 st.error(_format_sheets_error("シートを読めませんでした", _read_e))
                 st.stop()
-            pending = [r for r in rows if not r.get("status") or r.get("status") == "処理中"]
+            # 「処理中」「本文まで完了」は途中で落ちた行。次の実行で拾い直す
+            _resume_states = ("", "処理中", "本文まで完了")
+            pending = [r for r in rows if (r.get("status") or "") in _resume_states]
             _row_filter = _parse_batch_row_filter(st.session_state.get("batch_row_filter", ""))
             if _row_filter is not None:
                 pending = [r for r in pending if r["row_index"] in _row_filter]
@@ -3918,7 +3964,7 @@ with _safe_tab(tab_rank):
                             _html = _review_clinic_block(
                                 _html, _scraped_text,
                                 {"article_type": _cb_article_type, "main_kw": _cb_main_kw},
-                                log=st.write,
+                                rank=_r, log=st.write,
                             )
                             if not _cb_reference_html:
                                 _cb_reference_html = _html
