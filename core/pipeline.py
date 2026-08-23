@@ -461,6 +461,16 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     if cell_marks:
         log(f"　→ 表のセルの要確認 {cell_marks}件を「−」にしました")
 
+    # 本文に残った要確認の印を外して要確認欄へ移す。印が本文に出たまま公開されると事故になる。
+    result["html"], pulled = output_check.pull_todo_marks(result["html"])
+    if pulled:
+        log(f"　→ 本文の要確認の印 {len(pulled)}件を要確認欄へ移しました")
+        result["todo_list"] = (
+            result.get("todo_list", "")
+            + "\n\n【本文から外した要確認】\n"
+            + "\n".join(f"- {x}" for x in pulled)
+        ).strip()
+
     # 段落の分割は機械でやる。モデルに任せると直したそばから別の違反が出た。
     result["html"], split_count = output_check.split_long_paragraphs(result["html"])
     if split_count:

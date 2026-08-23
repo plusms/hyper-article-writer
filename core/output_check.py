@@ -238,6 +238,13 @@ NG_PHRASE_REPLACEMENTS = [
     ("を把握しやすい", "が分かりやすい"),
     ("を把握できる", "が分かる"),
     ("把握", "確認"),
+    ("スムーズな通院計画", "無理のない通院計画"),
+    ("スムーズな", "滞りない"),
+    ("その活用方法", "その使い方"),
+    ("活用方法", "使い方"),
+    ("ことが大切です", "ことで判断できます"),
+    ("ことが重要であり", "ことで結果が変わり"),
+    ("に重要", "に効いてきます"),
     ("がとても重要です", "で続けやすさが決まります"),
     ("非常に重要です", "で続けやすさが決まります"),
     ("特に重要です", "で差が出ます"),
@@ -316,7 +323,16 @@ def apply_mechanical_fixes(html: str) -> tuple:
     # 「ことが多い点があります」になって日本語が壊れる。
     pairs += NG_PHRASE_REPLACEMENTS
     pairs += [(word, "") for word in DELETABLE_WORDS]
-    return _replace_in_text(html, pairs)
+    fixed, done = _replace_in_text(html, pairs)
+    # タグをまたいで割れている語は上の置換で拾えない。残った分だけもう一度当てる
+    plain = _strip_tags(fixed)
+    rest = [(b, a) for b, a in pairs if b and b in plain]
+    if rest:
+        fixed, done2 = replace_across_tags(fixed, rest)
+        for pair in done2:
+            if pair not in done:
+                done.append(pair)
+    return fixed, done
 
 
 # 見本に無いクラス名をモデルが作ることがある。h2-title・h2-ttl など。
@@ -451,7 +467,7 @@ def replace_todo_in_cells(html: str) -> tuple:
 
 # 1案件あたりの送客リンクの上限。埼玉で1案件14本張られた。
 # 同じリンクを本文に繰り返すと読者にも検索エンジンにも不自然になる。
-MAX_LINKS_PER_CLINIC = 6
+MAX_LINKS_PER_CLINIC = 5
 
 _ANCHOR_RE = re.compile(r'<a\s[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S | re.I)
 
@@ -482,3 +498,62 @@ def limit_affiliate_links(html: str, max_per_clinic: int = MAX_LINKS_PER_CLINIC)
         return inner
 
     return _ANCHOR_RE.sub(_fix, html), removed
+
+
+def _tagless_positions(html: str):
+    """タグの外側の文字だけを抜き、元のHTMLでの位置を対応づける。"""
+    chars, index = [], []
+    inside = False
+    for i, ch in enumerate(html):
+        if ch == "<":
+            inside = True
+        elif ch == ">":
+            inside = False
+        elif not inside:
+            chars.append(ch)
+            index.append(i)
+    return "".join(chars), index
+
+
+def replace_across_tags(html: str, pairs: list) -> tuple:
+    """タグをまたいだ語も置き換える。
+
+    <span>で途中が割れていると、タグの外側だけを見る置換では拾えない。
+    埼玉で「確認することが大<span>切です」の形になっていた。
+    置き換えるときは、その語の最初の文字の位置に置換後の文字を入れ、残りを消す。
+    タグそのものは動かさないので、装飾の範囲だけがわずかにずれる。
+    """
+    done = []
+    for before, after in pairs:
+        while True:
+            plain, index = _tagless_positions(html)
+            at = plain.find(before)
+            if at < 0:
+                break
+            starts = index[at:at + len(before)]
+            keep = set()
+            out = []
+            for i, ch in enumerate(html):
+                if i == starts[0]:
+                    out.append(after)
+                    keep.add(i)
+                elif i in starts:
+                    keep.add(i)
+                else:
+                    out.append(ch)
+            html = "".join(out)
+            if (before, after) not in done:
+                done.append((before, after))
+    return html, done
+
+
+def pull_todo_marks(html: str) -> tuple:
+    """本文に残った要確認の印を外し、中身を返す。
+
+    印が本文に出たまま公開されると事故になる。中身は要確認欄へ移して人が見る。
+    Returns: (印を外したHTML, [外した印の中身])
+    """
+    found = _TODO_MARK_RE.findall(html)
+    if not found:
+        return html, []
+    return _TODO_MARK_RE.sub("", html), found
