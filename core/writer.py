@@ -630,6 +630,11 @@ def _build_body_prompt(
   自分で決めて書かない
 - 読者に向けた判断・比較・言い換えは自由に書いてよい。制限がかかるのは事実の記述だけ
 
+【冒頭の比較表（厳守）】
+- 比較表に出すのは推し順位1位から3位の3社だけ。掲載院が何院でも増やさない
+- 見本の比較表と同じ列数・同じ行構成にする。列を足さない
+- 4位以降は比較表に出さない。紹介ブロックで扱う
+
 {WRITING_RULES}
 {build_notation_rules_note(notation_rules or [])}
 {build_site_notes_block(site_notes)}
