@@ -1,6 +1,8 @@
 import re
 import anthropic
 
+NL = chr(10)
+
 
 def _call_model(prompt: str, claude_api_key: str, gemini_api_key: str = "",
                 provider: str = "claude", max_tokens: int = 8192) -> str:
@@ -316,3 +318,71 @@ def edit_clinic_block(html: str, instruction: str, claude_api_key: str,
 
 HTML本文のみを出力してください。説明文・コードフェンスは不要。"""
     return _call_model(prompt, claude_api_key, gemini_api_key, article_provider)
+
+
+def generate_lower_blocks(entries: list, main_kw: str = '', sub_kw: list | None = None,
+                          criteria_text: str = '', claude_api_key: str = '',
+                          site_parts: str = '', reference_html: str = '',
+                          article_type: str = '', gemini_api_key: str = '',
+                          article_provider: str = 'claude') -> str:
+    """4位以降の紹介ブロックをまとめて1回で作る。
+
+    4位以降は2〜3段落でリンクもCTAも料金テーブルも出さない。1院ずつモデルを
+    呼ぶと記事1本の待ち時間がその分だけ伸びるので、まとめて書かせる。
+    """
+    sub_kw = sub_kw or []
+    if not entries:
+        return ''
+    blocks = []
+    for entry in entries:
+        name = entry.get('name', '')
+        info = entry.get('info', '') or '（情報なし）'
+        price = entry.get('price_data', '') or '（記載なし）'
+        blocks.append(
+            f"【{entry['rank']}位 {name}】" + NL
+            + '使ってよい事実:' + NL + info + NL
+            + '料金:' + NL + price
+        )
+    ranks = '、'.join(f"{e['rank']}位 {e.get('name', '')}" for e in entries)
+    reference_section = ''
+    if reference_html:
+        reference_section = (
+            '【見本HTML（見出しと段落の作りを合わせる）】' + NL
+            + '上位院の出力です。見出しのタグとクラス名を合わせてください。' + NL
+            + '料金テーブル・基本情報テーブル・CTAボタン・画像は真似しないでください。' + NL
+            + reference_html[:6000] + NL
+        )
+    parts_section = ''
+    if site_parts:
+        parts_section = '【サイト別HTMLパーツ】' + NL + site_parts
+
+    prompt = (
+        'あなたはSEO記事のおすすめクリニック紹介ブロック専門ライターです。' + NL
+        + '4位以降の院を、下の順番どおりに続けて出力してください。' + NL + NL
+        + f'【記事メインKW】{main_kw}' + NL
+        + '【サブKW】' + ('、'.join(sub_kw) if sub_kw else '（なし）') + NL
+        + '【記事タイプ】' + (article_type or '（指定なし）') + NL + NL
+        + '【出力する院と順番】' + NL + ranks + NL + NL
+        + '【選び方コンテンツ（記事内の評価軸）】' + NL
+        + (criteria_text or '（未入力）') + NL + NL
+        + '【各院の情報】' + NL + (NL + NL).join(blocks) + NL + NL
+        + reference_section + NL
+        + parts_section + NL + NL
+        + '【4位以降のルール（厳守）】' + NL
+        + '- 1院につき見出し1つと紹介文2〜3段落だけ。1段落1主張' + NL
+        + '- リンク・CTAボタン・画像・料金テーブル・基本情報テーブルを出さない' + NL
+        + '- 料金に触れる場合は本文の文章の中で書く。表にしない' + NL
+        + '- 院ごとに切り口を変える。同じ言い回しを繰り返さない' + NL
+        + '- クリニック名は本文中でも省略せずに書く' + NL + NL
+        + '【使ってよい事実の範囲（最優先）】' + NL
+        + '- 各院の情報に書かれていることだけを事実として書く。書かれていないことは書かない' + NL
+        + '- 効果が出るまでの回数と期間、痛みの程度、機器の仕組み、地域の事情も、' + NL
+        + '  上に無ければ書かない。必要なら [要確認：〜] の形で残す' + NL
+        + '- 数字を自分で決めて書かない' + NL + NL
+        + '【共通ルール】' + NL
+        + '- 文中に隅付き括弧を使わない。強調は<strong>タグ' + NL
+        + '- 以下のとおり・次のとおり等の記事内参照表現を使わない' + NL
+        + '- ブロック末尾に免責注記・掲載情報の更新案内を追加しない' + NL + NL
+        + 'HTML本文のみを出力してください。説明文・コードフェンスは不要。' + NL
+    )
+    return _call_model(prompt, claude_api_key, gemini_api_key, article_provider, max_tokens=8192)
