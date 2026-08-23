@@ -10,6 +10,8 @@
 import gspread
 from google.oauth2.service_account import Credentials
 
+from core import sheet_cache
+
 TAB_NAME = "院"
 
 REGION_COL = "地域名"
@@ -63,7 +65,16 @@ def ensure_tab(creds_data, sheet_url) -> bool:
 
 
 def load_facilities(creds_data=None, sheet_url=None) -> list[dict]:
-    """院タブの全行を {列名: 値} のリストで返す。"""
+    """院タブの全行を {列名: 値} のリストで返す。記事ごとに読み直さない。"""
+    if not (creds_data and sheet_url):
+        return []
+    return sheet_cache.get(
+        ("facilities", sheet_url),
+        lambda: _load_facilities_uncached(creds_data, sheet_url),
+    )
+
+
+def _load_facilities_uncached(creds_data=None, sheet_url=None) -> list[dict]:
     global last_load_error
     last_load_error = ""
     if not (creds_data and sheet_url):

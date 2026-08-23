@@ -13,6 +13,8 @@
 import gspread
 from google.oauth2.service_account import Credentials
 
+from core import sheet_cache
+
 TAB_NAME = "型"
 
 TYPE_COL = "記事型"
@@ -48,7 +50,16 @@ def _get_spreadsheet(creds_data: dict, sheet_url: str):
 
 
 def load_types(creds_data=None, sheet_url=None) -> list[dict]:
-    """型タブの全行を {列名: 値} のリストで返す。"""
+    """型タブの全行を {列名: 値} のリストで返す。記事ごとに読み直さない。"""
+    if not (creds_data and sheet_url):
+        return []
+    return sheet_cache.get(
+        ("article_types", sheet_url),
+        lambda: _load_types_uncached(creds_data, sheet_url),
+    )
+
+
+def _load_types_uncached(creds_data=None, sheet_url=None) -> list[dict]:
     global last_load_error
     last_load_error = ""
     if not (creds_data and sheet_url):

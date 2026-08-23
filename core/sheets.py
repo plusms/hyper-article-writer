@@ -1,4 +1,6 @@
 import gspread
+
+from core import sheet_cache
 from google.oauth2.service_account import Credentials
 
 SCOPES = [
@@ -127,8 +129,13 @@ def get_sheet(sheet_url: str, creds_data: dict, tab_name: str = "") -> gspread.W
         ws = ss.worksheet(tab_name)
     except gspread.WorksheetNotFound:
         ws = ss.add_worksheet(title=tab_name, rows=1000, cols=len(header))
-    # 旧16列ヘッダーからの移行時に余剰列（N1:P1）を消す
-    ws.update("A1:P1", [header + [""] * (16 - len(header))])
+    # ヘッダーの書き直しは1回だけ。開くたびに書くと書き込み回数が増えて
+    # 1分あたりの上限に当たる。旧16列からの移行で余剰列（N1:P1）を消す用途。
+    sheet_cache.get(
+        ("header_written", sheet_url, tab_name),
+        lambda: ws.update("A1:P1", [header + [""] * (16 - len(header))]),
+        ttl=1800.0,
+    )
     return ws
 
 

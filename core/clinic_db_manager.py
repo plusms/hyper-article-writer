@@ -17,6 +17,8 @@ from datetime import date
 import gspread
 from google.oauth2.service_account import Credentials
 
+from core import sheet_cache
+
 DB_PATH = "config/clinic_db.json"
 _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -169,6 +171,13 @@ def find_duplicate_names(creds_data=None, sheet_url=None, genre: str = "") -> li
     """ジャンルタブで二重に入っている案件名を返す。"""
     if not (creds_data and sheet_url and genre):
         return []
+    return sheet_cache.get(
+        ("dupes", sheet_url, genre),
+        lambda: _find_duplicate_names_uncached(creds_data, sheet_url, genre),
+    )
+
+
+def _find_duplicate_names_uncached(creds_data=None, sheet_url=None, genre: str = "") -> list:
     try:
         spreadsheet = _get_spreadsheet(creds_data, sheet_url)
         rows = spreadsheet.worksheet(genre).get_all_values()
@@ -197,6 +206,15 @@ def find_duplicate_names(creds_data=None, sheet_url=None, genre: str = "") -> li
 def list_genre_tabs(creds_data=None, sheet_url=None) -> list[str]:
     """登録済みジャンル名のリストを返す。"""
     if creds_data and sheet_url:
+        return sheet_cache.get(
+            ("genre_tabs", sheet_url),
+            lambda: _list_genre_tabs_uncached(creds_data, sheet_url),
+        )
+    return _list_genre_tabs_uncached(creds_data, sheet_url)
+
+
+def _list_genre_tabs_uncached(creds_data=None, sheet_url=None) -> list[str]:
+    if creds_data and sheet_url:
         try:
             spreadsheet = _get_spreadsheet(creds_data, sheet_url)
             return [ws.title for ws in spreadsheet.worksheets() if _is_genre_tab(ws.title)]
@@ -210,10 +228,20 @@ last_load_error: str = ""
 
 
 def load_db(creds_data=None, sheet_url=None, genre: str = "") -> dict:
-    """
+    """記事1本の間に何度も呼ばれるので、読んだ結果を使い回す。
+
     genre指定あり → {name: {列名: 値, ...}} のフラットdict
     genre指定なし → {genre: {name: {...}}} のネストdict
     """
+    if not (creds_data and sheet_url):
+        return _load_db_uncached(creds_data, sheet_url, genre)
+    return sheet_cache.get(
+        ("clinic_db", sheet_url, genre),
+        lambda: _load_db_uncached(creds_data, sheet_url, genre),
+    )
+
+
+def _load_db_uncached(creds_data=None, sheet_url=None, genre: str = "") -> dict:
     global last_load_error
     last_load_error = ""
     if creds_data and sheet_url:
@@ -254,6 +282,7 @@ def upsert_clinic(name: str, domain: str, genre: str, info: str, affili_filename
     未指定（""）の項目は既存値を保持する。
     """
     today = str(date.today())
+    sheet_cache.clear()  # 書き換えるので覚えている値を捨てる
     if creds_data and sheet_url:
         spreadsheet = _get_spreadsheet(creds_data, sheet_url)
         ws = _get_or_create_tab(spreadsheet, genre)
