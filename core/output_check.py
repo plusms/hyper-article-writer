@@ -435,3 +435,38 @@ def replace_todo_in_cells(html: str) -> tuple:
         return f"{opening}{cleaned or '−'}{closing}"
 
     return _CELL_RE.sub(_fix, html), count
+
+
+# 1案件あたりの送客リンクの上限。埼玉で1案件14本張られた。
+# 同じリンクを本文に繰り返すと読者にも検索エンジンにも不自然になる。
+MAX_LINKS_PER_CLINIC = 6
+
+_ANCHOR_RE = re.compile(r'<a\s[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S | re.I)
+
+
+def limit_affiliate_links(html: str, max_per_clinic: int = MAX_LINKS_PER_CLINIC) -> tuple:
+    """1案件あたりの送客リンクを上限までに減らす。
+
+    超えた分はリンクを外してテキストだけ残す。画像を包むリンクは外さない。
+    前から順に残すので、冒頭の比較表と紹介ブロックのリンクが優先される。
+    Returns: (直したHTML, 外した本数)
+    """
+    counts: dict = {}
+    removed = 0
+
+    def _fix(match):
+        nonlocal removed
+        url, inner = match.group(1), match.group(2)
+        if "noxclinic" not in url:
+            return match.group(0)
+        # 画像リンクは残す。外すと画像だけが浮く
+        if "<img" in inner.lower():
+            return match.group(0)
+        key = url.split("/")[-1].split(".html")[0]
+        counts[key] = counts.get(key, 0) + 1
+        if counts[key] <= max_per_clinic:
+            return match.group(0)
+        removed += 1
+        return inner
+
+    return _ANCHOR_RE.sub(_fix, html), removed

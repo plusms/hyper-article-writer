@@ -451,6 +451,11 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     if replaced:
         log(f"　→ 記事全体を機械で置き換え: {len(replaced)}種類")
 
+    # 1案件に張るリンクの本数を上限までに減らす。埼玉で1案件14本張られた。
+    result["html"], cut_links = output_check.limit_affiliate_links(result["html"])
+    if cut_links:
+        log(f"　→ 多すぎる送客リンク {cut_links}本を外しました")
+
     # 表のセルに残った要確認の印を消す。指示だけでは守られないので機械で消す。
     result["html"], cell_marks = output_check.replace_todo_in_cells(result["html"])
     if cell_marks:
