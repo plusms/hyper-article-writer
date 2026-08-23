@@ -32,7 +32,7 @@ from core.sheets import (
     read_input_rows_mass, write_status_mass, write_output_row_mass,
     read_site_info, write_site_info_settings, create_site_tab, init_site_info_sheet,
 )
-from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, facility_db, article_type_db, output_check, article_review
+from core import site_config_manager, image_generator, drive_uploader, clinic_block_writer, clinic_db_manager, facility_db, article_type_db, output_check, article_review, pipeline
 
 st.set_page_config(page_title="CV Article Writer", layout="wide", page_icon="✍️")
 
@@ -821,24 +821,35 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             elif _batch_site_name:
                 st.warning(f"⚠️ サイト設定に「{_batch_site_name}」が未登録です。パーツとリンクの規則なしで生成します")
 
+            # 量産はコマンドから回すのと同じ手順を呼ぶ。ここに手順を書くと二重になり、
+            # 片方だけ直したときに画面から作った記事とコマンドで作った記事がずれる。
+            if tab_name == "量産":
+                _mass_settings = pipeline.Settings(
+                    claude_key=claude_key, gemini_key=gemini_key,
+                    article_provider=article_provider, research_provider=research_provider,
+                    gcp_creds=creds_data, db_sheet_url=db_sheet_url,
+                    site_info_sheet_url=_site_info_sheet_url_default,
+                    site_parts=_batch_site_parts, site_name=_batch_site_name,
+                    auto_review=bool(st.session_state.get("auto_review")),
+                )
+
+                def _mass_on_body(partial, _ws=ws, _row=row_num):
+                    write_output_row_mass(_ws, _row, partial)
+                    write_status_mass(_ws, _row, "本文まで完了")
+                    st.write("　→ 本文までシートに保存しました")
+
+                _mass_result = pipeline.generate_article(
+                    inputs, _mass_settings, log=st.write, on_body=_mass_on_body,
+                )
+                write_output_row_mass(ws, row_num, _mass_result)
+                write_status_mass(ws, row_num, "完了")
+                st.success(f"✅ 行{row_num} 完了: {kw}")
+                progress.progress((i + 1) / len(rows))
+                continue
+
             comp = analyze_competitors(inputs["competitor_urls"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
             if is_kh:
                 inputs["clinics"] = []
-            elif tab_name == "量産":
-                # 掲載案件は案件DBの推し順位で決める。競合から探させると案件DBに
-                # 無い名前が出て照合で全部弾かれ、案件ゼロの記事になる。
-                inputs["clinics"] = clinic_db_manager.list_clinics_by_rank(
-                    inputs.get("genre", ""), creds_data=creds_data, sheet_url=db_sheet_url,
-                )
-                if not inputs["clinics"]:
-                    raise RuntimeError(
-                        "案件DBから案件を取れませんでした。ジャンルの指定と案件DBのタブを確認してください"
-                    )
-                inputs["clinic_count"] = len(inputs["clinics"])
-                st.write(
-                    f"　→ 案件DBの推し順位順に {len(inputs['clinics'])} 案件: "
-                    + "、".join(c["name"] for c in inputs["clinics"])
-                )
             elif inputs["competitor_urls"]:
                 discovered = discover_clinics_from_competitors(
                     comp["raw_pages"], inputs["clinics"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider
@@ -904,9 +915,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
                 "clinics": inputs.get("clinics", []),
             }
             try:
-                if tab_name == "量産":
-                    write_output_row_mass(ws, row_num, _batch_partial)
-                elif not is_bulk and not is_kh:
+                if not is_bulk and not is_kh:
                     write_output_row(ws, row_num, _batch_partial)
                 _write_status(ws, row_num, "本文まで完了")
             except Exception as _pw_e:
@@ -985,9 +994,6 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             elif tab_name == "ノウハウ":
                 write_output_row_knowhow(ws, row_num, _out)
                 write_status_knowhow(ws, row_num, "完了")
-            elif tab_name == "量産":
-                write_output_row_mass(ws, row_num, {**_out, "clinics": inputs["clinics"]})
-                write_status_mass(ws, row_num, "完了")
             else:
                 write_output_row(ws, row_num, {**_out, "clinics": inputs["clinics"]})
                 write_status(ws, row_num, "完了")
