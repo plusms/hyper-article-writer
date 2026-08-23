@@ -767,6 +767,21 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             comp = analyze_competitors(inputs["competitor_urls"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider)
             if is_kh:
                 inputs["clinics"] = []
+            elif tab_name == "量産":
+                # 掲載案件は案件DBの推し順位で決める。競合から探させると案件DBに
+                # 無い名前が出て照合で全部弾かれ、案件ゼロの記事になる。
+                inputs["clinics"] = clinic_db_manager.list_clinics_by_rank(
+                    inputs.get("genre", ""), creds_data=creds_data, sheet_url=db_sheet_url,
+                )
+                if not inputs["clinics"]:
+                    raise RuntimeError(
+                        "案件DBから案件を取れませんでした。ジャンルの指定と案件DBのタブを確認してください"
+                    )
+                inputs["clinic_count"] = len(inputs["clinics"])
+                st.write(
+                    f"　→ 案件DBの推し順位順に {len(inputs['clinics'])} 案件: "
+                    + "、".join(c["name"] for c in inputs["clinics"])
+                )
             elif inputs["competitor_urls"]:
                 discovered = discover_clinics_from_competitors(
                     comp["raw_pages"], inputs["clinics"], claude_key, gemini_api_key=gemini_key, research_provider=research_provider

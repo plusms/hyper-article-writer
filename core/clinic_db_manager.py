@@ -564,3 +564,36 @@ def _save_local(db: dict) -> bool:
         return True
     except Exception:
         return False
+
+
+def list_clinics_by_rank(genre: str, creds_data=None, sheet_url=None) -> list:
+    """案件DBのジャンルタブを推し順位の順で返す。
+
+    量産はここから掲載案件を決める。競合から探させると案件DBに無い名前が出て
+    照合で全部弾かれ、案件ゼロの記事になる。登録済みの案件をそのまま使う。
+    """
+    if not (genre and creds_data and sheet_url):
+        return []
+    try:
+        flat = load_db(creds_data, sheet_url, genre=genre)
+    except Exception:
+        return []
+    items = []
+    for name, record in flat.items():
+        if not isinstance(record, dict):
+            continue
+        items.append((_rank_of(record), name, record))
+    items.sort(key=lambda x: (x[0], x[1]))
+    clinics = []
+    for _rank, name, record in items:
+        appeals = [
+            str(record.get(f"比較優位性{i}", "")).strip()
+            for i in range(1, 6)
+        ]
+        clinics.append({
+            "name": name,
+            "domain": str(record.get(DOMAIN_COL, record.get("domain", ""))).strip(),
+            "recommended": str(record.get("比較表に出すプラン", "")).strip(),
+            "appeal": " / ".join(a for a in appeals if a),
+        })
+    return clinics
