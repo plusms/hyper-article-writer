@@ -171,7 +171,12 @@ def run_checks(html: str, source_text: str = "") -> dict:
 
     Returns: {"fix": [...], "human": [...]}
     """
-    fix = find_ng_words(html) + find_notation_violations(html) + find_marker_violations(html)
+    fix = (
+        find_ng_words(html)
+        + find_notation_violations(html)
+        + find_marker_violations(html)
+        + find_long_paragraphs(html)
+    )
     human = find_unverified_numbers(html, source_text) + find_unsourced_claims(html)
     return {"fix": fix, "human": human}
 
@@ -197,6 +202,43 @@ def build_fix_instruction(findings: list[dict]) -> str:
 # 言い換え先が日本語として成立しない組み合わせ。検出はするが機械で置き換えない。
 # 品質性は辞書にない語なので、置き換えると文章が壊れる。人かモデルが直す。
 NO_AUTO_REPLACE = {"安全性"}
+
+# 禁止ワードのうち、文脈に関係なく同じ言い換えで通るもの。
+# 実際に出た使われ方から作った。1語だけを置き換えると助詞が壊れるので、
+# 前後を含んだ形で持つ。ここに無い語はモデルか人が直す。
+NG_PHRASE_REPLACEMENTS = [
+    ("が前提となります", "が必要になります"),
+    ("が前提となるため", "が必要になるため"),
+    ("が前提の", "が必要な"),
+    ("を前提に", "をもとに"),
+    ("コース契約が前提", "コース契約のみ"),
+    ("正確に把握できます", "正確に分かります"),
+    ("を把握できます", "が分かります"),
+    ("把握しておく", "確認しておく"),
+    ("柔軟なプラン設計", "選べるプラン構成"),
+    ("プラン設計", "プラン構成"),
+    ("重要な判断材料になります", "選ぶときの判断材料になります"),
+    ("が重要です", "で選べます"),
+    ("を把握しておく", "を確認しておく"),
+    ("を把握しやすい", "が分かりやすい"),
+    ("を把握できる", "が分かる"),
+    ("把握", "確認"),
+    ("を整理しています", "をまとめています"),
+    ("を整理することで", "をそろえることで"),
+    ("を整理して", "をそろえて"),
+    ("整理する", "そろえる"),
+    ("重要な判断材料", "選ぶときの判断材料"),
+    ("が重要な判断軸", "が選ぶときの判断軸"),
+    ("重要な", "見落とせない"),
+    ("を整理することで", "をそろえることで"),
+    ("整理して", "まとめて"),
+    ("スムーズに進められます", "迷わず進められます"),
+    ("スムーズに", "滞りなく"),
+    ("実態", "実際の状況"),
+    ("傾向があります", "ことが多いです"),
+    ("傾向が強く", "ことが多く"),
+    ("傾向", "ことが多い点"),
+]
 
 # 削るだけで文が成立する語。置き換え先を考える必要がないのでここで消す。
 DELETABLE_WORDS = ["もちろん", "なお、", "順番に"]
@@ -235,6 +277,9 @@ def apply_mechanical_fixes(html: str) -> tuple:
         for word, replacement, _reason in NOTATION_RULES
         if word not in NO_AUTO_REPLACE
     ]
+    # 長い言い回しから先に当てる。「傾向があります」より先に「傾向」を当てると
+    # 「ことが多い点があります」になって日本語が壊れる。
+    pairs += NG_PHRASE_REPLACEMENTS
     pairs += [(word, "") for word in DELETABLE_WORDS]
     return _replace_in_text(html, pairs)
 
@@ -261,4 +306,23 @@ def find_invented_classes(html: str, reference_html: str) -> list:
                 "text": word,
                 "detail": "見本に出てこないクラス名。装飾が効かない可能性がある",
             })
+    return findings
+
+
+MAX_SENTENCES_PER_PARAGRAPH = 3
+
+
+def find_long_paragraphs(html: str) -> list:
+    """1段落4文以上を拾う。ライティングルールは3文以内。"""
+    findings = []
+    for match in _P_RE.finditer(html):
+        plain = _strip_tags(match.group(1)).strip()
+        if plain.count("。") <= MAX_SENTENCES_PER_PARAGRAPH:
+            continue
+        findings.append({
+            "kind": "表現",
+            "rule": f"1段落{MAX_SENTENCES_PER_PARAGRAPH}文以内",
+            "text": plain,
+            "detail": f"{plain.count('。')}文ある。段落を分けるか箇条書きにする",
+        })
     return findings

@@ -439,6 +439,32 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
         article_type_db.get_reference_html(type_record or {}, col)
         for col in article_type_db.REFERENCE_COLUMNS
     )
+    # 記事全体に機械の直しをかける。検品を1周に減らしたぶん、置き換え先が決まって
+    # いる違反はここで確実に消す。モデルに任せると直したそばから別の違反が出る。
+    result["html"], replaced = output_check.apply_mechanical_fixes(result["html"])
+    if replaced:
+        log(f"　→ 記事全体を機械で置き換え: {len(replaced)}種類")
+
+    # 段落が長い箇所だけモデルに直させる。分割は文章を触るので機械ではできない。
+    long_paras = output_check.find_long_paragraphs(result["html"])
+    if long_paras and settings.auto_review and settings.claude_key:
+        log(f"　→ 4文以上の段落 {len(long_paras)}件を分けます")
+        try:
+            repaired = article_review.apply_fixes(
+                result["html"], long_paras, settings.article_provider,
+                claude_api_key=settings.claude_key, gemini_api_key=settings.gemini_key,
+            )
+            if repaired and len(repaired) >= len(result["html"]) * 0.7:
+                result["html"] = repaired
+            else:
+                log("　→ 修正後が短くなりすぎたので元のまま使います")
+        except Exception as e:
+            log(f"　→ 段落の分割に失敗しました（{type(e).__name__}）")
+
+    remaining = output_check.run_checks(result["html"], "")
+    if remaining.get("fix"):
+        log(f"　→ 機械チェックの残り {len(remaining['fix'])}件")
+
     invented = output_check.find_invented_classes(result["html"], reference_all)
     if invented:
         names = "、".join(f["text"] for f in invented)
