@@ -192,3 +192,40 @@ def build_fix_instruction(findings: list[dict]) -> str:
         "全文を作り直すと直っていない箇所が壊れるため、差分修正に限定します。\n\n"
         + format_findings(findings)
     )
+
+
+# 削るだけで文が成立する語。置き換え先を考える必要がないのでここで消す。
+DELETABLE_WORDS = ["もちろん", "なお、", "順番に"]
+
+_TAG_SPLIT_RE = re.compile(r"(<[^>]*>)")
+
+
+def _replace_in_text(html: str, pairs: list) -> tuple:
+    """タグの外側だけを置き換える。
+
+    タグの中を触るとクラス名やURLが壊れる。置き換えた組み合わせも返す。
+    """
+    done = []
+    parts = _TAG_SPLIT_RE.split(html)
+    for i, part in enumerate(parts):
+        if part.startswith("<"):
+            continue
+        for before, after in pairs:
+            if before and before in part:
+                part = part.replace(before, after)
+                if before not in [d[0] for d in done]:
+                    done.append((before, after))
+        parts[i] = part
+    return "".join(parts), done
+
+
+def apply_mechanical_fixes(html: str) -> tuple:
+    """置き換え先が決まっている違反を機械で直す。
+
+    表記ルールは言い換えが定義済み。削るだけで通る語も一緒に処理する。
+    禁止ワードのうち文の作り直しが要るものはここでは触らない。
+    Returns: (直したHTML, [(直した語, 直した後)])
+    """
+    pairs = [(word, replacement) for word, replacement, _reason in NOTATION_RULES]
+    pairs += [(word, "") for word in DELETABLE_WORDS]
+    return _replace_in_text(html, pairs)

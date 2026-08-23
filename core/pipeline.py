@@ -257,8 +257,7 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
             log(f"　→ 4位以降のまとめ生成に失敗: {e}")
             lower_html = ""
         if lower_html:
-            for rank, _name, info in lower:
-                check_block(lower_html, info, rank, log=log)
+            lower_html = fix_lower_blocks(lower_html, lower, inputs, settings, log=log)
             blocks.append(lower_html)
 
     if not blocks:
@@ -267,6 +266,44 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
     if CLINIC_BLOCK_RE.search(filled):
         log("　→ 紹介ブロックの差し込み口が2つ以上あります。1つ目だけ埋めました")
     return filled
+
+
+def fix_lower_blocks(html: str, lower: list, inputs: dict, settings: Settings, log=_noop) -> str:
+    """4位以降のまとめブロックを直す。
+
+    1院ずつモデルの検品をかけると回数が増えるので、まとめた1つに対して
+    機械の置き換え1回とモデルの修正1回だけかける。
+    """
+    fixed, replaced = output_check.apply_mechanical_fixes(html)
+    if replaced:
+        log("　→ 4位以降を機械で置き換え: "
+            + "、".join(f"{b}→{a or '削除'}" for b, a in replaced))
+
+    source_text = "\n\n".join(info for _rank, _name, info in lower)
+    try:
+        found = output_check.run_checks(fixed, source_text)
+    except Exception:
+        return fixed
+    for item in found.get("human", []):
+        log(f"　→ 4位以降で人が見る指摘: [{item.get('rule', '')}] {item.get('text', '')[:40]}")
+    to_fix = found.get("fix", [])
+    if not to_fix:
+        return fixed
+    log(f"　→ 4位以降の残り {len(to_fix)}件をまとめて直します")
+    if not (settings.auto_review and settings.claude_key):
+        return fixed
+    try:
+        repaired = article_review.apply_fixes(
+            fixed, to_fix, settings.article_provider,
+            claude_api_key=settings.claude_key, gemini_api_key=settings.gemini_key,
+        )
+    except Exception as e:
+        log(f"　→ 4位以降の修正に失敗しました（{type(e).__name__}）。そのまま使います")
+        return fixed
+    if not repaired or len(repaired) < len(fixed) * 0.7:
+        log("　→ 修正後が短くなりすぎたので元のまま使います")
+        return fixed
+    return repaired
 
 
 def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) -> dict:
