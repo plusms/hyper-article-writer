@@ -21,6 +21,10 @@ CLINIC_BLOCK_RE = re.compile(r"<!--\s*クリニック紹介ブロック入る\s*
 REVIEW_BLOCK_RANK_MAX = 3
 # ここから下はまとめて1回で書かせる。2〜3段落でリンクもCTAも無いので1院1コールは無駄。
 BATCH_BLOCK_RANK_FROM = 4
+# 1回のまとめ生成に入れる院数。7院を1回に詰めると入力が9千字を超えて、
+# 渡してあるデータをモデルが読み切れず「DBに情報がない」と書く。仙台3本目で
+# 要確認8件がこれだった。3院ずつなら4千字前後に収まる。
+BATCH_BLOCK_CHUNK = 3
 
 
 class Settings:
@@ -233,8 +237,9 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
         blocks.append(block)
         reference = block
 
-    if lower:
-        log(f"　🏥 {lower[0][0]}位から{lower[-1][0]}位の {len(lower)} 院をまとめて生成中...")
+    for start in range(0, len(lower), BATCH_BLOCK_CHUNK):
+        chunk = lower[start:start + BATCH_BLOCK_CHUNK]
+        log(f"　🏥 {chunk[0][0]}位から{chunk[-1][0]}位の {len(chunk)} 院をまとめて生成中...")
         entries = [
             {
                 "rank": rank,
@@ -242,7 +247,7 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
                 "info": info,
                 "price_data": str(records.get(name, {}).get("紹介ブロックに出すプラン", "")).strip(),
             }
-            for rank, name, info in lower
+            for rank, name, info in chunk
         ]
         try:
             lower_html = clinic_block_writer.generate_lower_blocks(
@@ -257,8 +262,9 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
             log(f"　→ 4位以降のまとめ生成に失敗: {e}")
             lower_html = ""
         if lower_html:
-            lower_html = fix_lower_blocks(lower_html, lower, inputs, settings, log=log)
+            lower_html = fix_lower_blocks(lower_html, chunk, inputs, settings, log=log)
             blocks.append(lower_html)
+            reference = lower_html
 
     if not blocks:
         return html
