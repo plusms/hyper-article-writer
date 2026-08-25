@@ -156,3 +156,62 @@ def build_reference_block(record: dict, columns: list | None = None, limit: int 
         "見出しの文言はコピーしない。ブロックの並び・タグの構造・クラス名・表の列構成を真似する。\n"
         + "\n\n".join(parts)
     )
+
+
+# ── 必須ブロックの確認 ────────────────────────────────────
+# 「説明の文｜語1・語2」の形で書かれた行だけを機械で確かめる。
+# 語を書かない行は助言として構成生成に渡すだけで、確認はしない。
+REQUIRED_COL = "必須ブロック"
+_RULE_SEP = "｜"
+_WORD_SEP = "・"
+
+
+def required_rules(record: dict) -> list:
+    """必須ブロックのうち、語で確かめられるものを返す。
+
+    Returns: [{"label": 説明の文, "words": [語, ...]}]
+    """
+    value = (record or {}).get(REQUIRED_COL, "") or ""
+    rules = []
+    for line in value.replace("\r", "").split("\n"):
+        line = line.strip()
+        if not line or _RULE_SEP not in line:
+            continue
+        label, _, words = line.partition(_RULE_SEP)
+        found = [w.strip() for w in words.replace("/", _WORD_SEP).split(_WORD_SEP) if w.strip()]
+        if label.strip() and found:
+            rules.append({"label": label.strip(), "words": found})
+    return rules
+
+
+def missing_required(text: str, rules: list) -> list:
+    """見出しに語が1つも出ていない必須ブロックを返す。
+
+    本文全体ではなく見出しだけを見る。本文のどこかに語があっても、
+    そのテーマのブロックが立っていることにはならない。
+    """
+    import re
+
+    headings = " ".join(
+        re.sub(r"<[^>]+>", "", m.group(1))
+        for m in re.finditer(r"<h[23][^>]*>(.*?)</h[23]>", text or "", re.S | re.I)
+    )
+    if not headings.strip():
+        # 構成テキストを渡された場合。行の頭がH2・H3の形になっている
+        headings = text or ""
+    missing = []
+    for rule in rules:
+        if any(word in headings for word in rule["words"]):
+            continue
+        missing.append(rule)
+    return missing
+
+
+def format_missing(missing: list) -> str:
+    """足りない必須ブロックを読める形にする。"""
+    if not missing:
+        return ""
+    return "\n".join(
+        "- " + r["label"] + "（見出しに " + "・".join(r["words"]) + " のいずれかを入れる）"
+        for r in missing
+    )

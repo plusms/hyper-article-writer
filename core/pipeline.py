@@ -8,6 +8,7 @@ Streamlit の中でしか動かないと、20本流している間ブラウザ�
 import re
 
 from core import article_review, article_type_db, block_builder, block_spec
+from core import expression_rules
 from core import clinic_block_writer, clinic_db_manager
 from core import facility_db, output_check, site_config_manager
 from core.planner import generate_structure
@@ -502,6 +503,18 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     if len(clinics) < 5:
         log(f"　→ 掲載できる案件が {len(clinics)} 社しかありません。院タブにこの地域の院を足してください")
 
+    # そのジャンルの禁止表現を読み込む。記事1本ごとに入れ替える。
+    try:
+        rules = expression_rules.load_rules(settings.gcp_creds, settings.db_sheet_url)
+        applied = expression_rules.for_genre(rules, inputs.get("genre", ""))
+        output_check.set_genre_rules(applied["ng_words"], applied["replacements"])
+        if applied["ng_words"] or applied["replacements"]:
+            log("　→ ジャンルの表現ルール: 禁止 " + str(len(applied["ng_words"]))
+                + "語 / 置換 " + str(len(applied["replacements"])) + "組")
+    except Exception as e:
+        output_check.clear_genre_rules()
+        log("　→ 表現ルールを読めませんでした（" + type(e).__name__ + "）")
+
     type_record = load_article_type(inputs, settings)
     if type_record:
         log(f"　→ 型を適用: {inputs.get('article_type', '')}／{inputs.get('genre', '')}")
@@ -627,6 +640,22 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     result["html"], split_count = output_check.split_long_paragraphs(result["html"])
     if split_count:
         log(f"　→ 4文以上の段落を {split_count}件 機械で分けました")
+
+    # 型が求める必須ブロックが立っているかを見出しで確かめる。
+    # 構成生成に自由文で渡すだけでは守られない。リスクと副作用の説明が
+    # 抜けたのはこれが理由だった。
+    rules = article_type_db.required_rules(type_record or {})
+    if rules:
+        lacking = article_type_db.missing_required(result["html"], rules)
+        if lacking:
+            log("　→ 型が求める必須ブロックが " + str(len(lacking)) + "件 立っていません")
+            result["todo_list"] = (
+                result.get("todo_list", "")
+                + "\n\n【必須ブロックが無い】\n"
+                + article_type_db.format_missing(lacking)
+            ).strip()
+        else:
+            log("　→ 必須ブロックはすべて立っています")
 
     # Markdownの混入とH3内の余分なマーカーを機械で直す。指示では守られない。
     result["html"], out_counts = output_check.apply_output_fixes(result["html"])

@@ -382,6 +382,7 @@ def apply_mechanical_fixes(html: str) -> tuple:
     # 長い言い回しから先に当てる。「傾向があります」より先に「傾向」を当てると
     # 「ことが多い点があります」になって日本語が壊れる。
     pairs += NG_PHRASE_REPLACEMENTS
+    pairs += list(EXTRA_REPLACEMENTS)
     pairs += [(word, "") for word in DELETABLE_WORDS]
     # 長い言い回しから先に当てる。「傾向」を「傾向があります」より先に当てると
     # 「ことが多い点があります」になる。並び順に頼らず機械で長い順にそろえる。
@@ -910,7 +911,8 @@ def run_article_checks(html: str, main_kw: str = "", sub_kw: list | None = None,
                        clinic_count: int = 0) -> list:
     """記事1本ぶんの検査。人が見る指摘だけを返す。"""
     return (
-        find_markdown(html)
+        find_genre_ng_words(html)
+        + find_markdown(html)
         + find_unclosed_tags(html)
         + find_truncated_text(html)
         + find_self_talk(html)
@@ -956,3 +958,38 @@ def classes_around_tag(html: str, tag: str) -> list:
             if element.get("class"):
                 names.update(element.get("class"))
     return sorted(names)
+
+
+# ── ジャンル別の禁止表現 ──────────────────────────────────
+# 案件DBの表現ルールタブから流し込む。記事1本ごとに入れ替える。
+# コードに書くとジャンルが増えるたびに書き足しが必要になる。
+EXTRA_NG_WORDS: list = []
+EXTRA_REPLACEMENTS: list = []
+
+
+def set_genre_rules(ng_words=None, replacements=None) -> None:
+    """そのジャンルの禁止語と置換を差し替える。"""
+    global EXTRA_NG_WORDS, EXTRA_REPLACEMENTS
+    EXTRA_NG_WORDS = [w for w in (ng_words or []) if w]
+    EXTRA_REPLACEMENTS = [(b, a) for b, a in (replacements or []) if b]
+
+
+def clear_genre_rules() -> None:
+    set_genre_rules([], [])
+
+
+def find_genre_ng_words(html: str) -> list:
+    """ジャンル別の禁止語を拾う。言い換えを持たないので人が直す。"""
+    if not EXTRA_NG_WORDS:
+        return []
+    text = _strip_tags(html)
+    findings = []
+    for word in EXTRA_NG_WORDS:
+        if word not in text:
+            continue
+        findings.append({
+            "rule": "ジャンルの禁止表現",
+            "text": word,
+            "detail": "該当箇所: " + _snippet(text, word, 50),
+        })
+    return findings
