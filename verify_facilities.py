@@ -141,6 +141,14 @@ def main() -> int:
 
     print("")
     print("食い違い: " + str(len(ng)) + "件")
+    if ng:
+        print("")
+        print("取り直す行番号（取得Taskにそのまま渡す）")
+        print("院タブ: " + facility_db.tab_name(args.genre))
+        print("行: " + "、".join(str(r[0]) for r in ng))
+        print("")
+        for row_no, label, _note in ng:
+            print(str(row_no) + " " + label)
     if not args.write or not ng:
         return 0
 
