@@ -28,10 +28,14 @@ REGIONAL_PRICE_YES = {"あり", "有", "はい", "yes", "YES", "○", "◯"}
 
 # 料金の列は末尾に足す。既存タブの列位置をずらさずに列を増やせる。
 # 読み込みはヘッダー名で引くので、並び順は記事の中身に影響しない。
+# 地図の埋め込みは人が用意する固定入力。iframeのHTMLかGoogleマップの場所IDを入れる。
+# AIに作らせると存在しない座標のURLを出すので、列が空なら記事に地図を出さない。
+MAP_COL = "地図の埋め込み"
+
 HEADERS = [
     REGION_COL, CLINIC_COL, "院名", "休診日", "診療時間", "所在地",
     "最寄駅・アクセス", "公式サイトURL", "予約リンク", "取得元URL",
-    "人の確認済み", "取得成否",
+    "人の確認済み", "取得成否", MAP_COL,
 ] + PRICE_COLS
 
 
@@ -244,6 +248,10 @@ def format_facilities(rows: list[dict]) -> str:
             value = row.get(col, "").strip()
             if value:
                 parts.append(f"{col}：{value}")
+        embed = row.get(MAP_COL, "").strip()
+        if embed:
+            # 地図はこの値をそのまま使わせる。URLを組み立てさせると別の場所が出る。
+            parts.append(f"地図の埋め込み（このHTMLをそのまま使う）：{embed}")
         lines.append(" / ".join(parts))
     return "\n".join(lines)
 
@@ -267,3 +275,12 @@ def attach_to_clinic_info(clinic_info: dict, facilities: dict) -> dict:
             )
         merged[name] = block.strip()
     return merged
+
+
+def has_map_embed(rows: list) -> bool:
+    """その地域の院に地図の埋め込みが1つでも入っているか。
+
+    入っていない院では、見本に地図があっても足りないと数えない。
+    数えるとモデルが架空のGoogleマップURLを作る。
+    """
+    return any((row.get(MAP_COL, "") or "").strip() for row in rows or [])

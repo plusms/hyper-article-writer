@@ -194,10 +194,17 @@ def _link_rule(base_link: str, slug: str) -> str:
 
 # 4位以降は仕様でCTAボタンと送客リンクを置かない。見本に有っても足りないと数えない。
 TOP_ONLY_PARTS = ["c-btn", "full-img", "img"]
+# 地図は院タブの埋め込み列が正。列が空なら記事に出さないので足りないと数えない。
+MAP_PARTS = ["iframe", "map", "map-cont", "map-ttl"]
+
+
+def has_map_source(info: str) -> bool:
+    """その院に渡した情報に地図の埋め込みが入っているか。"""
+    return "地図の埋め込み" in (info or "")
 
 
 def match_reference(block: str, reference: str, is_top: bool, rank: int,
-                    settings: Settings, log=_noop) -> str:
+                    settings: Settings, log=_noop, info: str = "") -> str:
     """見本にあるパーツが落ちていたら、見本から足させる。
 
     「見本を踏襲する」と書いても守られないので、出た物を数えて突き合わせる。
@@ -206,7 +213,9 @@ def match_reference(block: str, reference: str, is_top: bool, rank: int,
     """
     if not reference:
         return block
-    allow = [] if is_top else TOP_ONLY_PARTS
+    allow = [] if is_top else list(TOP_ONLY_PARTS)
+    if not has_map_source(info):
+        allow += MAP_PARTS
     missing = output_check.missing_reference_parts(block, reference, allow_missing=allow)
     if not missing:
         return block
@@ -287,7 +296,7 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
             log(f"　→ {rank}位 {name} で失敗: {e}")
             continue
         block = review_block(block, info, inputs, settings, rank=rank, log=log)
-        block = match_reference(block, reference, is_top, rank, settings, log=log)
+        block = match_reference(block, reference, is_top, rank, settings, log=log, info=info)
         block, replaced = output_check.apply_mechanical_fixes(block)
         if replaced:
             log(f"　→ {rank}位を機械で置き換え: {len(replaced)}種類")
