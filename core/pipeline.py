@@ -7,7 +7,8 @@ Streamlit の中でしか動かないと、20本流している間ブラウザ�
 
 import re
 
-from core import article_review, article_type_db, clinic_block_writer, clinic_db_manager
+from core import article_review, article_type_db, block_builder, block_spec
+from core import clinic_block_writer, clinic_db_manager
 from core import facility_db, output_check, site_config_manager
 from core.planner import generate_structure
 from core.researcher import analyze_competitors
@@ -260,6 +261,107 @@ def match_reference(block: str, reference: str, is_top: bool, rank: int,
     return fixed
 
 
+def facility_map(clinic_info: dict, inputs: dict, settings: Settings, log=_noop) -> dict:
+    """その地域の院タブの行を、案件名ごとに構造のまま返す。
+
+    attach_facilities は院情報を文章にして案件情報へ混ぜる。文章にすると
+    表へ差し込めないので、組み立てにはこちらの構造を使う。
+    """
+    if inputs.get("article_type") != "地域":
+        return {}
+    if not (settings.gcp_creds and settings.db_sheet_url):
+        return {}
+    rows = facility_db.load_facilities(
+        settings.gcp_creds, settings.db_sheet_url, inputs.get("genre", "")
+    )
+    if not rows:
+        return {}
+    region = inputs.get("region", "").strip()
+    if not region:
+        region = facility_db.pick_region(
+            inputs.get("main_kw", ""), facility_db.list_regions(rows))
+    if not region:
+        return {}
+    ok, _blocked = facility_db.select_for_article(rows, region, list(clinic_info.keys()))
+    return ok or {}
+
+
+def build_link_params(base_link: str, slug: str) -> dict:
+    """用途ごとの完成URLを作る。パラメータの規則は1箇所だけで持つ。"""
+    if not (base_link and slug):
+        return {}
+    return {
+        "txt": base_link + "?" + slug + "_rank_txt",
+        "bn": base_link + "?" + slug + "_rank_bn",
+        "bt": base_link + "?" + slug + "_rank_bt",
+    }
+
+
+def paragraph_slots(spec: list) -> int:
+    """骨格が求める段落の本数。"""
+    return sum(i.get("count", 1) for i in spec if i.get("kind") == block_spec.PARAGRAPHS)
+
+
+def build_blocks_from_spec(spec: list, clinic_info: dict, records: dict, facilities: dict,
+                           inputs: dict, settings: Settings, criteria: str, log=_noop) -> list:
+    """骨格に沿ってブロックを組む。モデルは文章だけ書く。"""
+    slug = inputs.get("slug", "").strip()
+    ordered = sorted(clinic_info.items(), key=lambda kv: push_rank(records.get(kv[0], {})))
+    facility_columns = []
+    for rows in facilities.values():
+        if rows:
+            facility_columns = list(rows[0].keys())
+            break
+    slots = paragraph_slots(spec)
+    used_angles = []
+    blocks = []
+
+    for rank, (name, info) in enumerate(ordered, start=1):
+        record = records.get(name, {})
+        is_top = rank < BATCH_BLOCK_RANK_FROM
+        base_link = str(record.get("送客リンク", "")).strip()
+        data = {
+            "name": name,
+            "is_top": is_top,
+            "link_params": build_link_params(base_link, slug) if is_top else {},
+            "clinic_row": record,
+            "facility_rows": facilities.get(name, []),
+            "clinic_columns": list(record.keys()),
+            "facility_columns": facility_columns,
+            "slug": slug,
+            "alias": str(record.get("画像のクリニック略称", "")).strip(),
+            "components": settings.site_components or [],
+            "cta_label": "の無料カウンセリング",
+        }
+        holes = block_builder.missing_data(spec, data)
+        if holes:
+            log("　→ " + str(rank) + "位 " + name + " の材料の穴: " + "、".join(holes))
+        log("　🏥 " + str(rank) + "位 " + name + " の文章を生成中...")
+        try:
+            texts = clinic_block_writer.generate_block_texts(
+                name=name, rank=rank, is_top=is_top, facts=info,
+                paragraph_count=slots, main_kw=inputs.get("main_kw", ""),
+                sub_kw=inputs.get("sub_kw", []), criteria_text=criteria,
+                article_type=inputs.get("article_type", ""), already_used=used_angles,
+                claude_api_key=settings.claude_key, gemini_api_key=settings.gemini_key,
+                article_provider=settings.article_provider,
+            )
+        except Exception as e:
+            log("　→ " + str(rank) + "位 " + name + " の文章生成で失敗: " + str(e))
+            continue
+        if not texts.get("paragraphs"):
+            log("　→ " + str(rank) + "位 " + name + " の文章を拾えませんでした。飛ばします")
+            continue
+        if texts.get("pickup"):
+            used_angles.append(texts["pickup"])
+        html = block_builder.assemble(spec, data, texts)
+        html, replaced = output_check.apply_mechanical_fixes(html)
+        if replaced:
+            log("　→ " + str(rank) + "位を機械で置き換え: " + str(len(replaced)) + "種類")
+        blocks.append(html)
+    return blocks
+
+
 def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict,
                        type_record: dict, settings: Settings, log=_noop) -> str:
     """本文のプレースホルダを紹介ブロックで置き換える。
@@ -282,6 +384,37 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
             html = html[:last_h2] + marker + "\n" + html[last_h2:]
     criteria = extract_criteria_summary(html, settings.claude_key)
     reference = article_type_db.get_reference_html(type_record or {}, "紹介ブロックの並び")
+
+    # 見本から骨格を読み取れたら、HTMLはコードが組む。モデルは文章だけ書く。
+    # 見本が無いジャンルはこれまでどおりモデルにHTMLを書かせる。切り替えで
+    # いきなり全ジャンルを止めない。
+    spec = []
+    if reference:
+        components = settings.site_components or []
+        try:
+            spec = block_spec.derive(
+                reference,
+                site_config_manager.part_class_names(components, "cta"),
+                site_config_manager.part_class_names(components, "image"),
+            )
+        except Exception as e:
+            log("　→ 見本から骨格を読み取れませんでした（" + type(e).__name__ + "）")
+            spec = []
+    if spec and any(i.get("kind") == block_spec.PARAGRAPHS for i in spec):
+        log("　→ 骨格を読み取りました: " + block_spec.summarize(spec))
+        counts = block_spec.model_owned_count(spec)
+        log("　→ モデルが書く部品 " + str(counts["model"]) + " / コードが組む部品 "
+            + str(counts["code"]))
+        built = build_blocks_from_spec(
+            spec, clinic_info, records, facility_map(clinic_info, inputs, settings, log=log),
+            inputs, settings, criteria, log=log)
+        if built:
+            filled = CLINIC_BLOCK_RE.sub(lambda _m: "\n".join(built), html, count=1)
+            if CLINIC_BLOCK_RE.search(filled):
+                log("　→ 紹介ブロックの差し込み口が2つ以上あります。1つ目だけ埋めました")
+            return filled
+        log("　→ 組み立てで1つも作れませんでした。モデルにHTMLを書かせる方へ切り替えます")
+
     trim = article_type_db.get_reference_html(type_record or {}, "紹介ブロックで削るもの")
     slug = inputs.get("slug", "").strip()
     ordered = sorted(clinic_info.items(), key=lambda kv: push_rank(records.get(kv[0], {})))

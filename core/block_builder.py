@@ -150,6 +150,9 @@ def build_info_table(labels: list, mapping: dict, clinic_row: dict, facility_row
             if str(found).strip():
                 value = found
                 break
+        # 表のセルにも社内向けのメモが混ざる。実例＝麻酔の行に
+        # 「※金額はDBに記載なし」が入り、そのまま記事に出た。
+        value = "\n".join(reader_facing_lines(value)) if str(value).strip() else value
         attr = ' style="width:40%;"' if i == 0 else ""
         rows.append("<tr><th" + attr + ">" + _esc(label) + "</th><td>"
                     + (_br(value) if str(value).strip() else EMPTY_CELL) + "</td></tr>")
@@ -190,6 +193,9 @@ def build_subtitle(text: str, classes: list) -> str:
     return '<div class="' + cls + '">' + _esc(text) + "</div>"
 
 
+# 切った残りがこれで終わっていたら文になっていない。
+DANGLING_ENDINGS = "はがをにでとものへや"
+
 # 社内向けのメモがレギュレーション列に混ざっている。本文に出ると事故になる。
 INTERNAL_MARKERS = [
     "DBに記載なし", "データベースに記載", "記載なし", "ASPの禁止表現",
@@ -205,8 +211,23 @@ def reader_facing_lines(value: str) -> list:
     """
     kept = []
     for line in _lines(value):
-        if any(word in line for word in INTERNAL_MARKERS):
-            continue
+        for word in INTERNAL_MARKERS:
+            if word not in line:
+                continue
+            # 印の直前の区切りから後ろを落とす。行ごと消すと本文まで消える。
+            # 「有料で処方※金額はDBに記載なし」は前半を残す。
+            cut = line.find(word)
+            for mark in ("※", "（", "(", "。", "、"):
+                pos = line.rfind(mark, 0, cut)
+                if pos > 0:
+                    cut = pos
+                    break
+            line = line[:cut].rstrip("・-※（( 、。")
+            # 切った残りが助詞で終わっていたら文になっていない。行ごと落とす。
+            # 「ASPの禁止表現はDBに記載なし」を切ると「ASPの禁止表現は」が残る。
+            if line and line[-1] in DANGLING_ENDINGS:
+                line = ""
+            break
         if not line.lstrip("・-※【 ").strip():
             continue
         kept.append(line)

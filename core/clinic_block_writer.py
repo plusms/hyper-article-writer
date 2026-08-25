@@ -407,3 +407,106 @@ def generate_lower_blocks(entries: list, main_kw: str = '', sub_kw: list | None 
         + 'HTML本文のみを出力してください。説明文・コードフェンスは不要。' + NL
     )
     return _call_model(prompt, claude_api_key, gemini_api_key, article_provider, max_tokens=8192)
+
+
+# ── 文章だけを書かせる ────────────────────────────────────
+# HTMLはコードが組む。モデルに書かせるのは推し文と紹介文の段落だけ。
+# クラス名の写し間違い・タグの入れ子崩れ・表の欠落は全部モデルがHTMLを書くのが原因。
+
+_PICKUP_RE = re.compile(r"^\s*推し文\s*[:：]\s*(.+)$", re.M)
+_PARA_RE = re.compile(r"^\s*段落\s*([0-9]+)\s*[:：]\s*(.+)$", re.M)
+
+
+def parse_block_texts(raw: str) -> dict:
+    """行の頭の印で拾う。拾えなければ空を返す。
+
+    空を返したら呼び出し側が失敗として扱う。無理に本文から切り出すと、
+    説明文や前置きが記事に入る。
+    """
+    text = raw or ""
+    pickup = ""
+    match = _PICKUP_RE.search(text)
+    if match:
+        pickup = match.group(1).strip()
+    paragraphs = []
+    for found in sorted(_PARA_RE.finditer(text), key=lambda m: int(m.group(1))):
+        body = found.group(2).strip()
+        if body:
+            paragraphs.append(body)
+    return {"pickup": pickup, "paragraphs": paragraphs}
+
+
+def generate_block_texts(
+    name: str,
+    rank: int,
+    is_top: bool,
+    facts: str,
+    paragraph_count: int,
+    main_kw: str = "",
+    sub_kw: list | None = None,
+    criteria_text: str = "",
+    article_type: str = "",
+    already_used: list | None = None,
+    claude_api_key: str = "",
+    gemini_api_key: str = "",
+    article_provider: str = "claude",
+) -> dict:
+    """推し文と紹介文の段落だけを書かせる。
+
+    facts はその院に渡してよい事実。ここに無いことは書かせない。
+    already_used は同じ記事で先に使った切り口。同じ言い回しの繰り返しを防ぐ。
+    """
+    sub_kw = sub_kw or []
+    used = [x for x in (already_used or []) if x]
+    lines = [
+        "あなたはSEO記事のクリニック紹介文を書くライターです。",
+        "HTMLは書きません。タグを1つも出力しないでください。表も作りません。",
+        "",
+        "【記事メインキーワード】" + main_kw,
+        "【サブキーワード】" + ("、".join(sub_kw) if sub_kw else "なし"),
+        "【記事タイプ】" + (article_type or "指定なし"),
+        "【このクリニック】" + name + "（掲載" + str(rank) + "位）",
+        "",
+        "【使ってよい事実】",
+        facts or "（なし）",
+        "",
+        "【記事内の評価軸】",
+        criteria_text or "（未入力）",
+        "",
+    ]
+    if used:
+        lines += [
+            "【同じ記事で先に使った切り口】",
+            "以下と同じ切り口・同じ言い回しにしないでください。",
+            "\n".join("- " + x for x in used),
+            "",
+        ]
+    lines += [
+        "【出力するもの】",
+        "推し文を1文と、紹介文の段落を" + str(paragraph_count) + "本。",
+        "",
+        "【出力の形式（厳守）】",
+        "行の頭に印を置いてください。印以外の説明・前置き・見出しは出さないでください。",
+        "推し文: （ここに1文）",
+    ]
+    for index in range(1, paragraph_count + 1):
+        lines.append("段落" + str(index) + ": （ここに本文）")
+    lines += [
+        "",
+        "【書き方のルール】",
+        "- 推し文は、この院を選ぶ理由が1文で分かる形にする。クリニック名は入れない",
+        "- 段落は1段落1主張。3文以内。読者が自分に当てはめて判断できる内容にする",
+        "- 使ってよい事実に書かれていることだけを書く。書かれていないことは書かない",
+        "- 数字を自分で決めて書かない。金額・回数・時間は使ってよい事実から写す",
+        "- 料金の表と基本情報の表は別に出るので、表の中身を段落で言い直さない",
+        "- キーワードをそのままの語順で文に入れない。自然な日本語にする",
+        "- 隅付き括弧とかぎ括弧を使わない",
+        "- 以下のとおり・次のとおりなど、記事内を指す表現を使わない",
+        "- 免責注記・掲載情報の更新案内・公式サイトでご確認くださいを書かない",
+    ]
+    if not is_top:
+        lines.append("- この院は4位以降です。1位や最もおすすめという書き方をしない")
+
+    result = _call_model(NL.join(lines), claude_api_key, gemini_api_key,
+                         article_provider, max_tokens=2048)
+    return parse_block_texts(result)
