@@ -73,9 +73,46 @@ FAILURE_MARKERS = [
 _SYSTEM_TABS = {"clinic_db", "院", "シート1", "地域", "指示文", "設定", "型", "見本"}
 _ARCHIVE_SUFFIX = "_旧info"  # 列形式へ移す前の退避タブ。ジャンルとして扱わない
 
+# ジャンルごとに2タブ持つ。案件は全国共通、院は地域ごと。
+# 「医療脱毛_案件」「医療脱毛_院」の形。タブ名だけ見てどちらか分かる。
+DEAL_SUFFIX = "_案件"
+FACILITY_SUFFIX = "_院"
+
+
+def genre_tab_name(genre: str) -> str:
+    """そのジャンルの案件タブ名。"""
+    return f"{genre}{DEAL_SUFFIX}" if genre else ""
+
+
+def genre_of_tab(title: str) -> str:
+    """タブ名からジャンル名を取り出す。案件タブでなければ空を返す。"""
+    if title.endswith(DEAL_SUFFIX):
+        return title[: -len(DEAL_SUFFIX)]
+    return ""
+
+
+def resolve_genre_tab(spreadsheet, genre: str) -> str:
+    """実際にあるタブ名を返す。新しい形が無ければ旧来のジャンル名をそのまま使う。
+
+    移行の途中で両方の形が混ざるので、どちらでも読めるようにする。
+    """
+    if not genre:
+        return ""
+    titles = {ws.title for ws in spreadsheet.worksheets()}
+    new_name = genre_tab_name(genre)
+    if new_name in titles:
+        return new_name
+    if genre in titles:
+        return genre
+    return ""
+
 
 def _is_genre_tab(title: str) -> bool:
-    return title not in _SYSTEM_TABS and not title.endswith(_ARCHIVE_SUFFIX)
+    if title in _SYSTEM_TABS or title.endswith(_ARCHIVE_SUFFIX):
+        return False
+    if title.endswith(FACILITY_SUFFIX):
+        return False
+    return True
 
 
 def _get_spreadsheet(creds_data: dict, sheet_url: str):
@@ -88,10 +125,14 @@ def _get_spreadsheet(creds_data: dict, sheet_url: str):
 
 
 def _get_or_create_tab(spreadsheet, genre: str) -> gspread.Worksheet:
+    existing = resolve_genre_tab(spreadsheet, genre)
+    if existing:
+        return spreadsheet.worksheet(existing)
+    title = genre_tab_name(genre)
     try:
-        return spreadsheet.worksheet(genre)
+        return spreadsheet.worksheet(title)
     except gspread.WorksheetNotFound:
-        ws = spreadsheet.add_worksheet(title=genre, rows=1000, cols=max(len(_HEADERS), 30))
+        ws = spreadsheet.add_worksheet(title=title, rows=1000, cols=max(len(_HEADERS), 30))
         ws.update(f"A1:{_col_letter(len(_HEADERS))}1", [_HEADERS])
         return ws
 
@@ -180,7 +221,10 @@ def find_duplicate_names(creds_data=None, sheet_url=None, genre: str = "") -> li
 def _find_duplicate_names_uncached(creds_data=None, sheet_url=None, genre: str = "") -> list:
     try:
         spreadsheet = _get_spreadsheet(creds_data, sheet_url)
-        rows = spreadsheet.worksheet(genre).get_all_values()
+        title = resolve_genre_tab(spreadsheet, genre)
+        if not title:
+            return []
+        rows = spreadsheet.worksheet(title).get_all_values()
     except Exception:
         return []
     if len(rows) < 2:
@@ -214,10 +258,18 @@ def list_genre_tabs(creds_data=None, sheet_url=None) -> list[str]:
 
 
 def _list_genre_tabs_uncached(creds_data=None, sheet_url=None) -> list[str]:
+    """ジャンル名のリストを返す。タブ名から接尾辞を外して重複を潰す。"""
     if creds_data and sheet_url:
         try:
             spreadsheet = _get_spreadsheet(creds_data, sheet_url)
-            return [ws.title for ws in spreadsheet.worksheets() if _is_genre_tab(ws.title)]
+            names = []
+            for ws in spreadsheet.worksheets():
+                if not _is_genre_tab(ws.title):
+                    continue
+                name = genre_of_tab(ws.title) or ws.title
+                if name not in names:
+                    names.append(name)
+            return names
         except Exception:
             pass
     db = _load_local()
@@ -249,10 +301,15 @@ def _load_db_uncached(creds_data=None, sheet_url=None, genre: str = "") -> dict:
             spreadsheet = _get_spreadsheet(creds_data, sheet_url)
             tabs = [ws.title for ws in spreadsheet.worksheets() if _is_genre_tab(ws.title)]
             if genre:
-                if genre not in tabs:
+                title = resolve_genre_tab(spreadsheet, genre)
+                if not title:
                     return {}
-                return _parse_worksheet(spreadsheet.worksheet(genre))
-            return {tab: _parse_worksheet(spreadsheet.worksheet(tab)) for tab in tabs}
+                return _parse_worksheet(spreadsheet.worksheet(title))
+            # キーはタブ名ではなくジャンル名で返す。呼び出し側は接尾辞を知らない。
+            return {
+                (genre_of_tab(tab) or tab): _parse_worksheet(spreadsheet.worksheet(tab))
+                for tab in tabs
+            }
         except Exception as e:
             last_load_error = f"{type(e).__name__}: {e}"
     db = _load_local()
@@ -267,7 +324,10 @@ def get_genre_headers(genre: str, creds_data=None, sheet_url=None) -> list[str]:
         return []
     try:
         spreadsheet = _get_spreadsheet(creds_data, sheet_url)
-        ws = spreadsheet.worksheet(genre)
+        title = resolve_genre_tab(spreadsheet, genre)
+        if not title:
+            return []
+        ws = spreadsheet.worksheet(title)
         return [h.strip() for h in ws.row_values(1)]
     except Exception:
         return []
@@ -348,7 +408,8 @@ def delete_clinic(name: str, genre: str = "", creds_data=None, sheet_url=None) -
     if creds_data and sheet_url:
         spreadsheet = _get_spreadsheet(creds_data, sheet_url)
         tabs = [ws.title for ws in spreadsheet.worksheets() if _is_genre_tab(ws.title)]
-        target_tabs = [genre] if genre and genre in tabs else tabs
+        _resolved = resolve_genre_tab(spreadsheet, genre) if genre else ""
+        target_tabs = [_resolved] if _resolved else tabs
         for tab_name in target_tabs:
             ws = spreadsheet.worksheet(tab_name)
             all_values = ws.get_all_values()

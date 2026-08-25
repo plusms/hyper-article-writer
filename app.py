@@ -596,7 +596,7 @@ def _attach_facilities(clinic_info: dict, inputs: dict, creds_data, sheet_url, l
     """
     if inputs.get("article_type") != "地域" or not (creds_data and sheet_url):
         return clinic_info
-    rows = facility_db.load_facilities(creds_data, sheet_url)
+    rows = facility_db.load_facilities(creds_data, sheet_url, inputs.get("genre", ""))
     if not rows:
         return clinic_info
     # 量産タブは地域名を列で持つ。無ければメインキーワードから拾う
@@ -4127,9 +4127,16 @@ with _safe_tab(tab_cases):
                     use_container_width=True, hide_index=True,
                 )
         if _active_db_url and _db_creds:
+            _ft_genre = st.selectbox(
+                "院タブを作るジャンル", list(st.session_state.get(_ck, {}).keys()),
+                key="db_facility_tab_genre",
+            ) if st.session_state.get(_ck) else ""
             if st.button("🏥 院タブを用意する（無ければ作成）", key="db_ensure_facility_tab"):
-                if facility_db.ensure_tab(_db_creds, _active_db_url):
-                    st.success("院タブを確認しました。地域・クリニック名・診療時間などはスプレッドシートに直接入れてください")
+                if facility_db.ensure_tab(_db_creds, _active_db_url, _ft_genre):
+                    st.success(
+                        f"「{facility_db.tab_name(_ft_genre)}」を確認しました。"
+                        "地域・クリニック名・診療時間・地域料金はスプレッドシートに直接入れてください"
+                    )
                 else:
                     st.error("院タブを作れませんでした。スプレッドシートURLと認証を確認してください")
 

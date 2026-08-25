@@ -88,7 +88,9 @@ def attach_facilities(clinic_info: dict, inputs: dict, settings: Settings, log=_
         return clinic_info
     if not (settings.gcp_creds and settings.db_sheet_url):
         return clinic_info
-    rows = facility_db.load_facilities(settings.gcp_creds, settings.db_sheet_url)
+    rows = facility_db.load_facilities(
+        settings.gcp_creds, settings.db_sheet_url, inputs.get("genre", "")
+    )
     if not rows:
         return clinic_info
     region = inputs.get("region", "").strip()
@@ -197,8 +199,19 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
     上位3院は1院1コール。4位以降はまとめて1コール。4位以降は2〜3段落で
     リンクもCTAも無いので、1院ずつ呼ぶと待ち時間が伸びるだけになる。
     """
-    if not CLINIC_BLOCK_RE.search(html) or not clinic_info:
+    if not clinic_info:
         return html
+    if not CLINIC_BLOCK_RE.search(html):
+        # モデルが差し込み口を出さないことがある。高崎と高松で紹介ブロックが
+        # 1つも入らず4千字の記事になった。まとめの前に差し込み口を足して続行する。
+        marker = "<!-- クリニック紹介ブロック入る -->"
+        last_h2 = html.rfind("<h2")
+        if last_h2 < 0:
+            log("　→ 紹介ブロックの差し込み口がありません。末尾に足します")
+            html = html + "\n" + marker
+        else:
+            log("　→ 紹介ブロックの差し込み口がありません。最後のH2の前に足します")
+            html = html[:last_h2] + marker + "\n" + html[last_h2:]
     criteria = extract_criteria_summary(html, settings.claude_key)
     reference = article_type_db.get_reference_html(type_record or {}, "紹介ブロックの並び")
     trim = article_type_db.get_reference_html(type_record or {}, "紹介ブロックで削るもの")
@@ -349,6 +362,8 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     if not clinics and inputs["clinics"]:
         raise RuntimeError("案件DBに使える案件が1件もありません")
     sync_clinic_list(inputs, clinics, log=log)
+    if len(clinics) < 5:
+        log(f"　→ 掲載できる案件が {len(clinics)} 社しかありません。院タブにこの地域の院を足してください")
 
     type_record = load_article_type(inputs, settings)
     if type_record:

@@ -5,3 +5,4 @@ __pycache__/
 service_account.json
 .streamlit/secrets.toml
 起動/
+run_*.log
