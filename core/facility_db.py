@@ -284,3 +284,51 @@ def has_map_embed(rows: list) -> bool:
     数えるとモデルが架空のGoogleマップURLを作る。
     """
     return any((row.get(MAP_COL, "") or "").strip() for row in rows or [])
+
+
+def load_facilities_with_rows(creds_data=None, sheet_url=None, genre: str = "") -> list:
+    """院タブの全行を行番号つきで返す。照合して書き戻すときに使う。
+
+    load_facilities は空行を飛ばすので行番号が合わない。書き戻す用途は必ずこちらを使う。
+    Returns: [(行番号, {列名: 値})]
+    """
+    if not (creds_data and sheet_url):
+        return []
+    spreadsheet = _get_spreadsheet(creds_data, sheet_url)
+    title = _resolve_tab(spreadsheet, genre)
+    if not title:
+        return []
+    rows = spreadsheet.worksheet(title).get_all_values()
+    if len(rows) < 2:
+        return []
+    headers = [h.strip() for h in rows[0]]
+    out = []
+    for index, row in enumerate(rows[1:], start=2):
+        if not row or not row[0].strip():
+            continue
+        padded = list(row) + [""] * (len(headers) - len(row))
+        out.append((index, {h: padded[i].strip() for i, h in enumerate(headers) if h}))
+    return out
+
+
+def mark_rows_unverified(creds_data, sheet_url, genre: str, rows: list, note: str = "") -> int:
+    """指定した行の取得成否を要確認にする。
+
+    facility_db は取得成否に要確認が入った行を記事から弾くので、
+    照合で食い違った住所が記事に出なくなる。
+    """
+    if not rows:
+        return 0
+    spreadsheet = _get_spreadsheet(creds_data, sheet_url)
+    title = _resolve_tab(spreadsheet, genre)
+    if not title:
+        return 0
+    ws = spreadsheet.worksheet(title)
+    header = [h.strip() for h in ws.row_values(1)]
+    if "取得成否" not in header:
+        return 0
+    col = _col_letter(header.index("取得成否") + 1)
+    value = note or "要確認。所在地が取得元ページに無い"
+    updates = [{"range": col + str(r), "values": [[value]]} for r in rows]
+    ws.batch_update(updates)
+    return len(updates)
