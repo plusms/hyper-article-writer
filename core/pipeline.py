@@ -314,6 +314,10 @@ def build_blocks_from_spec(spec: list, clinic_info: dict, records: dict, facilit
             facility_columns = list(rows[0].keys())
             break
     slots = paragraph_slots(spec)
+    # 表記を揃える先は見本から読み取る。コードに書くとサイトごとに書き換えが要る。
+    style = block_builder.detect_notation_style(
+        article_type_db.get_reference_html(inputs.get("_type_record") or {}, "紹介ブロックの並び")
+        or inputs.get("_reference", ""))
     used_angles = []
     blocks = []
 
@@ -333,6 +337,7 @@ def build_blocks_from_spec(spec: list, clinic_info: dict, records: dict, facilit
             "alias": str(record.get("画像のクリニック略称", "")).strip(),
             "components": settings.site_components or [],
             "cta_label": "の無料カウンセリング",
+            "notation_style": style,
         }
         holes = block_builder.missing_data(spec, data)
         if holes:
@@ -406,6 +411,7 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
         counts = block_spec.model_owned_count(spec)
         log("　→ モデルが書く部品 " + str(counts["model"]) + " / コードが組む部品 "
             + str(counts["code"]))
+        inputs["_reference"] = reference
         built = build_blocks_from_spec(
             spec, clinic_info, records, facility_map(clinic_info, inputs, settings, log=log),
             inputs, settings, criteria, log=log)

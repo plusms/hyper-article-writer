@@ -130,7 +130,7 @@ def build_price_table(plans: list, headers: list, table_classes: list) -> str:
 
 
 def build_info_table(labels: list, mapping: dict, clinic_row: dict, facility_row: dict,
-                     table_classes: list) -> str:
+                     table_classes: list, style: dict | None = None) -> str:
     """基本情報の表を組む。行を省略しない。
 
     値が取れない行も出す。行が消えると院ごとに表の形が変わる。
@@ -153,6 +153,8 @@ def build_info_table(labels: list, mapping: dict, clinic_row: dict, facility_row
         # 表のセルにも社内向けのメモが混ざる。実例＝麻酔の行に
         # 「※金額はDBに記載なし」が入り、そのまま記事に出た。
         value = "\n".join(reader_facing_lines(value)) if str(value).strip() else value
+        if style and should_normalize(label):
+            value = normalize_notation(value, style)
         attr = ' style="width:40%;"' if i == 0 else ""
         rows.append("<tr><th" + attr + ">" + _esc(label) + "</th><td>"
                     + (_br(value) if str(value).strip() else EMPTY_CELL) + "</td></tr>")
@@ -419,7 +421,8 @@ def assemble(spec: list, data: dict, texts: dict) -> str:
             labels = item.get("labels") or []
             mapping = build_label_map(labels, data.get("clinic_columns") or [],
                                       data.get("facility_columns") or [])
-            out.append(build_info_table(labels, mapping, clinic_row, facility_row, classes))
+            out.append(build_info_table(labels, mapping, clinic_row, facility_row, classes,
+                                        style=data.get("notation_style")))
 
         elif kind == block_spec.MAP:
             embeds = [r.get("地図の埋め込み", "") for r in facility_rows]
@@ -480,3 +483,81 @@ def missing_data(spec: list, data: dict) -> list:
         if kind == block_spec.IMAGE and data.get("is_top") and not data.get("alias"):
             problems.append("画像のクリニック略称が案件タブに無い")
     return problems
+
+
+# ── 表記を見本に揃える ────────────────────────────────────
+# 診療時間と休診日はクリニックごとに書き方が違う。並べると1つの記事に
+# 半角コロン・全角コロン・時分の漢字・午前午後が混ざる。
+# 揃える先は見本から読み取る。コードに書くとサイトごとに書き換えが要る。
+
+_TIME_COLON = re.compile(r"(\d{1,2})\s*[:：]\s*(\d{2})")
+_TIME_KANJI = re.compile(r"(\d{1,2})\s*時\s*(\d{1,2})?\s*分?")
+_TIME_MERIDIEM = re.compile(r"(午前|午後|AM|PM|am|pm)\s*(\d{1,2})(?:\s*[:：]\s*(\d{2}))?")
+# 曜を落としてよいのは、後ろが区切りか数字か行末のときだけ。
+# 「水曜定休」の曜を落とすと「水定休」になる。後ろに漢字が続く場合は触らない。
+# 曜を落とすのは、曜日が範囲か並びになっているときだけ。
+# 単独の「土曜日」「毎週木曜日」から曜を落とすと日本語にならない。
+_RANGE_MARKS = "～〜-‐–—―"
+# 文字クラスに入れるとハイフンが範囲の記号として解釈される。エスケープした形を持つ。
+_RANGE_CLASS = re.escape(_RANGE_MARKS)
+_DAY = "月火水木金土日"
+_DAY_RUN = re.compile(
+    "([" + _DAY + "]曜日?)"
+    "((?:[" + _RANGE_CLASS + "・、,/／][" + _DAY + "]曜?日?)+)")
+_DAY_SUFFIX = re.compile("([" + _DAY + "])曜日?")
+
+
+
+def detect_notation_style(reference_html: str) -> dict:
+    """見本がどの書き方をしているかを読み取る。"""
+    text = re.sub(r"<[^>]+>", " ", reference_html or "")
+    style = {"colon": ":", "range": "～", "day_full": False}
+    if text.count("：") > text.count(":"):
+        style["colon"] = "："
+    for mark in _RANGE_MARKS:
+        if mark in text:
+            style["range"] = mark
+            break
+    full = len(_DAY_SUFFIX.findall(text))
+    short = len(re.findall(r"[月火水木金土日][" + _RANGE_CLASS + r"][月火水木金土日](?!曜)", text))
+    style["day_full"] = full > short
+    return style
+
+
+def normalize_notation(value: str, style: dict) -> str:
+    """時刻と曜日の書き方を見本に揃える。数値は変えない。"""
+    if not str(value or "").strip() or not style:
+        return value
+    text = str(value)
+    colon = style.get("colon", ":")
+
+    def _meridiem(match):
+        word, hour, minute = match.group(1), int(match.group(2)), match.group(3) or "00"
+        if word in ("午後", "PM", "pm") and hour < 12:
+            hour += 12
+        if word in ("午前", "AM", "am") and hour == 12:
+            hour = 0
+        return str(hour) + colon + minute
+
+    text = _TIME_MERIDIEM.sub(_meridiem, text)
+    text = _TIME_KANJI.sub(
+        lambda m: m.group(1) + colon + (m.group(2) or "0").zfill(2), text)
+    text = _TIME_COLON.sub(lambda m: m.group(1) + colon + m.group(2), text)
+
+    target = style.get("range", "～")
+    for mark in _RANGE_MARKS:
+        if mark != target:
+            text = re.sub(r"(?<=[0-9" + re.escape(colon) + r"月火水木金土日])" + re.escape(mark)
+                          + r"(?=[0-9月火水木金土日])", target, text)
+    if not style.get("day_full"):
+        text = _DAY_RUN.sub(
+            lambda m: _DAY_SUFFIX.sub(lambda d: d.group(1), m.group(0)), text)
+    return text
+
+
+# 表記を揃える対象の行。時刻と曜日を含む項目だけに当てる。
+NOTATION_LABEL_WORDS = ["時間", "休診", "営業", "受付", "診療"]
+
+
+def should_normalize(label: str) -> bool:
+    return any(word in (label or "") for word in NOTATION_LABEL_WORDS)
