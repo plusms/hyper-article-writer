@@ -917,3 +917,42 @@ def run_article_checks(html: str, main_kw: str = "", sub_kw: list | None = None,
         + find_keyword_stuffing(html, main_kw, sub_kw)
         + find_count_mismatch(html, clinic_count)
     )
+
+
+def classes_around_tag(html: str, tag: str) -> list:
+    """そのタグを包んでいる囲みのクラス名を、見本から集める。
+
+    サイト設定にパーツが登録されていない要素は、役割から引けない。
+    見本の中で実際に何に包まれているかを見るほうが、サイトの命名に依存しない。
+
+    囲みの中にある見出しやラベルのクラス名も一緒に返す。地図の囲みは
+    タイトルと本体で別のクラスに分かれていることがある。
+    ただし表は独立した意味を持つので中身から外す。表が落ちたことを
+    地図が無いせいだと見逃すと、料金表が消えたまま公開される。
+    """
+    if not html or "<" + tag not in html:
+        return []
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    skip_tags = {"table", "thead", "tbody", "tr", "td", "th"}
+    names = set()
+    for node in soup.find_all(tag):
+        chain = [node] + [p for p in node.parents if hasattr(p, "get")]
+        outermost = node
+        for element in chain:
+            if element.get("class"):
+                outermost = element
+        for element in chain:
+            if element.get("class"):
+                names.update(element.get("class"))
+        for element in outermost.find_all(True):
+            if element.name in skip_tags:
+                continue
+            if element.find_parent(lambda t: t.name in skip_tags):
+                continue
+            if element.get("class"):
+                names.update(element.get("class"))
+    return sorted(names)

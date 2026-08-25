@@ -82,6 +82,7 @@ def _gcp_creds(secrets: dict):
 
 def _build_settings(args, secrets, creds) -> pipeline.Settings:
     site_parts = ""
+    site_components = []
     if args.site:
         try:
             folder = secrets.get("DRIVE_PARENT_FOLDER_ID", "0ANR02wEPgx88Uk9PVA")
@@ -89,7 +90,8 @@ def _build_settings(args, secrets, creds) -> pipeline.Settings:
             if direct:
                 site_config_manager.SITE_CONFIG_FOLDER_ID_OVERRIDE = direct
             config = site_config_manager.load_site_config(args.site, creds, folder)
-            site_parts = site_config_manager.format_site_parts(config.get("components", []))
+            site_components = config.get("components", []) or []
+            site_parts = site_config_manager.format_site_parts(site_components)
             link_rule = site_config_manager.format_link_settings(config.get("link_settings", {}))
             if link_rule:
                 site_parts = "\n\n".join(filter(None, [site_parts, link_rule]))
@@ -105,6 +107,7 @@ def _build_settings(args, secrets, creds) -> pipeline.Settings:
         site_info_sheet_url=secrets.get(
             "SITE_INFO_SHEET_URL", "1Mnan9LI3HAwd7n1VABvdTnrYBmpLre2yYWwrtt8PlNk"),
         site_parts=site_parts,
+        site_components=site_components,
         site_name=args.site,
         auto_review=not args.no_review,
     )

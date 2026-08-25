@@ -717,7 +717,8 @@ def _push_rank(record: dict) -> int:
         return 999
 
 
-def _fill_clinic_blocks(html, clinic_info, records, inputs, type_record, site_parts, claude_key, log=None) -> str:
+def _fill_clinic_blocks(html, clinic_info, records, inputs, type_record, site_parts, claude_key,
+                        log=None, site_components=None) -> str:
     """本文のプレースホルダを紹介ブロックで置き換える。
 
     実装は core/pipeline.py に1本化してある。画面から回すのと量産で作りが違うと、
@@ -730,6 +731,7 @@ def _fill_clinic_blocks(html, clinic_info, records, inputs, type_record, site_pa
         article_provider=article_provider,
         site_parts=site_parts,
         auto_review=True,
+        site_components=site_components or [],
     )
     return pipeline.fill_clinic_blocks(
         html, clinic_info, records, inputs, type_record or {}, settings,
@@ -759,10 +761,12 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             inputs = build_inputs_from_row(row, defaults)
 
             _batch_site_parts = ""
+            _batch_components = []
             _batch_site_name = inputs.get("site_name", "")
             if _batch_site_name and _batch_site_name in site_config_manager.list_sites(_site_cfg_creds, _site_cfg_parent_folder):
                 _sc = site_config_manager.load_site_config(_batch_site_name, _site_cfg_creds, _site_cfg_parent_folder)
-                _batch_site_parts = site_config_manager.format_site_parts(_sc.get("components", []))
+                _batch_components = _sc.get("components", []) or []
+                _batch_site_parts = site_config_manager.format_site_parts(_batch_components)
                 # リンクの規則も渡す。案件DBの送客リンクは本体だけで、末尾のパラメータは
                 # サイト設定が持っている。渡さないとパラメータなしのリンクが出る。
                 _batch_link_rule = site_config_manager.format_link_settings(_sc.get("link_settings", {}))
@@ -878,6 +882,7 @@ def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):
             output["html"] = _fill_clinic_blocks(
                 output["html"], clinics, _batch_records, inputs, _batch_type,
                 _batch_site_parts, claude_key, log=st.write,
+                site_components=_batch_components,
             )
 
             _out = {

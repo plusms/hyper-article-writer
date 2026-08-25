@@ -8,7 +8,7 @@ Streamlit の中でしか動かないと、20本流している間ブラウザ�
 import re
 
 from core import article_review, article_type_db, clinic_block_writer, clinic_db_manager
-from core import facility_db, output_check
+from core import facility_db, output_check, site_config_manager
 from core.planner import generate_structure
 from core.researcher import analyze_competitors
 from core.sheets import read_site_info
@@ -32,7 +32,8 @@ class Settings:
 
     def __init__(self, claude_key="", gemini_key="", article_provider="claude",
                  research_provider="gemini", gcp_creds=None, db_sheet_url="",
-                 site_info_sheet_url="", site_parts="", site_name="", auto_review=True):
+                 site_info_sheet_url="", site_parts="", site_name="", auto_review=True,
+                 site_components=None):
         self.claude_key = claude_key
         self.gemini_key = gemini_key
         self.article_provider = article_provider
@@ -43,6 +44,9 @@ class Settings:
         self.site_parts = site_parts
         self.site_name = site_name
         self.auto_review = auto_review
+        # サイト設定のパーツ。役割からクラス名を引くのに使う。
+        # 文字列にしたものだけを持つと、コード側でクラス名を書くことになる。
+        self.site_components = site_components or []
 
 
 def _noop(_msg: str) -> None:
@@ -193,9 +197,13 @@ def _link_rule(base_link: str, slug: str) -> str:
 
 
 # 4位以降は仕様でCTAボタンと送客リンクを置かない。見本に有っても足りないと数えない。
-TOP_ONLY_PARTS = ["c-btn", "full-img", "img"]
+# クラス名はサイト設定のパーツから引く。ここに書くとそのサイトでしか効かない。
+TOP_ONLY_ROLES = ["cta", "image"]
 # 地図は院タブの埋め込み列が正。列が空なら記事に出さないので足りないと数えない。
-MAP_PARTS = ["iframe", "map", "map-cont", "map-ttl"]
+MAP_ROLES = ["map"]
+# タグ名は役割ではなく仕様なのでサイトによらない。
+MAP_TAGS = ["iframe"]
+IMAGE_TAGS = ["img"]
 
 
 def has_map_source(info: str) -> bool:
@@ -213,9 +221,18 @@ def match_reference(block: str, reference: str, is_top: bool, rank: int,
     """
     if not reference:
         return block
-    allow = [] if is_top else list(TOP_ONLY_PARTS)
+    components = settings.site_components or []
+    allow = [] if is_top else (
+        site_config_manager.parts_by_roles(components, TOP_ONLY_ROLES) + IMAGE_TAGS
+    )
     if not has_map_source(info):
-        allow += MAP_PARTS
+        # サイト設定にマップのパーツが無いサイトがある。見本の中で iframe を
+        # 包んでいるクラス名を集めれば、サイトの命名に依存せず取れる。
+        allow += (
+            site_config_manager.parts_by_roles(components, MAP_ROLES)
+            + output_check.classes_around_tag(reference, "iframe")
+            + MAP_TAGS
+        )
     missing = output_check.missing_reference_parts(block, reference, allow_missing=allow)
     if not missing:
         return block

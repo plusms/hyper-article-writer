@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 from typing import Any, Dict, List
 
 from bs4 import BeautifulSoup
@@ -497,3 +498,47 @@ def registered_part_names(components: list) -> list:
         for c in (components or [])
         if c.get("active", True) and str(c.get("pattern", "")).strip()
     ]
+
+
+# ── 役割からクラス名を引く ────────────────────────────────
+# パーツの名前は自由入力なので、サイトごとに表記が違う。役割ごとに手がかりの語を
+# 持ち、名前に含まれていたらそのパーツのクラス名を返す。
+# クラス名をコードに書くと、そのサイトでしか効かないものになる。
+PART_ROLE_KEYWORDS = {
+    "cta": ["CTA", "ボタン", "申込", "予約ボタン"],
+    "image": ["画像", "イメージ", "バナー"],
+    "map": ["マップ", "地図", "アクセス"],
+    "table": ["テーブル", "表"],
+    "merit": ["メリット", "デメリット"],
+}
+
+
+def part_class_names(components: list, role: str) -> list:
+    """その役割のパーツが使っているクラス名を返す。
+
+    役割が登録されていなければ空を返す。空のときに何かを補うと、
+    そのサイトに無いクラス名を扱うことになる。
+    """
+    keywords = PART_ROLE_KEYWORDS.get(role, [])
+    if not keywords:
+        return []
+    names = set()
+    for component in components or []:
+        if not component.get("active", True):
+            continue
+        label = str(component.get("name", ""))
+        if not any(word in label for word in keywords):
+            continue
+        for value in re.findall(r'class="([^"]+)"', str(component.get("pattern", ""))):
+            names.update(value.split())
+    return sorted(names)
+
+
+def parts_by_roles(components: list, roles: list) -> list:
+    """複数の役割ぶんのクラス名をまとめて返す。"""
+    out = []
+    for role in roles or []:
+        for name in part_class_names(components, role):
+            if name not in out:
+                out.append(name)
+    return out
