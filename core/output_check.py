@@ -201,7 +201,7 @@ def build_fix_instruction(findings: list[dict]) -> str:
 
 # 言い換え先が日本語として成立しない組み合わせ。検出はするが機械で置き換えない。
 # 品質性は辞書にない語なので、置き換えると文章が壊れる。人かモデルが直す。
-NO_AUTO_REPLACE = set()
+NO_AUTO_REPLACE = {"安全性"}
 
 # 禁止ワードのうち、文脈に関係なく同じ言い換えで通るもの。
 # 実際に出た使われ方から作った。1語だけを置き換えると助詞が壊れるので、
@@ -232,8 +232,6 @@ NG_PHRASE_REPLACEMENTS = [
     ("最適な", "合った"),
     ("施術の安全性に関わります", "施術中の肌への負担に関わります"),
     ("プラン設計", "プラン構成"),
-    ("重要な判断材料になります", "選ぶときの判断材料になります"),
-    ("が重要です", "で選べます"),
     ("を把握しておく", "を確認しておく"),
     ("を把握しやすい", "が分かりやすい"),
     ("を把握できる", "が分かる"),
@@ -249,11 +247,6 @@ NG_PHRASE_REPLACEMENTS = [
     ("安全性に配慮", "肌への負担に配慮"),
     ("安全性を重視", "肌への負担の少なさを重視"),
     ("安全性", "施術の質"),
-    ("が重要", "で差が出ます"),
-    ("は重要", "で差が出ます"),
-    ("も重要", "も効いてきます"),
-    ("が重要となります", "で差が出ます"),
-    ("重要となります", "で差が出ます"),
     ("スムーズにストレスなく", "無理なく"),
     ("スムーズでストレスなく", "無理なく"),
     ("を活用することで", "を使うことで"),
@@ -267,15 +260,9 @@ NG_PHRASE_REPLACEMENTS = [
     ("最適です", "向いています"),
     ("を確認する重要性", "を確認しておく理由"),
     ("する重要性", "しておく理由"),
-    ("で重要", "で差が出ます"),
-    ("に重要", "に効いてきます"),
     ("を有効活用し", "を無駄なく使い"),
     ("有効活用", "無駄なく使うこと"),
-    ("がとても重要です", "で続けやすさが決まります"),
-    ("非常に重要です", "で続けやすさが決まります"),
-    ("特に重要です", "で差が出ます"),
     ("の重要性", "が効いてくる理由"),
-    ("重要です", "で決まります"),
     ("どの脱毛機が最適か", "どの脱毛機が肌に合うか"),
     ("に活用することで", "を使うことで"),
     ("の活用法", "の使い方"),
@@ -285,8 +272,6 @@ NG_PHRASE_REPLACEMENTS = [
     ("本記事", "このページ"),
     ("ことが大切です", "ことで選べます"),
     ("が大切です", "で判断できます"),
-    ("は大切です", "で決まります"),
-    ("大切です", "判断の分かれ目になります"),
     ("ご活用ください", "お使いください"),
     ("活用して", "使って"),
     ("活用できます", "使えます"),
@@ -298,6 +283,18 @@ NG_PHRASE_REPLACEMENTS = [
     ("重要な判断材料", "選ぶときの判断材料"),
     ("が重要な判断軸", "が選ぶときの判断軸"),
     ("重要な", "見落とせない"),
+    # 助詞を巻き込まない言い換え。が・も・は・に のどれが前に来ても成立する形にする。
+    ("重要です", "大きく効いてきます"),
+    ("重要でした", "大きく効いてきました"),
+    ("重要になります", "大きく効いてきます"),
+    ("重要となります", "大きく効いてきます"),
+    ("重要でしょう", "大きく効いてきます"),
+    ("重要視されます", "大きく見られます"),
+    ("大切です", "判断の分かれ目になります"),
+    ("大切でした", "判断の分かれ目でした"),
+    ("重要な判断材料になります", "選ぶときの判断材料になります"),
+    ("を活用できます", "を使えます"),
+    ("を把握できます", "が分かります"),
     ("を整理することで", "をそろえることで"),
     ("整理して", "まとめて"),
     ("スムーズに進められます", "迷わず進められます"),
@@ -313,11 +310,44 @@ DELETABLE_WORDS = ["もちろん", "なお、", "順番に"]
 
 _TAG_SPLIT_RE = re.compile(r"(<[^>]*>)")
 
+# 置換が日本語を壊した形。置換後にこれが出たら、その1件だけ元に戻す。
+# 「も重要です」に「も重要→も効いてきます」が当たって「も効いてきますです」に
+# なった実例から作った。置換表を広げるたびに同じ事故が起きるので、表ではなく
+# 出口で止める。ますので・ますが・ますと は正しい日本語なので入れない。
+BROKEN_PATTERNS = [
+    "ますです", "ますでし", "ますな", "ますに", "ますを", "ますは", "ますも",
+    "ますだ", "ますある", "ますこと", "ますとき", "ますため", "ますよう",
+    "ませんです", "ますました", "ますません",
+    "でで", "にに", "をを", "がが", "はは", "のの",
+    # 置換後が「で〜」で始まる語と、直前の助詞がぶつかる形
+    "はで決まり", "もで決まり", "とで決まり", "にで決まり", "をで決まり",
+    "はで差が", "もで差が", "とで差が", "にで差が", "をで差が",
+    "はで選べ", "もで選べ", "とで選べ", "にで選べ", "をで選べ",
+    "はで判断", "もで判断", "とで判断", "にで判断", "をで判断",
+    "はで続け", "もで続け", "とで続け", "にで続け", "をで続け",
+]
+
+_MASUNO_OK = re.compile(r"ますの[でにか]")
+
+
+def _has_broken(text: str) -> bool:
+    """置換が壊した日本語が入っているか。"""
+    for pattern in BROKEN_PATTERNS:
+        if pattern not in text:
+            continue
+        if pattern == "ますの" and _MASUNO_OK.search(text):
+            # ますので・ますのに・ますのか は成立する
+            if len(_MASUNO_OK.findall(text)) >= text.count("ますの"):
+                continue
+        return True
+    return False
+
 
 def _replace_in_text(html: str, pairs: list) -> tuple:
     """タグの外側だけを置き換える。
 
     タグの中を触るとクラス名やURLが壊れる。置き換えた組み合わせも返す。
+    1件ずつ当てて、その置換が日本語を壊したら戻す。表の並び順に頼らない。
     """
     done = []
     parts = _TAG_SPLIT_RE.split(html)
@@ -325,10 +355,14 @@ def _replace_in_text(html: str, pairs: list) -> tuple:
         if part.startswith("<"):
             continue
         for before, after in pairs:
-            if before and before in part:
-                part = part.replace(before, after)
-                if before not in [d[0] for d in done]:
-                    done.append((before, after))
+            if not before or before not in part:
+                continue
+            candidate = part.replace(before, after)
+            if _has_broken(candidate) and not _has_broken(part):
+                continue
+            part = candidate
+            if before not in [d[0] for d in done]:
+                done.append((before, after))
         parts[i] = part
     return "".join(parts), done
 
@@ -349,6 +383,9 @@ def apply_mechanical_fixes(html: str) -> tuple:
     # 「ことが多い点があります」になって日本語が壊れる。
     pairs += NG_PHRASE_REPLACEMENTS
     pairs += [(word, "") for word in DELETABLE_WORDS]
+    # 長い言い回しから先に当てる。「傾向」を「傾向があります」より先に当てると
+    # 「ことが多い点があります」になる。並び順に頼らず機械で長い順にそろえる。
+    pairs.sort(key=lambda pair: len(pair[0]), reverse=True)
     fixed, done = _replace_in_text(html, pairs)
     # タグをまたいで割れている語は上の置換で拾えない。残った分だけもう一度当てる
     plain = _strip_tags(fixed)
@@ -358,7 +395,25 @@ def apply_mechanical_fixes(html: str) -> tuple:
         for pair in done2:
             if pair not in done:
                 done.append(pair)
+    fixed = drop_empty_inline_tags(fixed)
     return fixed, done
+
+
+_EMPTY_INLINE_RE = re.compile(r"<(?:span|strong|em|b)(?:\s[^>]*)?>\s*</(?:span|strong|em|b)>", re.I)
+
+
+def drop_empty_inline_tags(html: str) -> str:
+    """中身が空になった装飾タグを消す。
+
+    タグをまたぐ置換のあと、マーカーの中身だけが置換先へ移って
+    <span class="marker"></span> が残る。空のマーカーは公開すると崩れて見える。
+    """
+    for _ in range(3):
+        fixed = _EMPTY_INLINE_RE.sub("", html)
+        if fixed == html:
+            break
+        html = fixed
+    return html
 
 
 # 見本に無いクラス名をモデルが作ることがある。h2-title・h2-ttl など。
@@ -567,7 +622,12 @@ def replace_across_tags(html: str, pairs: list) -> tuple:
                     keep.add(i)
                 else:
                     out.append(ch)
-            html = "".join(out)
+            candidate = "".join(out)
+            # タグの外側だけを見る置換と同じ検査をかける。ここが素通りしていたため、
+            # 1回目で弾いた置換が2回目に当たって「効いてきますです」が通っていた。
+            if _has_broken(_strip_tags(candidate)) and not _has_broken(_strip_tags(html)):
+                break
+            html = candidate
             if (before, after) not in done:
                 done.append((before, after))
     return html, done
@@ -583,3 +643,277 @@ def pull_todo_marks(html: str) -> tuple:
     if not found:
         return html, []
     return _TODO_MARK_RE.sub("", html), found
+
+
+# ── 見本との粒度照合 ─────────────────────────────────────
+# 見本にあるパーツが出力に無いと、院ごとに情報の厚みが違う記事になる。
+# 「見本を踏襲する」と指示しても守られないので、出た物を数えて突き合わせる。
+_ELEMENT_KINDS = [
+    ("table", "料金表・基本情報などのテーブル"),
+    ("iframe", "地図の埋め込み"),
+    ("ul", "おすすめポイントの箇条書き"),
+    ("img", "画像"),
+    ("h3", "見出し"),
+]
+
+
+def _count_elements(html: str) -> dict:
+    counts = {}
+    for tag, _label in _ELEMENT_KINDS:
+        counts[tag] = len(re.findall("<" + tag + r"[\s>]", html, re.I))
+    return counts
+
+
+def _class_words(html: str) -> set:
+    words = set()
+    for value in re.findall(r'class="([^"]+)"', html):
+        words.update(value.split())
+    return words
+
+
+def missing_reference_parts(html: str, reference_html: str, allow_missing: list | None = None) -> list:
+    """見本にあって出力に無いパーツを返す。
+
+    allow_missing は仕様として置かないもの。4位以降のCTAボタンなど。
+    """
+    if not reference_html:
+        return []
+    skip = set(allow_missing or [])
+    findings = []
+    ref_counts = _count_elements(reference_html)
+    got_counts = _count_elements(html)
+    for tag, label in _ELEMENT_KINDS:
+        if tag in skip or ref_counts.get(tag, 0) == 0:
+            continue
+        if got_counts.get(tag, 0) >= ref_counts[tag]:
+            continue
+        findings.append({
+            "rule": "見本にあるパーツが足りない",
+            "text": label,
+            "detail": f"<{tag}> が見本に{ref_counts[tag]}個、出力に{got_counts.get(tag, 0)}個",
+        })
+    ref_classes = _class_words(reference_html)
+    got_classes = _class_words(html)
+    for name in sorted(ref_classes - got_classes):
+        if name in skip:
+            continue
+        findings.append({
+            "rule": "見本にあるパーツが足りない",
+            "text": name,
+            "detail": f'見本の class="{name}" が出力に無い',
+        })
+    return findings
+
+
+def build_reference_fix_instruction(findings: list, reference_html: str) -> str:
+    """足りないパーツを見本から足させる指示。文章は触らせない。"""
+    if not findings:
+        return ""
+    lines = [f"- {f['text']}: {f['detail']}" for f in findings]
+    return (
+        "このブロックには見本にあるパーツが足りていません。"
+        "足りないパーツだけを見本と同じHTMLで足してください。" + chr(10)
+        + "既にある文章・数値・クラス名は1文字も変更しないでください。" + chr(10)
+        + "情報が無い項目は空欄にせず、その行を出したうえで内容を「−」にしてください。" + chr(10) + chr(10)
+        + chr(10).join(lines) + chr(10) + chr(10)
+        + "【見本HTML】" + chr(10) + reference_html
+    )
+
+
+# ── 出力の壊れを拾う ─────────────────────────────────────
+_MD_BOLD_RE = re.compile(r"[*]{2}([^*\n]{1,80}?)[*]{2}")
+_MD_HEAD_RE = re.compile(r"^[ ]{0,3}#{1,6}[ ]+(.+)$", re.M)
+_H3_SPLIT_RE = re.compile(r"(?=<h3[\s>])", re.I)
+_PAIR_TAGS = ("strong", "em", "span", "p", "div", "table", "ul", "li")
+_OPEN_TAG_RE = re.compile(r"<(strong|em|span|p|div|table|ul|li)(?:\s[^>]*)?>", re.I)
+_CLOSE_TAG_RE = re.compile(r"</(strong|em|span|p|div|table|ul|li)>", re.I)
+_INNER_RE = re.compile(r"<(p|span|td|th|li)[^>]*>(.*?)</\1>", re.S | re.I)
+
+# AIが読者ではなく作業者に向けて書いた文。本文に残ると事故になる。
+SELF_TALK_WORDS = [
+    "提供された情報", "提供されていません", "情報には含まれていません",
+    "DBに記載", "データベースに記載", "別途確認が必要", "入力データ",
+    "案件DB", "取得できませんでした", "記載がありません",
+]
+
+# 文末がこれで終わっていたら文が途中で切れている。「※金額は」で切れていた実例から。
+_DANGLING_ENDINGS = "はがをにでとものへや"
+
+
+def convert_markdown(html: str) -> tuple:
+    """HTMLに混ざったMarkdownの太字をタグに直す。
+
+    アスタリスクがそのまま公開される。指示で禁止しても混ざるので機械で直す。
+    Returns: (直したHTML, 直した数)
+    """
+    count = 0
+
+    def _bold(match):
+        nonlocal count
+        count += 1
+        return "<strong>" + match.group(1) + "</strong>"
+
+    return _MD_BOLD_RE.sub(_bold, html), count
+
+
+def find_markdown(html: str) -> list:
+    """タグに直せなかったMarkdown記法を拾う。"""
+    findings = []
+    for match in _MD_HEAD_RE.finditer(html):
+        findings.append({
+            "rule": "Markdownの見出し記法",
+            "text": match.group(0).strip()[:60],
+            "detail": "HTMLの見出しタグに直す",
+        })
+    left = _MD_BOLD_RE.search(html)
+    if left:
+        findings.append({
+            "rule": "Markdownの太字記法",
+            "text": left.group(0)[:60],
+            "detail": "strongタグに直す",
+        })
+    return findings
+
+
+def find_unclosed_tags(html: str) -> list:
+    """開きタグと閉じタグの数が合わないものを拾う。入れ子崩れがここに出る。"""
+    opens: dict = {}
+    closes: dict = {}
+    for match in _OPEN_TAG_RE.finditer(html):
+        name = match.group(1).lower()
+        opens[name] = opens.get(name, 0) + 1
+    for match in _CLOSE_TAG_RE.finditer(html):
+        name = match.group(1).lower()
+        closes[name] = closes.get(name, 0) + 1
+    findings = []
+    for name in _PAIR_TAGS:
+        if opens.get(name, 0) == closes.get(name, 0):
+            continue
+        findings.append({
+            "rule": "タグの数が合わない",
+            "text": name,
+            "detail": "開き{0}個、閉じ{1}個".format(opens.get(name, 0), closes.get(name, 0)),
+        })
+    return findings
+
+
+def find_truncated_text(html: str) -> list:
+    """文が助詞で終わっている箇所を拾う。"""
+    findings = []
+    for match in _INNER_RE.finditer(html):
+        plain = _strip_tags(match.group(2)).strip()
+        if len(plain) < 4:
+            continue
+        if plain[-1] not in _DANGLING_ENDINGS:
+            continue
+        findings.append({
+            "rule": "文が途中で切れている",
+            "text": plain[-40:],
+            "detail": "文末が助詞で終わっている。書き足すか行を消す",
+        })
+    return findings
+
+
+def find_self_talk(html: str) -> list:
+    """読者ではなく作業者に向けて書かれた文を拾う。"""
+    text = _strip_tags(html)
+    findings = []
+    for word in SELF_TALK_WORDS:
+        if word not in text:
+            continue
+        findings.append({
+            "rule": "読者向けでない文",
+            "text": word,
+            "detail": "該当箇所: " + _snippet(text, word, 60),
+        })
+    return findings
+
+
+def dedupe_markers(html: str) -> tuple:
+    """1つのH3の中に2つ以上あるマーカーを、先頭の1つだけ残す。
+
+    各H3に1か所という指示は守られない。装飾を外すだけなので機械でできる。
+    Returns: (直したHTML, 外した数)
+    """
+    count = 0
+    out = []
+    for part in _H3_SPLIT_RE.split(html):
+        found = list(_MARKER_RE.finditer(part))
+        if len(found) <= 1:
+            out.append(part)
+            continue
+        for match in reversed(found[1:]):
+            part = part[:match.start()] + match.group(2) + part[match.end():]
+            count += 1
+        out.append(part)
+    return "".join(out), count
+
+
+def find_keyword_stuffing(html: str, main_kw: str = "", sub_kw: list | None = None) -> list:
+    """空白区切りのキーワードがそのまま本文に出ているものを拾う。"""
+    text = _strip_tags(html)
+    findings = []
+    seen = set()
+    for kw in [main_kw] + list(sub_kw or []):
+        kw = (kw or "").strip()
+        if not kw or kw in seen:
+            continue
+        seen.add(kw)
+        if " " not in kw and "　" not in kw:
+            continue
+        if kw not in text:
+            continue
+        findings.append({
+            "rule": "キーワードのまま詰め込み",
+            "text": kw,
+            "detail": "自然な日本語に直す／該当箇所: " + _snippet(text, kw, 60),
+        })
+    return findings
+
+
+def find_count_mismatch(html: str, clinic_count: int) -> list:
+    """見出しのN選と実際に紹介した院数が合わないものを拾う。"""
+    if not clinic_count:
+        return []
+    findings = []
+    seen = set()
+    for match in re.finditer(r"([0-9]{1,2})\s*選", _strip_tags(html)):
+        promised = int(match.group(1))
+        if promised == clinic_count or promised in seen:
+            continue
+        seen.add(promised)
+        findings.append({
+            "rule": "見出しの院数と紹介数が合わない",
+            "text": match.group(0),
+            "detail": "見出しは{0}院、紹介ブロックは{1}院".format(promised, clinic_count),
+        })
+    return findings
+
+
+def apply_output_fixes(html: str) -> tuple:
+    """機械で確実に直せる出力の壊れをまとめて直す。
+
+    Returns: (直したHTML, {項目: 件数})
+    """
+    counts = {}
+    html, n = convert_markdown(html)
+    if n:
+        counts["Markdownの太字をタグに直した"] = n
+    html, n = dedupe_markers(html)
+    if n:
+        counts["H3内の余分なマーカーを外した"] = n
+    html = drop_empty_inline_tags(html)
+    return html, counts
+
+
+def run_article_checks(html: str, main_kw: str = "", sub_kw: list | None = None,
+                       clinic_count: int = 0) -> list:
+    """記事1本ぶんの検査。人が見る指摘だけを返す。"""
+    return (
+        find_markdown(html)
+        + find_unclosed_tags(html)
+        + find_truncated_text(html)
+        + find_self_talk(html)
+        + find_keyword_stuffing(html, main_kw, sub_kw)
+        + find_count_mismatch(html, clinic_count)
+    )

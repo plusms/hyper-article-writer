@@ -17,14 +17,14 @@ from core.writer import WRITING_RULES, extract_criteria_summary, generate_body
 # writer が地域・比較記事で埋め込むプレースホルダ。空白の揺れを拾えるようにする
 CLINIC_BLOCK_RE = re.compile(r"<!--\s*クリニック紹介ブロック入る\s*-->")
 
-# モデルを呼ぶ検品をかける掲載順位の上限。ここまでがリンクとCTAと料金表を持つ。
-REVIEW_BLOCK_RANK_MAX = 3
-# ここから下はまとめて1回で書かせる。2〜3段落でリンクもCTAも無いので1院1コールは無駄。
+# モデルを呼ぶ検品をかける掲載順位の上限。全院が見本と同じ粒度を持つので全院かける。
+# 3院で切っていたため、4位以降は一発生成のまま記事に入っていた。
+REVIEW_BLOCK_RANK_MAX = 99
+# ここから下は送客リンクとCTAを置かない。それ以外は見本と同じ粒度で出す。
 BATCH_BLOCK_RANK_FROM = 4
-# 1回のまとめ生成に入れる院数。7院を1回に詰めると入力が9千字を超えて、
-# 渡してあるデータをモデルが読み切れず「DBに情報がない」と書く。仙台3本目で
-# 要確認8件がこれだった。3院ずつなら4千字前後に収まる。
-BATCH_BLOCK_CHUNK = 3
+# 2026-08-25 まとめ生成は廃止。1院1コールに戻した。まとめると見本を切ることになり、
+# 料金表と基本情報が4位以降から落ちる。入力を詰め込むとモデルが「DBに情報がない」と
+# 書く問題も、1院ずつなら起きない。
 
 
 class Settings:
@@ -192,6 +192,48 @@ def _link_rule(base_link: str, slug: str) -> str:
     )
 
 
+# 4位以降は仕様でCTAボタンと送客リンクを置かない。見本に有っても足りないと数えない。
+TOP_ONLY_PARTS = ["c-btn", "full-img", "img"]
+
+
+def match_reference(block: str, reference: str, is_top: bool, rank: int,
+                    settings: Settings, log=_noop) -> str:
+    """見本にあるパーツが落ちていたら、見本から足させる。
+
+    「見本を踏襲する」と書いても守られないので、出た物を数えて突き合わせる。
+    足りない分だけを足させ、既にある文章は触らせない。1回だけ直して、
+    それでも足りなければ人のキューへ回す。
+    """
+    if not reference:
+        return block
+    allow = [] if is_top else TOP_ONLY_PARTS
+    missing = output_check.missing_reference_parts(block, reference, allow_missing=allow)
+    if not missing:
+        return block
+    log(f"　→ {rank}位に見本のパーツが {len(missing)}件 足りません: "
+        + "、".join(m["text"] for m in missing[:6]))
+    if not settings.claude_key:
+        return block
+    instruction = output_check.build_reference_fix_instruction(missing, reference)
+    try:
+        fixed = clinic_block_writer.edit_clinic_block(
+            block, instruction, settings.claude_key,
+            gemini_api_key=settings.gemini_key,
+            article_provider=settings.article_provider,
+        )
+    except Exception as e:
+        log(f"　→ {rank}位の見本合わせに失敗しました（{type(e).__name__}）。そのまま使います")
+        return block
+    if not fixed or len(fixed) < len(block) * 0.7:
+        log(f"　→ {rank}位の見本合わせで出力が痩せたので元のまま使います")
+        return block
+    left = output_check.missing_reference_parts(fixed, reference, allow_missing=allow)
+    if left:
+        log(f"　→ {rank}位はまだ {len(left)}件 足りません: "
+            + "、".join(m["text"] for m in left[:6]))
+    return fixed
+
+
 def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict,
                        type_record: dict, settings: Settings, log=_noop) -> str:
     """本文のプレースホルダを紹介ブロックで置き換える。
@@ -219,24 +261,22 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
     ordered = sorted(clinic_info.items(), key=lambda kv: push_rank(records.get(kv[0], {})))
 
     blocks = []
-    lower = []
     for rank, (name, info) in enumerate(ordered, start=1):
-        if rank >= BATCH_BLOCK_RANK_FROM:
-            lower.append((rank, name, info))
-            continue
         record = records.get(name, {})
         base_link = str(record.get("送客リンク", "")).strip()
+        is_top = rank < BATCH_BLOCK_RANK_FROM
+        # 4位以降は送客リンクとCTAを置かない。リンクを渡さないことで見出しにも入らない。
         instruction = "\n".join(filter(None, [
             ("【見本から削るもの・残すもの】\n" + trim) if trim else "",
-            _link_rule(base_link, slug),
+            _link_rule(base_link, slug) if is_top else "",
         ]))
         log(f"　🏥 {rank}位 {name} の紹介ブロックを生成中...")
         try:
             block = clinic_block_writer.generate_clinic_block(
                 name=name, rank=rank, scraped_info=info,
                 price_data=str(record.get("紹介ブロックに出すプラン", "")).strip(),
-                extra_notes="", link_url=base_link,
-                lp_plan=str(record.get("比較表に出すプラン", "")).strip(),
+                extra_notes="", link_url=base_link if is_top else "",
+                lp_plan=str(record.get("比較表に出すプラン", "")).strip() if is_top else "",
                 main_kw=inputs.get("main_kw", ""), sub_kw=inputs.get("sub_kw", []),
                 criteria_text=criteria, claude_api_key=settings.claude_key,
                 site_parts=settings.site_parts, reference_html=reference,
@@ -247,37 +287,13 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
             log(f"　→ {rank}位 {name} で失敗: {e}")
             continue
         block = review_block(block, info, inputs, settings, rank=rank, log=log)
+        block = match_reference(block, reference, is_top, rank, settings, log=log)
+        block, replaced = output_check.apply_mechanical_fixes(block)
+        if replaced:
+            log(f"　→ {rank}位を機械で置き換え: {len(replaced)}種類")
         blocks.append(block)
-        reference = block
-
-    for start in range(0, len(lower), BATCH_BLOCK_CHUNK):
-        chunk = lower[start:start + BATCH_BLOCK_CHUNK]
-        log(f"　🏥 {chunk[0][0]}位から{chunk[-1][0]}位の {len(chunk)} 院をまとめて生成中...")
-        entries = [
-            {
-                "rank": rank,
-                "name": name,
-                "info": info,
-                "price_data": str(records.get(name, {}).get("紹介ブロックに出すプラン", "")).strip(),
-            }
-            for rank, name, info in chunk
-        ]
-        try:
-            lower_html = clinic_block_writer.generate_lower_blocks(
-                entries,
-                main_kw=inputs.get("main_kw", ""), sub_kw=inputs.get("sub_kw", []),
-                criteria_text=criteria, claude_api_key=settings.claude_key,
-                site_parts=settings.site_parts, reference_html=reference,
-                article_type=inputs.get("article_type", ""),
-                gemini_api_key=settings.gemini_key, article_provider=settings.article_provider,
-            )
-        except Exception as e:
-            log(f"　→ 4位以降のまとめ生成に失敗: {e}")
-            lower_html = ""
-        if lower_html:
-            lower_html = fix_lower_blocks(lower_html, chunk, inputs, settings, log=log)
-            blocks.append(lower_html)
-            reference = lower_html
+        # 見本は型タブの値のまま据え置く。直前の出力を見本にすると、院を追うごとに
+        # 見本から離れていく。全院を同じ見本に合わせるほうが粒度がそろう。
 
     if not blocks:
         return html
@@ -285,44 +301,6 @@ def fill_clinic_blocks(html: str, clinic_info: dict, records: dict, inputs: dict
     if CLINIC_BLOCK_RE.search(filled):
         log("　→ 紹介ブロックの差し込み口が2つ以上あります。1つ目だけ埋めました")
     return filled
-
-
-def fix_lower_blocks(html: str, lower: list, inputs: dict, settings: Settings, log=_noop) -> str:
-    """4位以降のまとめブロックを直す。
-
-    1院ずつモデルの検品をかけると回数が増えるので、まとめた1つに対して
-    機械の置き換え1回とモデルの修正1回だけかける。
-    """
-    fixed, replaced = output_check.apply_mechanical_fixes(html)
-    if replaced:
-        log("　→ 4位以降を機械で置き換え: "
-            + "、".join(f"{b}→{a or '削除'}" for b, a in replaced))
-
-    source_text = "\n\n".join(info for _rank, _name, info in lower)
-    try:
-        found = output_check.run_checks(fixed, source_text)
-    except Exception:
-        return fixed
-    for item in found.get("human", []):
-        log(f"　→ 4位以降で人が見る指摘: [{item.get('rule', '')}] {item.get('text', '')[:40]}")
-    to_fix = found.get("fix", [])
-    if not to_fix:
-        return fixed
-    log(f"　→ 4位以降の残り {len(to_fix)}件をまとめて直します")
-    if not (settings.auto_review and settings.claude_key):
-        return fixed
-    try:
-        repaired = article_review.apply_fixes(
-            fixed, to_fix, settings.article_provider,
-            claude_api_key=settings.claude_key, gemini_api_key=settings.gemini_key,
-        )
-    except Exception as e:
-        log(f"　→ 4位以降の修正に失敗しました（{type(e).__name__}）。そのまま使います")
-        return fixed
-    if not repaired or len(repaired) < len(fixed) * 0.7:
-        log("　→ 修正後が短くなりすぎたので元のまま使います")
-        return fixed
-    return repaired
 
 
 def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) -> dict:
@@ -490,6 +468,26 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     result["html"], split_count = output_check.split_long_paragraphs(result["html"])
     if split_count:
         log(f"　→ 4文以上の段落を {split_count}件 機械で分けました")
+
+    # Markdownの混入とH3内の余分なマーカーを機械で直す。指示では守られない。
+    result["html"], out_counts = output_check.apply_output_fixes(result["html"])
+    for label, num in out_counts.items():
+        log("　→ " + label + ": " + str(num) + "件")
+
+    # 記事1本ぶんの検査。タグの崩れ・途切れた文・読者向けでない文・KWの詰め込み・
+    # 見出しの院数と紹介数の不一致。どれも人が直すので要確認欄へ出す。
+    broken = output_check.run_article_checks(
+        result["html"], main_kw=inputs.get("main_kw", ""),
+        sub_kw=inputs.get("sub_kw", []),
+        clinic_count=len(inputs.get("clinics", []) or []),
+    )
+    if broken:
+        log("　→ 出力の検査で " + str(len(broken)) + "件: "
+            + "、".join(sorted({b["rule"] for b in broken})))
+        result["todo_list"] = (
+            result.get("todo_list", "")
+            + "\n\n【出力の検査】\n" + output_check.format_findings(broken)
+        ).strip()
 
     # 置換表に無い禁止ワードが残ることがある。黙って通さず要確認へ回す。
     remaining = output_check.run_checks(result["html"], "")

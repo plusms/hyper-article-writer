@@ -720,71 +720,21 @@ def _push_rank(record: dict) -> int:
 def _fill_clinic_blocks(html, clinic_info, records, inputs, type_record, site_parts, claude_key, log=None) -> str:
     """本文のプレースホルダを紹介ブロックで置き換える。
 
-    地域・比較記事は本文生成で紹介H2の中身を書かない。ここを人手でやると量産に
-    ならないので、1院1コールで作って差し込む。まとめて1コールにすると出力上限で切れる。
+    実装は core/pipeline.py に1本化してある。画面から回すのと量産で作りが違うと、
+    片方だけ直った状態になる。実際に、画面側は4位以降にも送客リンクを渡し、量産側は
+    4位以降の料金表と基本情報を落としていた。両方ここを通す。
     """
-    if not _CLINIC_BLOCK_RE.search(html) or not clinic_info:
-        return html
-    criteria = extract_criteria_summary(html, claude_key)
-    reference = article_type_db.get_reference_html(type_record or {}, "紹介ブロックの並び")
-    trim = article_type_db.get_reference_html(type_record or {}, "紹介ブロックで削るもの")
-    slug = inputs.get("slug", "").strip()
-    ordered = sorted(
-        clinic_info.items(),
-        key=lambda kv: _push_rank(records.get(kv[0], {})),
+    settings = pipeline.Settings(
+        claude_key=claude_key,
+        gemini_key=gemini_key,
+        article_provider=article_provider,
+        site_parts=site_parts,
+        auto_review=True,
     )
-    blocks = []
-    for rank, (name, info) in enumerate(ordered, start=1):
-        record = records.get(name, {})
-        base_link = str(record.get("送客リンク", "")).strip()
-        link_rule = ""
-        if base_link and slug:
-            link_rule = (
-                "【リンクのパラメータ】\n"
-                f"- 見出し・本文中のテキストリンク: {base_link}?{slug}_rank_txt\n"
-                f"- 画像のリンク: {base_link}?{slug}_rank_bn\n"
-                f"- CTAボタン: {base_link}?{slug}_rank_bt\n"
-            )
-        instruction = "\n".join(filter(None, [
-            ("【見本から削るもの・残すもの】\n" + trim) if trim else "",
-            link_rule,
-        ]))
-        if log:
-            log(f"　🏥 {rank}位 {name} の紹介ブロックを生成中...")
-        try:
-            block = clinic_block_writer.generate_clinic_block(
-                name=name,
-                rank=rank,
-                scraped_info=info,
-                price_data=str(record.get("紹介ブロックに出すプラン", "")).strip(),
-                extra_notes="",
-                link_url=base_link,
-                lp_plan=str(record.get("比較表に出すプラン", "")).strip(),
-                main_kw=inputs.get("main_kw", ""),
-                sub_kw=inputs.get("sub_kw", []),
-                criteria_text=criteria,
-                claude_api_key=claude_key,
-                site_parts=site_parts,
-                reference_html=reference,
-                extra_instruction=instruction,
-                article_type=inputs.get("article_type", ""),
-                gemini_api_key=gemini_key,
-                article_provider=article_provider,
-            )
-        except Exception as e:
-            if log:
-                log(f"　→ {rank}位 {name} で失敗: {e}")
-            continue
-        block = _review_clinic_block(block, info, inputs, rank=rank, log=log)
-        blocks.append(block)
-        # 2院目以降は1院目の出力に揃える。型の見本より実際の出力のほうが揃う
-        reference = block
-    if not blocks:
-        return html
-    filled = _CLINIC_BLOCK_RE.sub(lambda _m: "\n".join(blocks), html, count=1)
-    if _CLINIC_BLOCK_RE.search(filled) and log:
-        log("　→ 紹介ブロックの差し込み口が2つ以上あります。1つ目だけ埋めました")
-    return filled
+    return pipeline.fill_clinic_blocks(
+        html, clinic_info, records, inputs, type_record or {}, settings,
+        log=log or (lambda _m: None),
+    )
 
 
 def _run_batch_core(rows, ws, is_bulk, is_kh, tab_name, defaults, creds_data):

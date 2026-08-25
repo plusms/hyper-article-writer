@@ -238,7 +238,20 @@ def generate_clinic_block(
             if lp_plan:
                 top3_section += f'- LP掲載プランを記載: {lp_plan}\n'
     else:
-        top3_section = f"【4位以下ルール（{rank}位）】\n- クリニック紹介文は2〜3段落\n- リンク・CTAボタンなし\n"
+        # 4位以降も見本と同じ構成にする。料金テーブル・基本情報テーブル・マップは
+        # 上位院と同じ粒度で出す。8月23日にまとめ生成へ寄せたときにここが落ちて、
+        # 推し3院だけ料金表と基本情報がある記事になった。落ちていたのは速度のための
+        # 変更の副作用で、仕様として決めたのはリンクとCTAを置かないことだけ。
+        top3_section = (
+            f"【4位以降ルール（{rank}位）】\n"
+            "- 見本HTMLの構成をそのまま踏襲する。料金テーブル・基本情報テーブル・"
+            "マップ・おすすめポイントは上位院と同じ粒度で出す\n"
+            "- クリニック紹介文は3〜4段落。1段落1主張\n"
+            "- 送客リンクとCTAボタンだけ置かない。見出しのクリニック名もリンクにしない\n"
+            "- リンクが無いこと・CTAが無いことを要確認として書かない。"
+            "4位以降はリンクを置かない仕様である\n"
+            "- 選び方コンテンツの項目のうち、この院が満たすものに自然に触れる\n"
+        )
 
     components_str = " → ".join(COMPONENT_LABELS.get(c, c) for c in active_components)
 
@@ -320,6 +333,10 @@ HTML本文のみを出力してください。説明文・コードフェンス�
     return _call_model(prompt, claude_api_key, gemini_api_key, article_provider)
 
 
+# 2026-08-25 廃止。4位以降も generate_clinic_block を通して見本どおりに出す。
+# まとめ生成は見本を6千字で切り、料金テーブル・基本情報テーブル・画像を禁止して
+# いたため、推し3院だけ情報が厚い記事になっていた。呼び出し元は pipeline.py から
+# 外した。復活させるときは見本を切らないこと。
 def generate_lower_blocks(entries: list, main_kw: str = '', sub_kw: list | None = None,
                           criteria_text: str = '', claude_api_key: str = '',
                           site_parts: str = '', reference_html: str = '',
