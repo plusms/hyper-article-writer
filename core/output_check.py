@@ -283,6 +283,20 @@ NG_PHRASE_REPLACEMENTS = [
     ("重要な判断材料", "選ぶときの判断材料"),
     ("が重要な判断軸", "が選ぶときの判断軸"),
     ("重要な", "見落とせない"),
+    # 仙台の1本目の実出力から作った。長い言い回しから当たるよう機械で並べ替える。
+    ("なる設計です", "なります"),
+    ("設計になっている", "作りになっている"),
+    ("コース設計", "コースの作り"),
+    ("された設計", "された作り"),
+    ("が前提となる", "が必要な"),
+    ("を前提としていますが", "が基本ですが"),
+    ("を前提としています", "が基本です"),
+    ("前提であれば", "なら"),
+    ("が前提で", "が基本で"),
+    ("を現実的な選択肢にしている", "を続けやすくしている"),
+    ("を現実的な選択肢に", "を選びやすく"),
+    ("現実的な選択肢", "選びやすい形"),
+    ("と活用法", "と使い方"),
     # 助詞を巻き込まない言い換え。が・も・は・に のどれが前に来ても成立する形にする。
     ("重要です", "大きく効いてきます"),
     ("重要でした", "大きく効いてきました"),
@@ -907,6 +921,9 @@ def apply_output_fixes(html: str) -> tuple:
     html, n = dedupe_markers(html)
     if n:
         counts["H3内の余分なマーカーを外した"] = n
+    html, n = shrink_markers(html)
+    if n:
+        counts["長すぎるマーカーの囲む範囲を縮めた"] = n
     html = drop_empty_inline_tags(html)
     return html, counts
 
@@ -997,3 +1014,36 @@ def find_genre_ng_words(html: str) -> list:
             "detail": "該当箇所: " + _snippet(text, word, 50),
         })
     return findings
+
+
+def shrink_markers(html: str, limit: int = MARKER_MAX_CHARS) -> tuple:
+    """字数を超えたマーカーの囲む範囲を縮める。文字は変えない。
+
+    モデルに縮めさせると、直したそばから別の違反が出る。ここは囲む範囲を
+    後ろから削るだけなので機械でできる。区切りの位置で切るので日本語は壊れない。
+    Returns: (直したHTML, 縮めた数)
+    """
+    count = 0
+
+    def _fix(match):
+        nonlocal count
+        whole, tag, inner = match.group(0), match.group(1), match.group(2)
+        plain = _strip_tags(inner).strip()
+        if len(plain) <= limit:
+            return whole
+        # 後ろから区切りを探して、上限に収まる位置で切る
+        cut = -1
+        for mark in ("を", "が", "は", "に", "で", "と", "も", "、", "から", "まで"):
+            pos = plain.rfind(mark, 0, limit + 1)
+            if pos > cut:
+                cut = pos + len(mark)
+        if cut <= 0:
+            cut = limit
+        kept, rest = plain[:cut], plain[cut:]
+        if not kept.strip():
+            return whole
+        count += 1
+        opening = whole[:whole.index(">") + 1]
+        return opening + kept + "</" + tag + ">" + rest
+
+    return _MARKER_RE.sub(_fix, html), count

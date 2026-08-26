@@ -31,7 +31,12 @@ def load_context(genre: str, article_type: str):
         return {}, "", secrets
     record = article_type_db.pick_type(
         article_type_db.load_types(creds, url), article_type, genre)
-    reference = article_type_db.get_reference_html(record or {}, "紹介ブロックの並び")
+    # 見本は全列つなげて渡す。紹介ブロックだけ渡すと、比較表や選び方で使う
+    # クラス名が全部「見本に無い」と出る。仙台の1本目で red が出た。
+    reference = "\n".join(
+        article_type_db.get_reference_html(record or {}, column)
+        for column in article_type_db.REFERENCE_COLUMNS
+    )
     rules = expression_rules.for_genre(
         expression_rules.load_rules(creds, url), genre)
     output_check.set_genre_rules(rules["ng_words"], rules["replacements"])

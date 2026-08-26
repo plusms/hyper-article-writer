@@ -68,6 +68,12 @@ def check_notation_drift(html: str) -> list:
     for label, styles in (("時刻", _TIME_STYLES), ("曜日", _DAY_STYLES)):
         found = {name: len(pattern.findall(text)) for name, pattern in styles}
         used = {n: c for n, c in found.items() if c}
+        # 少数派が3件未満かつ全体の1割未満なら数えない。70件に対して1件で
+        # NGを出すと、直せないものが毎回並んで判定表が読まれなくなる。
+        total = sum(used.values())
+        if len(used) > 1:
+            used = {n: c for n, c in used.items()
+                    if c >= 3 or (total and c / total >= 0.1)}
         if len(used) <= 1:
             out.append(_result(label + "の表記ゆれ", True))
             continue
