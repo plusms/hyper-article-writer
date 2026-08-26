@@ -391,6 +391,10 @@ def assemble(spec: list, data: dict, texts: dict) -> str:
 
         elif kind == block_spec.IMAGE:
             if not is_top:
+                # 空を入れる。continue で抜けると out が spec より短くなり、
+                # 見出しが空かどうかの判定が別の部品を見る。地図の無い院で
+                # 「所在地とアクセス」の見出しだけが7件残った原因。
+                out.append("")
                 continue
             url = image_url(spec, data.get("slug", ""), data.get("alias", ""))
             out.append(build_image(url, name, params.get("bn", ""), classes))
@@ -430,6 +434,7 @@ def assemble(spec: list, data: dict, texts: dict) -> str:
 
         elif kind == block_spec.CTA:
             if not is_top:
+                out.append("")
                 continue
             out.append(build_cta(cta_pattern(data.get("components") or []),
                                  params.get("bt", ""), name,
