@@ -13,7 +13,10 @@ import argparse
 import json
 import sys
 
+import re
+
 from core import article_audit, article_type_db, expression_rules, output_check
+from core import site_config_manager
 from run_mass import _load_secrets
 
 
@@ -63,6 +66,7 @@ def main() -> int:
     parser.add_argument("--main-kw", dest="main_kw", default="")
     parser.add_argument("--sub-kw", dest="sub_kw", default="")
     parser.add_argument("--clinics", type=int, default=0)
+    parser.add_argument("--site", default="", help="サイト設定のパーツも既知として扱う")
     args = parser.parse_args()
 
     record, reference, secrets = load_context(args.genre, args.article_type)
@@ -78,8 +82,24 @@ def main() -> int:
         print("記事のHTMLが空です", file=sys.stderr)
         return 1
 
+    known = set()
+    if args.site:
+        creds = secrets.get("GCP_SERVICE_ACCOUNT_JSON")
+        if isinstance(creds, str):
+            creds = json.loads(creds)
+        folder = secrets.get("SITE_CONFIG_FOLDER_ID") or secrets.get("DRIVE_PARENT_FOLDER_ID")
+        if secrets.get("SITE_CONFIG_FOLDER_ID"):
+            site_config_manager.SITE_CONFIG_FOLDER_ID_OVERRIDE = secrets["SITE_CONFIG_FOLDER_ID"]
+        config = site_config_manager.load_site_config(args.site, creds, folder)
+        for component in config.get("components", []) or []:
+            if not component.get("active", True):
+                continue
+            for value in re.findall(r'class="([^"]+)"', str(component.get("pattern", ""))):
+                known.update(value.split())
+
     checks = article_audit.audit(
         html,
+        known_classes=known,
         main_kw=args.main_kw,
         sub_kw=[x.strip() for x in args.sub_kw.split(",") if x.strip()],
         clinic_count=args.clinics,

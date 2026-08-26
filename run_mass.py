@@ -113,6 +113,30 @@ def _build_settings(args, secrets, creds) -> pipeline.Settings:
     )
 
 
+OUTPUT_DIR = "output"
+
+
+def save_local_copy(row_num: int, kw: str, result: dict) -> None:
+    """記事を手元にも残す。
+
+    シートへの書き込みが失敗すると、生成に何分もかけた記事が消える。
+    5万字を超えてセルに入らず落ちた実例がある。
+    """
+    try:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        safe = "".join(c for c in str(kw) if c.isalnum() or c in " 　-_")[:40].strip()
+        path = os.path.join(OUTPUT_DIR, str(row_num) + "_" + (safe or "article") + ".html")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(result.get("html", ""))
+        note = result.get("todo_list", "")
+        if note:
+            with open(path.replace(".html", "_要確認.txt"), "w", encoding="utf-8") as f:
+                f.write(note)
+        _say("", "手元に保存しました: " + path)
+    except Exception as e:
+        _say("", "手元への保存に失敗しました（" + type(e).__name__ + "）")
+
+
 def _run_one(row, args, settings, ws) -> tuple:
     row_num = row["row_index"]
     kw = row["main_kw"]
@@ -157,6 +181,7 @@ def _run_one(row, args, settings, ws) -> tuple:
         return (row_num, kw, False, time.monotonic() - started)
 
     with _sheet_lock:
+        save_local_copy(row_num, kw, result)
         write_output_row_mass(ws, row_num, result)
         write_status_mass(ws, row_num, "完了")
     minutes = (time.monotonic() - started) / 60

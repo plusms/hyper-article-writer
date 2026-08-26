@@ -419,12 +419,16 @@ def drop_empty_inline_tags(html: str) -> str:
 
 # 見本に無いクラス名をモデルが作ることがある。h2-title・h2-ttl など。
 # 装飾が効かない状態で公開されるので、生成後に機械で拾う。
-def find_invented_classes(html: str, reference_html: str) -> list:
-    """見本に出てこないクラス名を返す。"""
-    if not reference_html:
+def find_invented_classes(html: str, reference_html: str, known_extra=None) -> list:
+    """見本にもサイト設定のパーツにも無いクラス名を返す。
+
+    見本だけと比べると、本文で使うQ&Aやチェックリストのパーツが全部
+    未登録に見える。仙台の1本目で bold・checkList・faq が出た。
+    """
+    if not reference_html and not known_extra:
         return []
-    known = set(re.findall(r'class="([^"]+)"', reference_html))
-    known_words = set()
+    known = set(re.findall(r'class="([^"]+)"', reference_html or ""))
+    known_words = set(known_extra or [])
     for value in known:
         known_words.update(value.split())
     findings = []

@@ -227,21 +227,60 @@ def write_status_mass(ws: gspread.Worksheet, row_index: int, status: str) -> Non
     ws.update_cell(row_index, COL_STATUS_MASS + 1, status)
 
 
+# スプレッドシートの1セルの上限。超えると書き込みが400で落ちる。
+CELL_LIMIT = 50000
+# 続きを書く列。HTMLが1セルに入らないときに使う。
+CONTINUATION_COLUMNS = ["L", "M", "N", "O"]
+
+
+def split_for_cells(html: str, limit: int = CELL_LIMIT) -> list:
+    """HTMLをセルに入る大きさに分ける。タグの途中では切らない。
+
+    上限で切り捨てると記事が欠ける。行の切れ目で分けて続きの列へ書く。
+    """
+    text = html or ""
+    if len(text) <= limit:
+        return [text]
+    chunks = []
+    rest = text
+    while len(rest) > limit:
+        cut = rest.rfind("\n", 0, limit)
+        if cut <= 0:
+            cut = rest.rfind("><", 0, limit)
+            cut = cut + 1 if cut > 0 else limit
+        chunks.append(rest[:cut])
+        rest = rest[cut:]
+    if rest:
+        chunks.append(rest)
+    return chunks
+
+
 def write_output_row_mass(ws: gspread.Worksheet, row_index: int, data: dict) -> None:
     clinics = data.get("clinics", [])
     clinic_list_str = ", ".join(
         f"{c['name']}::{c.get('domain', '')}" for c in clinics if c.get("name")
     )
+    chunks = split_for_cells(data.get("html", ""))
+    note = data.get("todo_list", "")
+    if len(chunks) > 1:
+        used = ", ".join(["I"] + CONTINUATION_COLUMNS[:len(chunks) - 1])
+        note = ("【HTMLが1セルに入らないので分けて書いています】" + chr(10)
+                + used + " の順につなげてください" + chr(10) + chr(10) + note).strip()
     ws.update(
         f"G{row_index}:K{row_index}",
         [[
             data.get("title", ""),
             data.get("meta", ""),
-            data.get("html", ""),
-            data.get("todo_list", ""),
+            chunks[0] if chunks else "",
+            note[:CELL_LIMIT],
             clinic_list_str,
         ]]
     )
+    for index, chunk in enumerate(chunks[1:]):
+        if index >= len(CONTINUATION_COLUMNS):
+            break
+        column = CONTINUATION_COLUMNS[index]
+        ws.update(f"{column}{row_index}", [[chunk]])
     _reset_row_height(ws, row_index)
 
 

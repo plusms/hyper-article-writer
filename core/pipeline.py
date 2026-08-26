@@ -698,7 +698,14 @@ def generate_article(inputs: dict, settings: Settings, log=_noop, on_body=None) 
     if dropped:
         log(f"　→ 要確認から対応不要な指摘を {dropped}件 落としました")
 
-    invented = output_check.find_invented_classes(result["html"], reference_all)
+    part_classes = set()
+    for component in settings.site_components or []:
+        if not component.get("active", True):
+            continue
+        for value in re.findall(r'class="([^"]+)"', str(component.get("pattern", ""))):
+            part_classes.update(value.split())
+    invented = output_check.find_invented_classes(
+        result["html"], reference_all, known_extra=part_classes)
     if invented:
         names = "、".join(f["text"] for f in invented)
         log(f"　→ 見本に無いクラス名が {len(invented)}種類: {names}")

@@ -90,9 +90,19 @@ def check_brackets(html: str) -> list:
 
 
 def clinic_blocks(html: str) -> list:
-    """紹介ブロックを院ごとに切り出す。"""
+    """紹介ブロックを院ごとに切り出す。
+
+    最後の院のあとには次のH2が続く。そこで切らないと、FAQやまとめの段落まで
+    最後の院のものとして数えてしまう。仙台の1本目で段落が12本と出た。
+    """
     parts = (html or "").split(_PICKUP_SPLIT)
-    return parts[1:]
+    blocks = parts[1:]
+    if blocks:
+        tail = blocks[-1]
+        cut = re.search(r"<h2[\s>]", tail)
+        if cut:
+            blocks[-1] = tail[:cut.start()]
+    return blocks
 
 
 def check_block_uniformity(html: str) -> list:
@@ -150,10 +160,10 @@ def check_required_blocks(html: str, type_record: dict) -> list:
                     article_type_db.format_missing(lacking) or str(len(rules)) + "件すべて有り")]
 
 
-def check_reference_classes(html: str, reference: str) -> list:
-    if not reference:
+def check_reference_classes(html: str, reference: str, known_extra=None) -> list:
+    if not reference and not known_extra:
         return []
-    invented = output_check.find_invented_classes(html, reference)
+    invented = output_check.find_invented_classes(html, reference, known_extra=known_extra)
     return [_result("見本に無いクラス名", not invented, len(invented),
                     "、".join(f["text"] for f in invented[:8]))]
 
@@ -165,7 +175,7 @@ def _group(name: str, findings: list, note_ok: str = "") -> dict:
 
 def audit(html: str, main_kw: str = "", sub_kw=None, clinic_count: int = 0,
           type_record: dict | None = None, reference: str = "",
-          source_text: str = "") -> list:
+          source_text: str = "", known_classes=None) -> list:
     """全項目を1回で判定して並べて返す。"""
     html = html or ""
     checks = []
@@ -173,7 +183,7 @@ def audit(html: str, main_kw: str = "", sub_kw=None, clinic_count: int = 0,
     checks += check_heading_counts(html, type_record or {})
     checks += check_required_blocks(html, type_record or {})
     checks += check_block_uniformity(html)
-    checks += check_reference_classes(html, reference)
+    checks += check_reference_classes(html, reference, known_extra=known_classes)
 
     checks.append(_group("タグの数の不一致", output_check.find_unclosed_tags(html)))
     checks.append(_group("Markdownの混入", output_check.find_markdown(html)))
